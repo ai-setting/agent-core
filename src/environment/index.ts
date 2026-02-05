@@ -29,23 +29,6 @@ export interface Prompt {
   version?: string;
 }
 
-export { OsEnv } from "./expand_env/os-env.js";
-export type { OsEnvConfig } from "./expand_env/os-env.js";
-export {
-  createBashTool,
-  createFileTools,
-  createOsTools,
-  bash,
-  readFile,
-  writeFile,
-  glob,
-  grep,
-  type BashResult,
-  type ReadFileOptions,
-  type WriteFileOptions,
-  type GlobOptions,
-  type GrepOptions,
-} from "./expand_env/os-env.js";
 export {
   createInvokeLLM,
   createSystem1IntuitiveReasoning,
