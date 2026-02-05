@@ -1,0 +1,10 @@
+{
+  "compiler": {
+    "typescript": {
+      "tsconfigPath": "tsconfig.json"
+    }
+  },
+  "loader": {
+    ".ts": "typescript"
+  }
+}
