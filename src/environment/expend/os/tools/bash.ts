@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ToolInfo } from "../../types/index.js";
+import type { ToolInfo } from "../../../../types/index.js";
 
 export interface BashResult {
   success: boolean;

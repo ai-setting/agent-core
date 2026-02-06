@@ -10,14 +10,14 @@ import {
   RetryManager,
   ConcurrencyManager,
   type ToolRegistration,
-} from "../base/index.js";
+} from "../../base/index.js";
 import type {
   Context,
   Action,
   ToolResult,
   Tool,
   ToolInfo,
-} from "../../types/index.js";
+} from "../../../types/index.js";
 
 /**
  * OS-specific tool execution configuration.
@@ -54,7 +54,9 @@ const DEFAULT_TIMEOUTS: Record<string, number> = {
   file_glob: 5000,
   file_grep: 10000,
   network_fetch: 30000,
-  default: 30000,
+  invoke_llm: 120000,
+  llm: 120000,
+  default: 60000,
 };
 
 const DEFAULT_CONCURRENCY_LIMITS: Record<string, number> = {
@@ -74,8 +76,8 @@ const RETRY_CONFIGS: Record<string, { maxRetries: number; baseDelayMs: number }>
   default: { maxRetries: 2, baseDelayMs: 500 },
 };
 
-export { createOsTools, createTodoTools } from "../../tool/os/index.js";
-export * from "../../tool/os/index.js";
+export { createOsTools, createTodoTools } from "./tools/index.js";
+export * from "./tools/index.js";
 
 /**
  * Operating system environment for agent tool execution.
@@ -146,7 +148,7 @@ export class OsEnv extends BaseEnvironment {
   }
 
   private async registerDefaultTools(): Promise<void> {
-    const { createOsTools, createTodoTools } = await import("../../tool/os/index.js");
+    const { createOsTools, createTodoTools } = await import("./tools/index.js");
     const osTools = createOsTools();
     const todoTools = createTodoTools();
     for (const tool of [...osTools, ...todoTools]) {
