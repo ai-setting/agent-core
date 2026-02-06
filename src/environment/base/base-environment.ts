@@ -25,8 +25,7 @@ import {
   DefaultMetricsCollector,
   AggregatedMetrics,
 } from "./index.js";
-import { LLMAdapter } from "../llm/index.js";
-import { createInvokeLLM, createSystem1IntuitiveReasoning } from "./invoke-llm.js";
+import { createInvokeLLM, createSystem1IntuitiveReasoning, type InvokeLLMConfig } from "./invoke-llm.js";
 
 export interface BaseEnvironmentConfig {
   timeoutManager?: TimeoutManager;
@@ -38,7 +37,6 @@ export interface BaseEnvironmentConfig {
   defaultTimeoutMs?: number;
   defaultConcurrencyLimit?: number;
   defaultMaxRetries?: number;
-  llmAdapter?: LLMAdapter;
   defaultModel?: string;
   systemPrompt?: string;
   model?: string;
@@ -63,7 +61,6 @@ export abstract class BaseEnvironment implements Environment {
   protected errorRecovery: ErrorRecovery;
   protected metrics: DefaultMetricsCollector;
   protected maxConcurrentStreams: number;
-  protected llmAdapter: LLMAdapter | undefined;
   protected defaultModel: string;
   protected systemPrompt: string;
   private initializationPromise: Promise<void> | null = null;
@@ -78,7 +75,6 @@ export abstract class BaseEnvironment implements Environment {
     this.errorRecovery = config?.errorRecovery ?? ErrorRecovery.default();
     this.metrics = config?.metricsCollector ?? new DefaultMetricsCollector();
     this.maxConcurrentStreams = config?.maxConcurrentStreams ?? 10;
-    this.llmAdapter = config?.llmAdapter;
     this.defaultModel = config?.defaultModel ?? "gpt-4";
     this.systemPrompt = config?.systemPrompt ?? "";
 
@@ -108,10 +104,10 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   protected async configureLLMWithModel(model: string, baseURL?: string, apiKey?: string): Promise<void> {
-    const { createAdapterFromModel } = await import("../llm/index.js");
-    const adapter = await createAdapterFromModel(model, { baseURL, apiKey });
-    if (adapter) {
-      this.configureLLM(adapter, model);
+    const { createLLMConfigFromEnv } = await import("./invoke-llm.js");
+    const config = createLLMConfigFromEnv(model);
+    if (config) {
+      this.configureLLM(config);
     }
   }
 
@@ -431,27 +427,12 @@ export abstract class BaseEnvironment implements Environment {
     return allStatus;
   }
 
-  configureLLM(adapter: LLMAdapter, defaultModel?: string): void {
-    this.llmAdapter = adapter;
-    if (defaultModel) {
-      this.defaultModel = defaultModel;
-    }
-
-    const invokeLlmTool = createInvokeLLM({
-      adapter,
-      defaultModel: this.defaultModel,
-    });
+  configureLLM(config: InvokeLLMConfig): void {
+    const invokeLlmTool = createInvokeLLM(config);
     this.registerTool(invokeLlmTool);
 
-    const system1Tool = createSystem1IntuitiveReasoning({
-      adapter,
-      defaultModel: this.defaultModel,
-    });
+    const system1Tool = createSystem1IntuitiveReasoning(config);
     this.registerTool(system1Tool);
-  }
-
-  getLLMAdapter(): LLMAdapter | undefined {
-    return this.llmAdapter;
   }
 
   protected abstract getDefaultTimeout(toolName: string): number;

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "bun test",
+    "test": "bun test test/unit",
     "test:coverage": "bun test --coverage",
     "test:unit": "bun test test/unit",
     "test:integration": "bun test test/integration",
@@ -14,6 +14,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.37",
+    "@ai-sdk/cerebras": "^2.0.30",
+    "@ai-sdk/cohere": "^3.0.18",
+    "@ai-sdk/deepinfra": "^2.0.31",
+    "@ai-sdk/google": "^3.0.21",
+    "@ai-sdk/groq": "^3.0.21",
+    "@ai-sdk/mistral": "^3.0.18",
+    "@ai-sdk/openai": "^3.0.25",
+    "@ai-sdk/openai-compatible": "^2.0.27",
+    "@ai-sdk/perplexity": "^3.0.17",
+    "@ai-sdk/togetherai": "^2.0.30",
+    "@ai-sdk/xai": "^3.0.47",
+    "ai": "^6.0.73",
     "glob": "^13.0.1",
     "zod": "^3.22.4",
     "zod-to-json-schema": "^3.24.5"
