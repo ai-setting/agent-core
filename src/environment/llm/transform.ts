@@ -66,7 +66,7 @@ export namespace LLMTransform {
     return messages;
   }
 
-  export function getProviderOptions(model: ModelInfo, sessionId?: string): Record<string, unknown> {
+  export function getProviderOptions(model: ModelInfo): Record<string, unknown> {
     const options: Record<string, unknown> = {};
     const npm = model.apiNpm || "";
 
@@ -82,10 +82,6 @@ export namespace LLMTransform {
       options["usage"] = { include: true };
     }
 
-    if (sessionId && (model.provider === "openai" || npm.includes("@ai-sdk/openai"))) {
-      options["promptCacheKey"] = sessionId;
-    }
-
     if (model.provider === "google" || npm.includes("@ai-sdk/google")) {
       options["thinkingConfig"] = { includeThoughts: true };
     }
@@ -96,13 +92,12 @@ export namespace LLMTransform {
   export function transformConfig(
     config: Partial<LLMConfig>,
     model: ModelInfo,
-    sessionId?: string,
   ): TransformedConfig {
     return {
       temperature: config.temperature ?? getDefaultTemperature(model),
       topP: config.topP ?? getDefaultTopP(model),
       topK: config.topK ?? getDefaultTopK(model),
-      providerOptions: getProviderOptions(model, sessionId),
+      providerOptions: getProviderOptions(model),
     };
   }
 }

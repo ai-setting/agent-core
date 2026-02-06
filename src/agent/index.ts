@@ -7,15 +7,15 @@
  * - Graceful degradation on tool errors
  * - Abort signal support
  * - Detailed error logging
- * - Session state management
+ * - Multimodal history support
  */
 
-import type { Environment, Prompt } from "../environment";
+import type { Environment, Prompt, HistoryMessage, MessageContent } from "../environment";
 import { Event, Context } from "../types";
 
 interface Message {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | Record<string, unknown>;
   name?: string;
 }
 
@@ -53,21 +53,35 @@ interface DoomLoopEntry {
   count: number;
 }
 
+function convertContent(content: MessageContent | MessageContent[]): string | Record<string, unknown> {
+  if (Array.isArray(content)) {
+    return content.map(c => {
+      if (c.type === "text") return { type: "text", text: c.text };
+      return c as unknown as Record<string, unknown>;
+    }) as unknown as Record<string, unknown>;
+  }
+  if (content.type === "text") return content.text;
+  return content as unknown as Record<string, unknown>;
+}
+
 export class Agent {
   private config: Required<AgentConfig>;
   private doomLoopCache: Map<string, DoomLoopEntry> = new Map();
   private iteration: number = 0;
   private aborted: boolean = false;
+  private _history: HistoryMessage[] = [];
 
   constructor(
     private event: Event,
     private env: Environment,
     private tools: import("../types").Tool[],
     private prompt: Prompt | undefined,
-    private context: Context,
+    private context: Context = {},
     private configOverrides: AgentConfig = {},
+    history?: HistoryMessage[],
   ) {
     this.config = { ...DEFAULT_CONFIG, ...configOverrides };
+    this._history = history ?? [];
   }
 
   async run(): Promise<string> {
@@ -81,6 +95,11 @@ export class Agent {
 
     const messages: Message[] = [
       { role: "system", content: this.prompt.content },
+      ...this._history.map(h => ({
+        role: h.role as Message["role"],
+        content: convertContent(h.content),
+        name: h.name,
+      })),
       { role: "user", content: this.formatEvent(this.event) },
     ];
 
@@ -117,7 +136,10 @@ export class Agent {
     const llmResult = await this.env.handle_action(
       {
         tool_name: "invoke_llm",
-        args: { messages },
+        args: { 
+          messages,
+          tools: this.tools.length > 0 ? this.tools : undefined,
+        },
       },
       this.context
     );
@@ -156,6 +178,19 @@ export class Agent {
         throw new Error(
           `Doom loop detected: tool "${toolCall.function.name}" called ${this.config.doomLoopThreshold} times with same arguments`
         );
+      }
+
+      // Check if tool is allowed (if tools list is provided)
+      if (this.tools.length > 0) {
+        const isAllowed = this.tools.some(t => t.name === toolCall.function.name);
+        if (!isAllowed) {
+          messages.push({
+            role: "tool",
+            content: `Error: Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`,
+            name: toolCall.function.name,
+          });
+          continue;
+        }
       }
 
       const toolResult = await this.env.handle_action(
@@ -305,6 +340,7 @@ export function createAgent(
   prompt: Prompt | undefined,
   context: Context,
   config?: AgentConfig,
+  history?: HistoryMessage[],
 ): Agent {
-  return new Agent(event, env, tools, prompt, context, config);
+  return new Agent(event, env, tools, prompt, context, config, history);
 }

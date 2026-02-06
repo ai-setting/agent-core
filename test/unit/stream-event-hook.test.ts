@@ -59,7 +59,7 @@ describe("Stream Event Hook", () => {
 
   beforeEach(() => {
     env = new TestEnv();
-    mockContext = { session_id: "test-session", workdir: "/test" };
+    mockContext = { workdir: "/test" };
   });
 
   test("emits text event through hook", () => {
@@ -204,7 +204,7 @@ describe("Environment without onStreamEvent", () => {
       defaultModel: "test-model",
     });
 
-    const mockContext: Context = { session_id: "test", workdir: "/test" };
+    const mockContext: Context = { workdir: "/test" };
 
     // Should not throw
     expect(() => {

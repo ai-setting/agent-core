@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { Environment, Prompt, StreamEvent } from "../index.js";
+import { Environment, Prompt, StreamEvent, HistoryMessage } from "../index.js";
 import {
   Context,
   Action,
@@ -246,7 +246,7 @@ export abstract class BaseEnvironment implements Environment {
     return stream;
   }
 
-  async handle_query(query: string, context: Context): Promise<string> {
+  async handle_query(query: string, context?: Context, history?: HistoryMessage[]): Promise<string> {
     await this.ensureLLMInitialized();
 
     const event = {
@@ -262,7 +262,7 @@ export abstract class BaseEnvironment implements Environment {
       this.addPrompt(prompt);
     }
 
-    const agent = new Agent(event, this as Environment, this.listTools(), prompt, context);
+    const agent = new Agent(event, this as Environment, this.listTools(), prompt, context ?? {}, undefined, history);
     return agent.run();
   }
 
@@ -374,7 +374,6 @@ export abstract class BaseEnvironment implements Environment {
 
   private toToolContext(context: Context): ToolContext {
     return {
-      session_id: context.session_id,
       workdir: context.workdir,
       user_id: context.user_id,
       abort: context.abort,

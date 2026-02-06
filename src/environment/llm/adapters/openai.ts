@@ -49,6 +49,14 @@ interface OpenAIChatRequest {
       };
     }>;
   }>;
+  tools?: Array<{
+    type: string;
+    function: {
+      name: string;
+      description?: string;
+      parameters: Record<string, unknown>;
+    };
+  }>;
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
@@ -317,7 +325,7 @@ export class OpenAIAdapter implements LLMAdapter {
   }
 
   private buildRequest(params: LLMCompleteParams | LLMStreamParams): OpenAIChatRequest {
-    const { messages, config } = params;
+    const { messages, tools, config } = params;
     const modelConfig = config?.model ?? this.config.defaultModel;
 
     const parsed = parseModel(modelConfig);
@@ -332,7 +340,7 @@ export class OpenAIAdapter implements LLMAdapter {
     const transformedConfig = LLMTransform.transformConfig(config || {}, modelInfo);
     const transformedMessages = LLMTransform.transformMessages(messages, modelInfo);
 
-    return {
+    const request: OpenAIChatRequest = {
       model: parsed.model,
       messages: transformedMessages.map((m) => this.formatMessage(m)),
       temperature: transformedConfig.temperature,
@@ -345,6 +353,19 @@ export class OpenAIAdapter implements LLMAdapter {
       response_format: config?.responseFormat,
       ...(transformedConfig.providerOptions || {}),
     };
+
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+    }
+
+    return request;
   }
 
   private formatMessage(msg: LLMMessage): {

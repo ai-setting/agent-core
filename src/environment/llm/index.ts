@@ -6,6 +6,15 @@
 import { LLMStreamEvent } from "../../types/index.js";
 
 /**
+ * Tool definition for LLM.
+ */
+export interface LLMTool {
+  name: string;
+  description?: string;
+  parameters: Record<string, unknown>;
+}
+
+/**
  * LLM provider type identifiers.
  */
 export type LLMProviderType = "openai" | "anthropic" | "google" | "ollama" | "custom";
@@ -323,6 +332,9 @@ export interface LLMCompleteParams {
   /** Messages to send to the LLM. */
   messages: LLMMessage[];
 
+  /** Available tools for the LLM to call. */
+  tools?: LLMTool[];
+
   /** Model configuration. */
   config?: LLMConfig;
 
@@ -339,6 +351,9 @@ export interface LLMCompleteParams {
 export interface LLMStreamParams {
   /** Messages to send to the LLM. */
   messages: LLMMessage[];
+
+  /** Available tools for the LLM to call. */
+  tools?: LLMTool[];
 
   /** Model configuration. */
   config?: LLMConfig;
