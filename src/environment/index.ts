@@ -100,4 +100,3 @@ export {
 } from "./base/index.js";
 export { BaseEnvironment } from "./base/base-environment.js";
 export * from "./expend/os/index.js";
-export type { LLMResult, LLMResponse } from "./llm/index.js";

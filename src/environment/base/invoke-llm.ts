@@ -1,65 +1,89 @@
 /**
- * @fileoverview LLM tool implementations.
+ * @fileoverview LLM tool implementations using direct API calls.
  *
  * Tools:
- * - invoke_llm: Internal LLM invocation - returns final result and emits events via hook
- * - system1_intuitive_reasoning: System 1 direct LLM call for simple tasks
+ * - invoke_llm: Internal LLM invocation with tool support
+ * - system1_intuitive_reasoning: Direct LLM call for simple tasks
  */
 
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { LLMAdapter, LLMMessage, LLMToolCall, LLMUsage, LLMTool } from "../llm/index.js";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
 
-function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
-  return zodToJsonSchema(parameters, "zod");
-}
-
 export interface InvokeLLMConfig {
-  adapter: LLMAdapter;
-  defaultModel: string;
-  maxOutputTokens?: number;
-  timeoutMs?: number;
-}
-
-export interface LLMResult {
-  content: string;
-  reasoning?: string;
-  tool_calls?: LLMToolCall[];
-  usage?: LLMUsage;
   model: string;
+  baseURL: string;
+  apiKey: string;
 }
 
-interface ToolMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  name?: string;
+interface StreamChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    delta: {
+      role?: string;
+      content?: string;
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        type?: string;
+        function?: {
+          name?: string;
+          arguments?: string;
+        };
+      }>;
+    };
+    finish_reason?: string;
+  }>;
 }
 
-const formatMessages = (messages: ToolMessage[]): LLMMessage[] => {
-  return messages.map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-    ...(msg.name && { name: msg.name }),
-  }));
+const BUILTIN_PROVIDERS: Record<string, { baseURL?: string; defaultModel: string }> = {
+  openai: { baseURL: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
+  moonshot: { baseURL: "https://api.moonshot.cn/v1", defaultModel: "kimi-k2.5" },
+  kimi: { baseURL: "https://api.moonshot.cn/v1", defaultModel: "kimi-k2.5" },
+  deepseek: { baseURL: "https://api.deepseek.com", defaultModel: "deepseek-chat" },
 };
 
-const getModel = (args: Record<string, unknown>, config: InvokeLLMConfig): string => {
-  if (typeof args.model === "string" && args.model.length > 0) {
-    return args.model;
+function getProviderConfig(provider: string): { baseURL?: string; defaultModel: string } {
+  return BUILTIN_PROVIDERS[provider] || { defaultModel: provider };
+}
+
+function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
+  const schema = zodToJsonSchema(parameters, "zod");
+  if ("$ref" in schema && schema.definitions) {
+    const def = (schema.definitions as Record<string, unknown>).zod as Record<string, unknown> | undefined;
+    if (def && def.type === "object" && def.properties) {
+      return {
+        type: "object",
+        properties: def.properties,
+        required: def.required,
+        additionalProperties: true,
+      };
+    }
   }
-  return config.defaultModel;
-};
+  return schema as Record<string, unknown>;
+}
 
-function createLLMTool(config: InvokeLLMConfig, options: {
-  name: string;
-  description: string;
-  returnToolCalls: boolean;
-}): ToolInfo {
-  const toolInfo: ToolInfo = {
-    name: options.name,
-    description: options.description,
+function convertTools(tools: ToolInfo[]): any[] {
+  return tools
+    .filter((t) => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning")
+    .map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description ?? "",
+        parameters: extractToolSchema(t.parameters),
+      },
+    }));
+}
 
+export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
+  return {
+    name: "invoke_llm",
+    description: "Internal LLM invocation with tool support. Framework internal use.",
     parameters: z.object({
       messages: z
         .array(
@@ -71,7 +95,6 @@ function createLLMTool(config: InvokeLLMConfig, options: {
         )
         .min(1)
         .describe("Conversation history with roles and content"),
-
       tools: z
         .array(
           z.object({
@@ -82,121 +105,113 @@ function createLLMTool(config: InvokeLLMConfig, options: {
         )
         .optional()
         .describe("Available tools for the LLM to call"),
-
-      model: z.string().optional().describe("Model identifier (defaults to configured default)"),
-
-      temperature: z.number().min(0).max(2).optional().describe("Temperature for sampling (0-2)"),
-
+      model: z.string().optional().describe("Model identifier"),
+      temperature: z.number().min(0).max(2).optional().describe("Temperature (0-2)"),
       maxTokens: z.number().positive().optional().describe("Maximum output tokens"),
-
-      topP: z.number().min(0).max(1).optional().describe("Top-p sampling parameter"),
-
-      stop: z.array(z.string()).optional().describe("Stop sequences"),
-
-      frequencyPenalty: z.number().min(-2).max(2).optional().describe("Frequency penalty"),
-
-      presencePenalty: z.number().min(-2).max(2).optional().describe("Presence penalty"),
     }),
-
     async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
       const startTime = Date.now();
-      const messages = formatMessages(args.messages as ToolMessage[]);
-      const model = getModel(args, config);
-      
-      // Convert ToolInfo[] to LLMTool[] format for the LLM API, filtering out internal tools
-      const inputTools = args.tools as import("../../types").Tool[] | undefined;
-      const tools: LLMTool[] | undefined = inputTools
-        ?.filter(t => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning")
-        .map(t => {
-          const schema = extractToolSchema(t.parameters) as Record<string, unknown>;
-          const schemaRef = schema.$ref as string | undefined;
-          const definitions = schema.definitions as Record<string, unknown> | undefined;
-          
-          // Flatten schema by replacing $ref with actual definition
-          if (schemaRef && definitions) {
-            const defName = schemaRef.replace("#/definitions/", "");
-            const def = definitions[defName] as Record<string, unknown> | undefined;
-            if (def && def.type === "object" && def.properties) {
-              return {
-                name: t.name,
-                description: t.description ?? "",
-                parameters: {
-                  type: "object",
-                  properties: def.properties,
-                  required: def.required,
-                  additionalProperties: true,
-                },
-              };
-            }
-          }
-          return {
-            name: t.name,
-            description: t.description ?? "",
-            parameters: schema,
-          };
-        });
+      const messages = args.messages as Array<{ role: string; content: string; name?: string }>;
+      const tools = args.tools as ToolInfo[] | undefined;
 
-      let textContent = "";
-      let reasoningContent = "";
-      const toolCalls: LLMToolCall[] = [];
+      const requestBody: any = {
+        model: config.model,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          name: m.name,
+        })),
+        stream: true,
+        temperature: args.temperature,
+        max_tokens: args.maxTokens,
+      };
+
+      if (tools && tools.length > 0) {
+        requestBody.tools = convertTools(tools);
+        requestBody.tool_choice = "auto";
+      }
 
       try {
-        await config.adapter.stream(
-          {
-            messages,
-            tools,
-            config: {
-              model,
-              temperature: args.temperature as number | undefined,
-              maxTokens: args.maxTokens as number | undefined,
-              topP: args.topP as number | undefined,
-              stop: args.stop as string[] | undefined,
-              frequencyPenalty: args.frequencyPenalty as number | undefined,
-              presencePenalty: args.presencePenalty as number | undefined,
-            },
-            abort: ctx.abort,
-            metadata: ctx.metadata,
+        const response = await fetch(`${config.baseURL}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
           },
-          {
-            onStart: () => {},
+          body: JSON.stringify(requestBody),
+          signal: ctx.abort,
+        });
 
-            onContent: (chunk: string, type: "text" | "reasoning" | "tool-call") => {
-              if (type === "reasoning") {
-                reasoningContent += chunk;
-              } else {
-                textContent += chunk;
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`API error: ${response.status} - ${error}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Failed to get response reader");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let content = "";
+        const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (!trimmed.startsWith("data: ")) continue;
+
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const chunk: StreamChunk = JSON.parse(data);
+              const delta = chunk.choices?.[0]?.delta;
+              if (!delta) continue;
+
+              if (delta.content) {
+                content += delta.content;
               }
-            },
 
-            onToolCall: (toolName: string, toolArgs: Record<string, unknown>, toolCallId: string) => {
-              const toolCall: LLMToolCall = {
-                id: toolCallId,
-                function: {
-                  name: toolName,
-                  arguments: JSON.stringify(toolArgs),
-                },
-              };
-              toolCalls.push(toolCall);
-            },
-
-            onUsage: (usage: LLMUsage) => {},
-
-            onComplete: (usage?: LLMUsage) => {},
-
-            onError: (error: Error) => {
-              throw error;
-            },
-          },
-        );
+              if (delta.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  if (tc.index !== undefined) {
+                    if (!toolCalls[tc.index]) {
+                      toolCalls[tc.index] = {
+                        id: tc.id || `call-${tc.index}`,
+                        function: { name: "", arguments: "" },
+                      };
+                    }
+                    if (tc.function?.name) {
+                      toolCalls[tc.index].function.name = tc.function.name;
+                    }
+                    if (tc.function?.arguments) {
+                      toolCalls[tc.index].function.arguments += tc.function.arguments;
+                    }
+                  }
+                }
+              }
+            } catch {
+              // Skip parse errors
+            }
+          }
+        }
 
         const output: Record<string, unknown> = {
-          content: textContent,
-          reasoning: reasoningContent || undefined,
-          model,
-          provider: config.adapter.name,
+          content,
+          model: config.model,
         };
 
-        if (options.returnToolCalls && toolCalls.length > 0) {
+        if (toolCalls.length > 0) {
           output.tool_calls = toolCalls;
         }
 
@@ -219,29 +234,96 @@ function createLLMTool(config: InvokeLLMConfig, options: {
       }
     },
   };
-
-  return toolInfo;
-}
-
-export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
-  return createLLMTool(config, {
-    name: "invoke_llm",
-    description:
-      "Internal LLM invocation interface. " +
-      "Returns final result with optional tool_calls. " +
-      "Framework internal use only - agents should not actively select this tool.",
-    returnToolCalls: true,
-  });
 }
 
 export function createSystem1IntuitiveReasoning(config: InvokeLLMConfig): ToolInfo {
-  return createLLMTool(config, {
+  return {
     name: "system1_intuitive_reasoning",
-    description:
-      "System 1 Intuitive Reasoning: Direct LLM call for simple tasks. " +
-      "Use for Q&A, text generation, translation, summarization. " +
-      "Returns complete generated text. " +
-      "Select this when the query needs LLM's knowledge or creativity.",
-    returnToolCalls: false,
-  });
+    description: "Direct LLM call for simple tasks (Q&A, text generation, translation, summarization).",
+    parameters: z.object({
+      messages: z
+        .array(
+          z.object({
+            role: z.enum(["system", "user", "assistant", "tool"]),
+            content: z.string(),
+            name: z.string().optional(),
+          }),
+        )
+        .min(1)
+        .describe("Conversation history"),
+      model: z.string().optional().describe("Model identifier"),
+      temperature: z.number().min(0).max(2).optional().describe("Temperature (0-2)"),
+      maxTokens: z.number().positive().optional().describe("Maximum output tokens"),
+    }),
+    async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+      const startTime = Date.now();
+      const messages = args.messages as Array<{ role: string; content: string; name?: string }>;
+
+      const requestBody = {
+        model: config.model,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          name: m.name,
+        })),
+        stream: false,
+        temperature: args.temperature,
+        max_tokens: args.maxTokens,
+      };
+
+      try {
+        const response = await fetch(`${config.baseURL}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: ctx.abort,
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`API error: ${response.status} - ${error}`);
+        }
+
+        const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const content = data.choices?.[0]?.message?.content || "";
+
+        return {
+          success: true,
+          output: content,
+          metadata: {
+            execution_time_ms: Date.now() - startTime,
+          },
+        };
+      } catch (error) {
+        return {
+          success: false,
+          output: "",
+          error: error instanceof Error ? error.message : String(error),
+          metadata: {
+            execution_time_ms: Date.now() - startTime,
+          },
+        };
+      }
+    },
+  };
+}
+
+export function createLLMConfigFromEnv(model: string): InvokeLLMConfig | undefined {
+  const parts = model.split("/");
+  const provider = parts[0] || "openai";
+  const modelId = parts.slice(1).join("/") || getProviderConfig(provider).defaultModel;
+
+  const apiKey = process.env.LLM_API_KEY || process.env[`${provider.toUpperCase()}_API_KEY`];
+  if (!apiKey) return undefined;
+
+  const baseURL = process.env.LLM_BASE_URL || process.env[`${provider.toUpperCase()}_BASE_URL`] || getProviderConfig(provider).baseURL;
+
+  return {
+    model: modelId,
+    baseURL: baseURL || "",
+    apiKey,
+  };
 }
