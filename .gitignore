@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Third party reference libraries
+thirdparty/
+
 # Build outputs
 dist/
 build/
