@@ -7,7 +7,7 @@
  */
 
 import { z } from "zod";
-import type { LLMAdapter, LLMMessage, LLMToolCall, LLMUsage } from "../llm/index.js";
+import type { LLMAdapter, LLMMessage, LLMToolCall, LLMUsage, LLMTool } from "../llm/index.js";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
 
 export interface InvokeLLMConfig {
@@ -67,6 +67,17 @@ function createLLMTool(config: InvokeLLMConfig, options: {
         .min(1)
         .describe("Conversation history with roles and content"),
 
+      tools: z
+        .array(
+          z.object({
+            name: z.string(),
+            description: z.string().optional(),
+            parameters: z.record(z.unknown()),
+          }),
+        )
+        .optional()
+        .describe("Available tools for the LLM to call"),
+
       model: z.string().optional().describe("Model identifier (defaults to configured default)"),
 
       temperature: z.number().min(0).max(2).optional().describe("Temperature for sampling (0-2)"),
@@ -86,6 +97,10 @@ function createLLMTool(config: InvokeLLMConfig, options: {
       const startTime = Date.now();
       const messages = formatMessages(args.messages as ToolMessage[]);
       const model = getModel(args, config);
+      const allTools = args.tools as LLMTool[] | undefined;
+      const tools = allTools?.filter(
+        (t) => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning"
+      );
 
       let textContent = "";
       let reasoningContent = "";
@@ -95,6 +110,7 @@ function createLLMTool(config: InvokeLLMConfig, options: {
         await config.adapter.stream(
           {
             messages,
+            tools,
             config: {
               model,
               temperature: args.temperature as number | undefined,
@@ -105,7 +121,7 @@ function createLLMTool(config: InvokeLLMConfig, options: {
               presencePenalty: args.presencePenalty as number | undefined,
             },
             abort: ctx.abort,
-            metadata: { sessionId: ctx.session_id },
+            metadata: ctx.metadata,
           },
           {
             onStart: () => {},

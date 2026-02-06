@@ -108,7 +108,7 @@ describe("tool helper function", () => {
         description: "Tests context",
         parameters: z.object({}),
         execute: async (args, ctx) => {
-          return { success: true, output: ctx.session_id };
+          return { success: true, output: JSON.stringify(ctx) };
         },
       });
 

@@ -68,7 +68,7 @@ describe("Enhanced Agent", () => {
     ];
 
     mockPrompt = { id: "system", content: "You are a helpful assistant." };
-    mockContext = { session_id: "test-session" };
+    mockContext = {};
   });
 
   test("creates agent with config", () => {
@@ -457,5 +457,144 @@ describe("Enhanced Agent", () => {
     const result = await agent.run();
 
     expect(result).toBe("Done");
+  });
+});
+
+describe("Agent with tools parameter restriction", () => {
+  let mockEnv: Environment;
+  let mockPrompt: Prompt;
+  let mockContext: Context;
+  let responseQueue: Array<{ success: boolean; output: Record<string, unknown>; error?: string }>;
+  let actionLog: Array<{ tool: string; args: Record<string, unknown> }>;
+  let capturedTools: Array<{ name: string; description?: string; parameters: Record<string, unknown> }> | undefined;
+
+  function createMockEnv(): Environment {
+    return {
+      handle_query: async () => "",
+      handle_action: async (action, ctx) => {
+        actionLog.push({ tool: action.tool_name, args: action.args });
+
+        if (action.tool_name === "invoke_llm") {
+          capturedTools = (action.args as Record<string, unknown>).tools as typeof capturedTools;
+        }
+
+        if (responseQueue.length === 0) {
+          return {
+            success: true,
+            output: { content: "Final response" },
+            metadata: { execution_time_ms: 10 },
+          };
+        }
+
+        const response = responseQueue.shift()!;
+        return {
+          success: response.success,
+          output: response.output,
+          error: response.error,
+          metadata: { execution_time_ms: 10 },
+        };
+      },
+      getTools: () => [],
+      getPrompt: () => mockPrompt,
+      subscribe: () => {},
+      unsubscribe: () => {},
+      getStream: () => undefined,
+      pushToSubscribers: () => {},
+    } as unknown as Environment;
+  }
+
+  beforeEach(() => {
+    actionLog = [];
+    responseQueue = [];
+    capturedTools = undefined;
+    mockEnv = createMockEnv();
+
+    mockPrompt = { id: "system", content: "You are a helpful assistant." };
+    mockContext = {};
+  });
+
+  test("passes tools to invoke_llm when tools are provided", async () => {
+    const event: Event = {
+      event_type: "user_query",
+      timestamp: new Date().toISOString(),
+      role: "user",
+      content: "Hello",
+    };
+
+    responseQueue.push({
+      success: true,
+      output: { content: "Hi there!" },
+    });
+
+    const restrictedTools = [
+      {
+        name: "bash",
+        description: "Execute bash commands",
+        parameters: { command: { type: "string" } },
+      },
+      {
+        name: "read_file",
+        description: "Read file contents",
+        parameters: { path: { type: "string" } },
+      },
+    ];
+
+    const agent = new Agent(event, mockEnv, restrictedTools as any, mockPrompt, mockContext);
+    await agent.run();
+
+    expect(capturedTools).toBeDefined();
+    expect(capturedTools!.length).toBe(2);
+    expect(capturedTools![0].name).toBe("bash");
+    expect(capturedTools![1].name).toBe("read_file");
+  });
+
+  test("does not pass tools when empty tools array is provided", async () => {
+    const event: Event = {
+      event_type: "user_query",
+      timestamp: new Date().toISOString(),
+      role: "user",
+      content: "Hello",
+    };
+
+    responseQueue.push({
+      success: true,
+      output: { content: "Hi there!" },
+    });
+
+    const emptyTools: any[] = [];
+
+    const agent = new Agent(event, mockEnv, emptyTools, mockPrompt, mockContext);
+    await agent.run();
+
+    expect(capturedTools).toBeUndefined();
+  });
+
+  test("filters available tools when subset is provided", async () => {
+    const event: Event = {
+      event_type: "user_query",
+      timestamp: new Date().toISOString(),
+      role: "user",
+      content: "Check weather",
+    };
+
+    responseQueue.push({
+      success: true,
+      output: { content: "Sunny!" },
+    });
+
+    const onlyWeatherTool = [
+      {
+        name: "get_weather",
+        description: "Get weather information",
+        parameters: { city: { type: "string" } },
+      },
+    ];
+
+    const agent = new Agent(event, mockEnv, onlyWeatherTool as any, mockPrompt, mockContext);
+    await agent.run();
+
+    expect(capturedTools).toBeDefined();
+    expect(capturedTools!.length).toBe(1);
+    expect(capturedTools![0].name).toBe("get_weather");
   });
 });

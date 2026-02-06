@@ -87,7 +87,7 @@ describe("createSystem1IntuitiveReasoning (System 1)", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -102,7 +102,7 @@ describe("createSystem1IntuitiveReasoning (System 1)", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -139,7 +139,7 @@ describe("createSystem1IntuitiveReasoning (System 1)", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(false);
@@ -171,7 +171,7 @@ describe("createSystem1IntuitiveReasoning (System 1)", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Test" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -217,7 +217,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -231,7 +231,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -250,7 +250,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.metadata).toBeDefined();
@@ -279,7 +279,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(false);
@@ -294,7 +294,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }], model: "custom-model" },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -312,7 +312,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Hello" }], temperature: 0.7, maxTokens: 100, topP: 0.9 },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);
@@ -345,7 +345,7 @@ describe("createInvokeLLM", () => {
 
     const result = await tool.execute(
       { messages: [{ role: "user", content: "Test" }] },
-      { session_id: "test-session" }
+      { workdir: "/test" }
     );
 
     expect(result.success).toBe(true);

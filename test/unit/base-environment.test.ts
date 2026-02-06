@@ -248,7 +248,7 @@ class TestBaseEnvironment extends BaseEnvironment {
     super(config);
   }
 
-  handle_query(query: string, context: Context): Promise<string> {
+  handle_query(query: string, context?: Context, history?: Array<{ role: string; content: string; name?: string }>): Promise<string> {
     return Promise.resolve("test response");
   }
 

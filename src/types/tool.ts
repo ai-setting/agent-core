@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export interface ToolContext {
   workdir?: string;
-  session_id: string;
   user_id?: string;
+  session_id?: string;
   abort?: AbortSignal;
   metadata?: Record<string, unknown>;
 }
