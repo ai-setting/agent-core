@@ -4,6 +4,43 @@
 
 Agent Core is a lightweight AI Agent framework for operating system environments. This guide outlines the development standards, coding conventions, and best practices for contributing to this project.
 
+## 1.1 Documentation
+
+All design documentation is centralized in the `docs/` folder. **Before implementing any feature, read the relevant design documents first.**
+
+### Documentation Structure
+
+```
+docs/
+├── architecture/           # Architecture design documents
+│   └── overview.md        # Overall application architecture (EventBus, SSE, etc.)
+└── app/                   # Application design documents
+    ├── cli-design.md      # CLI client design
+    ├── server-design.md   # Server design
+    ├── desktop-design.md  # Desktop app design (TODO)
+    └── web-design.md      # Web app design (TODO)
+```
+
+### Key Design Documents
+
+| Feature | Document | Description |
+|---------|----------|-------------|
+| Overall Architecture | `docs/architecture/overview.md` | EventBus, SSE, Client-Server communication |
+| EventBus | `docs/architecture/eventbus-design.md` | EventBus implementation details |
+| SSE | `docs/architecture/sse-design.md` | Server-Sent Events implementation |
+| Server | `docs/app/server-design.md` | HTTP Server, EventBus, Session API |
+| CLI | `docs/app/cli-design.md` | Command-line client, AgentClient |
+| Desktop | `docs/app/desktop-design.md` | Desktop application (TODO) |
+| Web | `docs/app/web-design.md` | Web application (TODO) |
+
+### Quick Reference
+
+- **Implementing EventBus?** → Read `docs/architecture/eventbus-design.md`
+- **Implementing SSE?** → Read `docs/architecture/sse-design.md`
+- **Building Server?** → Read `docs/app/server-design.md`
+- **Building CLI?** → Read `docs/app/cli-design.md`
+- **Integrating invoke_llm events?** → Read `docs/app/server-design.md` Section 2.2
+
 ## 2. Code Style Guidelines
 
 ### 2.1 TypeScript Conventions
