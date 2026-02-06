@@ -69,7 +69,7 @@ function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
 }
 
 function convertTools(tools: ToolInfo[]): any[] {
-  return tools
+  const result = tools
     .filter((t) => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning")
     .map((t) => ({
       type: "function",
@@ -79,12 +79,14 @@ function convertTools(tools: ToolInfo[]): any[] {
         parameters: extractToolSchema(t.parameters),
       },
     }));
+  console.log(`[convertTools] Input: ${tools.map(t => t.name).join(", ")} -> Output: ${result.map(t => t.function.name).join(", ")}`);
+  return result;
 }
 
 export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
   return {
     name: "invoke_llm",
-    description: "Internal LLM invocation with tool support. Framework internal use.",
+    description: "Direct LLM API call. Use this for simple text generation tasks only. DO NOT use this tool for complex tasks that might require other tools - let the main agent handle those. This tool does NOT support recursive tool calling.",
     parameters: z.object({
       messages: z
         .array(
@@ -105,7 +107,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
           }),
         )
         .optional()
-        .describe("Available tools for the LLM to call"),
+        .describe("Available tools - NOTE: do NOT include invoke_llm or system1_intuitive_reasoning to avoid recursion"),
       model: z.string().optional().describe("Model identifier"),
       temperature: z.number().min(0).max(2).optional().describe("Temperature (0-2)"),
       maxTokens: z.number().positive().optional().describe("Maximum output tokens"),
@@ -127,7 +129,19 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
         }>;
         tool_call_id?: string;
       }>;
-      const tools = args.tools as ToolInfo[] | undefined;
+      let tools = args.tools as ToolInfo[] | undefined;
+
+      console.log(`[invoke_llm] Received ${tools?.length || 0} tools: ${tools?.map(t => t.name).join(", ") || "none"}`);
+
+      // Prevent recursion: filter out invoke_llm and system1_intuitive_reasoning
+      if (tools) {
+        const beforeCount = tools.length;
+        tools = tools.filter(t => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning");
+        console.log(`[invoke_llm] Filtered tools: ${beforeCount} -> ${tools.length}`);
+        if (tools.length === 0) {
+          tools = undefined;
+        }
+      }
 
       const requestBody: any = {
         model: config.model,
@@ -161,6 +175,9 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
       if (tools && tools.length > 0) {
         requestBody.tools = convertTools(tools);
         requestBody.tool_choice = "auto";
+        console.log(`[invoke_llm] Sending ${requestBody.tools.length} tools to LLM: ${requestBody.tools.map((t: any) => t.function.name).join(", ")}`);
+      } else {
+        console.log(`[invoke_llm] Sending NO tools to LLM`);
       }
 
       try {
@@ -190,6 +207,18 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
         let reasoningContent = "";
         const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
 
+        // Emit start event
+        const sessionId = ctx.session_id || (ctx.metadata as any)?.session_id || "default";
+        const messageId = (ctx.metadata as any)?.message_id || `msg_${Date.now()}`;
+        const env = (ctx as any).env;
+        
+        if (env?.emitStreamEvent) {
+          env.emitStreamEvent({
+            type: "start",
+            metadata: { model: config.model },
+          }, { session_id: sessionId } as any);
+        }
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -213,13 +242,31 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
 
               if (delta.content) {
                 content += delta.content;
+                
+                // Emit text event
+                if (env?.emitStreamEvent) {
+                  env.emitStreamEvent({
+                    type: "text",
+                    content,
+                    delta: delta.content,
+                  }, { session_id: sessionId } as any);
+                }
               }
 
               if (delta.reasoning_content) {
                 reasoningContent += delta.reasoning_content;
+                
+                // Emit reasoning event
+                if (env?.emitStreamEvent) {
+                  env.emitStreamEvent({
+                    type: "reasoning",
+                    content: reasoningContent,
+                  }, { session_id: sessionId } as any);
+                }
               }
 
               if (delta.tool_calls) {
+                console.log(`[invoke_llm] AI requested tool_calls: ${delta.tool_calls.map((tc: any) => tc.function?.name || "unknown").join(", ")}`);
                 for (const tc of delta.tool_calls) {
                   if (tc.index !== undefined) {
                     if (!toolCalls[tc.index]) {
@@ -236,6 +283,19 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
                     }
                   }
                 }
+                
+                // Emit tool_call event
+                if (env?.emitStreamEvent && toolCalls.length > 0) {
+                  const lastTool = toolCalls[toolCalls.length - 1];
+                  if (lastTool.function.name) {
+                    env.emitStreamEvent({
+                      type: "tool_call",
+                      tool_name: lastTool.function.name,
+                      tool_args: JSON.parse(lastTool.function.arguments || "{}"),
+                      tool_call_id: lastTool.id,
+                    }, { session_id: sessionId } as any);
+                  }
+                }
               }
             } catch {
               // Skip parse errors
@@ -243,14 +303,29 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
           }
         }
 
+        // Filter out invalid tool calls (no function name)
+        const validToolCalls = toolCalls.filter(tc => tc.function?.name && tc.function.name.trim() !== "");
+        
         const output: Record<string, unknown> = {
           content,
           reasoning: reasoningContent,
           model: config.model,
         };
 
-        if (toolCalls.length > 0) {
-          output.tool_calls = toolCalls;
+        if (validToolCalls.length > 0) {
+          output.tool_calls = validToolCalls;
+          console.log(`[invoke_llm] Returning with ${validToolCalls.length} tool_calls: ${validToolCalls.map(t => t.function.name).join(", ")}`);
+          // Note: Don't emit completed event here - agent will continue processing
+        } else {
+          console.log(`[invoke_llm] Returning content (no tool_calls)`);
+          // Emit completed event only when returning final content (no tool calls)
+          if (env?.emitStreamEvent) {
+            env.emitStreamEvent({
+              type: "completed",
+              content,
+              metadata: { model: config.model },
+            }, { session_id: sessionId } as any);
+          }
         }
 
         return {

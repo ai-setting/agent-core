@@ -42,6 +42,11 @@ export interface BaseEnvironmentConfig {
   model?: string;
   baseURL?: string;
   apiKey?: string;
+  /**
+   * Hook for handling stream events from LLM
+   * Called during invoke_llm streaming response
+   */
+  onStreamEvent?: (event: StreamEvent, context: Context) => void | Promise<void>;
 }
 
 export interface ToolRegistration {
@@ -77,6 +82,11 @@ export abstract class BaseEnvironment implements Environment {
     this.maxConcurrentStreams = config?.maxConcurrentStreams ?? 10;
     this.defaultModel = config?.defaultModel ?? "gpt-4";
     this.systemPrompt = config?.systemPrompt ?? "";
+
+    // Set stream event hook from config
+    if (config?.onStreamEvent) {
+      this.onStreamEvent = config.onStreamEvent;
+    }
 
     if (this.systemPrompt) {
       this.addPrompt({ id: "system", content: this.systemPrompt });
@@ -339,7 +349,11 @@ export abstract class BaseEnvironment implements Environment {
         context.abort.addEventListener("abort", abortHandler);
       }
 
-      Promise.resolve(tool.execute(action.args, this.toToolContext(context)))
+      // Pass env instance to tool context
+      const toolContext = this.toToolContext(context);
+      (toolContext as any).env = this;
+
+      Promise.resolve(tool.execute(action.args, toolContext))
         .then((result) => {
           clearTimeout(timer);
           if (context.abort) {
@@ -372,8 +386,13 @@ export abstract class BaseEnvironment implements Environment {
     return {
       workdir: context.workdir,
       user_id: context.user_id,
+      session_id: context.session_id,
       abort: context.abort,
-      metadata: context.metadata,
+      metadata: {
+        ...context.metadata,
+        session_id: context.session_id,
+        message_id: context.message_id,
+      },
     };
   }
 

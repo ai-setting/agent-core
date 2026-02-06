@@ -43,6 +43,7 @@ interface LLMOutput {
 
 interface AgentConfig {
   maxIterations?: number;
+  maxErrorRetries?: number;
   retryDelayMs?: number;
   retryBackoffFactor?: number;
   maxRetryDelayMs?: number;
@@ -51,6 +52,7 @@ interface AgentConfig {
 
 const DEFAULT_CONFIG: Required<AgentConfig> = {
   maxIterations: 100,
+  maxErrorRetries: 3,
   retryDelayMs: 1000,
   retryBackoffFactor: 2,
   maxRetryDelayMs: 30000,
@@ -78,13 +80,15 @@ export class Agent {
   private config: Required<AgentConfig>;
   private doomLoopCache: Map<string, DoomLoopEntry> = new Map();
   private iteration: number = 0;
+  private errorRetryCount: number = 0;
   private aborted: boolean = false;
   private _history: HistoryMessage[] = [];
+  private tools: import("../types").Tool[];
 
   constructor(
     private event: Event,
     private env: Environment,
-    private tools: import("../types").Tool[],
+    tools: import("../types").Tool[],
     private prompt: Prompt | undefined,
     private context: Context = {},
     private configOverrides: AgentConfig = {},
@@ -92,6 +96,16 @@ export class Agent {
   ) {
     this.config = { ...DEFAULT_CONFIG, ...configOverrides };
     this._history = history ?? [];
+    // Filter out internal tools to prevent recursion
+    console.log(`[Agent] Initial tools: ${tools.map(t => t.name).join(", ")}`);
+    this.tools = tools.filter((t: import("../types").Tool) => {
+      const isInternal = t.name === "invoke_llm" || t.name === "system1_intuitive_reasoning";
+      if (isInternal) {
+        console.log(`[Agent] Filtering out internal tool: ${t.name}`);
+      }
+      return !isInternal;
+    });
+    console.log(`[Agent] Filtered tools: ${this.tools.map(t => t.name).join(", ")}`);
   }
 
   async run(): Promise<string> {
@@ -122,14 +136,23 @@ export class Agent {
 
       try {
         const result = await this.executeIteration(messages);
+        console.log(`[Agent] executeIteration returned: ${result === null ? 'null' : typeof result + ' (length: ' + result.length + ')'}`);
         if (result !== null) {
+          console.log(`[Agent] Returning result from run(): "${result.substring(0, 50)}..."`);
           return result;
         }
+        console.log(`[Agent] Result was null, continuing to next iteration`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         
         if (this.isRetryableError(errorMessage)) {
-          const delay = this.calculateRetryDelay(this.iteration);
+          this.errorRetryCount++;
+          
+          if (this.errorRetryCount > this.config.maxErrorRetries) {
+            throw new Error(`Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${errorMessage}`);
+          }
+          
+          const delay = this.calculateRetryDelay(this.errorRetryCount);
           console.warn(`Transient error on iteration ${this.iteration}, retrying in ${delay}ms: ${errorMessage}`);
           await this.sleep(delay);
           continue;
@@ -143,6 +166,8 @@ export class Agent {
   }
 
   private async executeIteration(messages: Message[]): Promise<string | null> {
+    console.log(`[Agent] executeIteration - Available tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
+    
     const llmResult = await this.env.handle_action(
       {
         tool_name: "invoke_llm",
@@ -154,24 +179,45 @@ export class Agent {
       this.context
     );
 
+    console.log(`[Agent] LLM result success: ${llmResult.success}, has error: ${!!llmResult.error}`);
+    
     if (!llmResult.success) {
       const error = llmResult.error || "Unknown LLM error";
+      console.log(`[Agent] LLM call failed with error: ${error}`);
       
       if (this.isRetryableError(error)) {
+        this.errorRetryCount++;
+        
+        if (this.errorRetryCount > this.config.maxErrorRetries) {
+          throw new Error(`Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${error}`);
+        }
+        
+        console.log(`[Agent] Error is retryable (attempt ${this.errorRetryCount}/${this.config.maxErrorRetries}), returning null`);
         return null;
       }
       
       throw new Error(`LLM call failed: ${error}`);
     }
 
+    console.log(`[Agent] LLM result type: ${typeof llmResult.output}, success: ${llmResult.success}`);
+    console.log(`[Agent] LLM output raw:`, JSON.stringify(llmResult.output, null, 2));
+    console.log(`[Agent] LLM output keys: ${Object.keys(llmResult.output || {}).join(", ")}`);
+    
     const output = llmResult.output as unknown as LLMOutput;
+    console.log(`[Agent] After cast - output.content: "${output.content}", type: ${typeof output.content}`);
+    console.log(`[Agent] After cast - output.tool_calls:`, output.tool_calls);
     const hasToolCalls = output.tool_calls && output.tool_calls.length > 0;
 
+    console.log(`[Agent] LLM returned - hasToolCalls: ${hasToolCalls}, content length: ${(output.content || "").length}`);
+    console.log(`[Agent] Output content preview: ${(output.content || "").substring(0, 100)}`);
+
     if (!hasToolCalls) {
+      console.log(`[Agent] No tool calls, returning content: "${output.content}"`);
       return output.content || "(no response)";
     }
 
     const toolCalls = output.tool_calls!;
+    console.log(`[Agent] Processing ${toolCalls.length} tool_calls: ${toolCalls.map(tc => tc.function.name).join(", ")}`);
 
     // Push assistant message with reasoning and tool_calls (for models like Kimi)
     // Kimi requires reasoning_content when thinking is enabled
@@ -189,8 +235,12 @@ export class Agent {
       })),
     } as Message);
 
+    console.log(`[Agent] Processing ${toolCalls.length} tool_calls from LLM`);
+    
     for (const toolCall of toolCalls) {
       let toolArgs: Record<string, unknown> = {};
+
+      console.log(`[Agent] Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
 
       try {
         toolArgs = JSON.parse(toolCall.function.arguments);
@@ -209,11 +259,14 @@ export class Agent {
       // Check if tool is allowed (if tools list is provided)
       if (this.tools.length > 0) {
         const isAllowed = this.tools.some(t => t.name === toolCall.function.name);
+        console.log(`[Agent] Tool ${toolCall.function.name} allowed: ${isAllowed}`);
         if (!isAllowed) {
+          console.log(`[Agent] Rejecting tool call for ${toolCall.function.name}`);
           messages.push({
             role: "tool",
             content: `Error: Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`,
             name: toolCall.function.name,
+            tool_call_id: toolCall.id,
           });
           continue;
         }
@@ -254,6 +307,12 @@ export class Agent {
       this.updateDoomLoopCache(toolCall.function.name, toolArgs);
     }
 
+    // Reset error retry count on successful iteration (tool calls were processed)
+    if (this.errorRetryCount > 0) {
+      console.log(`[Agent] Resetting error retry count after successful tool execution`);
+      this.errorRetryCount = 0;
+    }
+
     return null;
   }
 
@@ -266,9 +325,15 @@ export class Agent {
       "Doom loop detected",
       "Invalid JSON",
       "Parse error",
+      "401",
+      "Invalid Authentication",
+      "Unauthorized",
+      "API key",
     ];
 
-    return !nonRetryablePatterns.some((pattern) => error.includes(pattern));
+    return !nonRetryablePatterns.some((pattern) => 
+      error.toLowerCase().includes(pattern.toLowerCase())
+    );
   }
 
   private calculateRetryDelay(attempt: number): number {

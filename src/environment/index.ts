@@ -9,9 +9,13 @@ export type StreamEventType = "text" | "reasoning" | "tool_call" | "tool_result"
 export interface StreamEvent {
   type: StreamEventType;
   content?: string;
+  delta?: string;
   tool_name?: string;
   tool_args?: Record<string, unknown>;
+  tool_call_id?: string;
   tool_result?: unknown;
+  error?: string;
+  code?: string;
   metadata?: Record<string, unknown>;
 }
 
