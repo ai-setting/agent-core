@@ -26,6 +26,7 @@ interface StreamChunk {
     delta: {
       role?: string;
       content?: string;
+      reasoning_content?: string;
       tool_calls?: Array<{
         index: number;
         id?: string;
@@ -111,16 +112,47 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
     }),
     async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
       const startTime = Date.now();
-      const messages = args.messages as Array<{ role: string; content: string; name?: string }>;
+      const messages = args.messages as Array<{
+        role: string;
+        content: string;
+        name?: string;
+        reasoning_content?: string;
+        tool_calls?: Array<{
+          id: string;
+          type: string;
+          function: {
+            name: string;
+            arguments: string;
+          };
+        }>;
+        tool_call_id?: string;
+      }>;
       const tools = args.tools as ToolInfo[] | undefined;
 
       const requestBody: any = {
         model: config.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          name: m.name,
-        })),
+        messages: messages.map((m) => {
+          const msg: any = {
+            role: m.role,
+            content: m.content,
+          };
+          if (m.name) {
+            msg.name = m.name;
+          }
+          // Include reasoning_content for Kimi thinking mode
+          if (m.reasoning_content) {
+            msg.reasoning_content = m.reasoning_content;
+          }
+          // Include tool_calls for assistant messages
+          if (m.tool_calls && m.role === "assistant") {
+            msg.tool_calls = m.tool_calls;
+          }
+          // Include tool_call_id for tool messages (required by Kimi)
+          if (m.tool_call_id && m.role === "tool") {
+            msg.tool_call_id = m.tool_call_id;
+          }
+          return msg;
+        }),
         stream: true,
         temperature: args.temperature,
         max_tokens: args.maxTokens,
@@ -155,6 +187,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
         const decoder = new TextDecoder();
         let buffer = "";
         let content = "";
+        let reasoningContent = "";
         const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
 
         while (true) {
@@ -180,6 +213,10 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
 
               if (delta.content) {
                 content += delta.content;
+              }
+
+              if (delta.reasoning_content) {
+                reasoningContent += delta.reasoning_content;
               }
 
               if (delta.tool_calls) {
@@ -208,6 +245,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
 
         const output: Record<string, unknown> = {
           content,
+          reasoning: reasoningContent,
           model: config.model,
         };
 
@@ -257,15 +295,43 @@ export function createSystem1IntuitiveReasoning(config: InvokeLLMConfig): ToolIn
     }),
     async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
       const startTime = Date.now();
-      const messages = args.messages as Array<{ role: string; content: string; name?: string }>;
+      const messages = args.messages as Array<{
+        role: string;
+        content: string;
+        name?: string;
+        reasoning_content?: string;
+        tool_calls?: Array<{
+          id: string;
+          type: string;
+          function: {
+            name: string;
+            arguments: string;
+          };
+        }>;
+        tool_call_id?: string;
+      }>;
 
-      const requestBody = {
+      const requestBody: any = {
         model: config.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          name: m.name,
-        })),
+        messages: messages.map((m) => {
+          const msg: any = {
+            role: m.role,
+            content: m.content,
+          };
+          if (m.name) {
+            msg.name = m.name;
+          }
+          if (m.reasoning_content) {
+            msg.reasoning_content = m.reasoning_content;
+          }
+          if (m.tool_calls && m.role === "assistant") {
+            msg.tool_calls = m.tool_calls;
+          }
+          if (m.tool_call_id && m.role === "tool") {
+            msg.tool_call_id = m.tool_call_id;
+          }
+          return msg;
+        }),
         stream: false,
         temperature: args.temperature,
         max_tokens: args.maxTokens,

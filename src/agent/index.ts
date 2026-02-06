@@ -17,6 +17,16 @@ interface Message {
   role: "system" | "user" | "assistant" | "tool";
   content: string | Record<string, unknown>;
   name?: string;
+  reasoning_content?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: string;
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  tool_call_id?: string;
 }
 
 interface LLMOutput {
@@ -163,6 +173,22 @@ export class Agent {
 
     const toolCalls = output.tool_calls!;
 
+    // Push assistant message with reasoning and tool_calls (for models like Kimi)
+    // Kimi requires reasoning_content when thinking is enabled
+    messages.push({
+      role: "assistant",
+      content: output.content || "",
+      reasoning_content: output.reasoning,
+      tool_calls: toolCalls.map((tc) => ({
+        id: tc.id,
+        type: "function",
+        function: {
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        },
+      })),
+    } as Message);
+
     for (const toolCall of toolCalls) {
       let toolArgs: Record<string, unknown> = {};
 
@@ -209,6 +235,7 @@ export class Agent {
           role: "tool",
           content: `Error: ${error}`,
           name: toolCall.function.name,
+          tool_call_id: toolCall.id,
         });
         
         continue;
@@ -221,6 +248,7 @@ export class Agent {
             ? toolResult.output
             : JSON.stringify(toolResult.output),
         name: toolCall.function.name,
+        tool_call_id: toolCall.id,
       });
 
       this.updateDoomLoopCache(toolCall.function.name, toolArgs);

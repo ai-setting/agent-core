@@ -32,22 +32,6 @@ describe("BaseEnvironment Simplified Initialization", () => {
 
       expect(env).toBeDefined();
     });
-
-    test("should accept llmAdapter directly", () => {
-      const mockAdapter = {
-        name: "test",
-        displayName: "Test",
-        isConfigured: () => true,
-        getDefaultModel: () => "test-model",
-        listModels: async () => ["test-model"],
-        complete: async () => ({ success: true, content: "test" }),
-        stream: async () => {},
-      } as any;
-
-      const env = new TestBaseEnvironment({ llmAdapter: mockAdapter });
-
-      expect(env.getLLMAdapter()).toBe(mockAdapter);
-    });
   });
 
   describe("constructor with system prompt", () => {
@@ -195,14 +179,6 @@ describe("BaseEnvironment Simplified Initialization", () => {
       env.unsubscribe(handler);
 
       expect(env["streamHandlers"].has(handler)).toBe(false);
-    });
-  });
-
-  describe("LLM adapter", () => {
-    test("should return undefined when no adapter configured", () => {
-      const env = new TestBaseEnvironment();
-
-      expect(env.getLLMAdapter()).toBeUndefined();
     });
   });
 

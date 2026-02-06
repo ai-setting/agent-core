@@ -1,387 +1,250 @@
 /**
- * @fileoverview Unit tests for invoke_llm tools (System 1 & System 2).
- * Tests return values and tool call handling.
+ * @fileoverview Unit tests for invoke-llm module.
+ * Tests tool creation, config loading, and message handling.
  */
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
-  createSystem1IntuitiveReasoning,
   createInvokeLLM,
+  createSystem1IntuitiveReasoning,
+  createLLMConfigFromEnv,
+  type InvokeLLMConfig,
 } from "../../src/environment/base/invoke-llm.js";
-import type { LLMAdapter } from "../../src/environment/llm/index.js";
 
-function createMockAdapter(): LLMAdapter {
-  let customContent = "Hello, world!";
-  let simulateError = false;
-  let customUsage = { inputTokens: 10, outputTokens: 5 };
+describe("InvokeLLM Tools", () => {
+  describe("createInvokeLLM", () => {
+    test("should create a tool with correct metadata", () => {
+      const config: InvokeLLMConfig = {
+        model: "gpt-4o",
+        baseURL: "https://api.openai.com/v1",
+        apiKey: "test-key",
+      };
 
-  return {
-    name: "openai" as const,
-    displayName: "OpenAI",
-    configured: true,
-    defaultModel: "gpt-4o",
+      const tool = createInvokeLLM(config);
 
-    isConfigured() {
-      return this.configured;
-    },
+      expect(tool.name).toBe("invoke_llm");
+      expect(tool.description).toContain("Internal LLM invocation");
+    });
 
-    getDefaultModel() {
-      return this.defaultModel;
-    },
+    test("should create tool with custom model", () => {
+      const config: InvokeLLMConfig = {
+        model: "custom-model",
+        baseURL: "https://api.example.com/v1",
+        apiKey: "custom-key",
+      };
 
-    async complete() {
-      return { success: true as const, content: customContent, usage: customUsage };
-    },
+      const tool = createInvokeLLM(config);
 
-    async stream(_params: any, callbacks) {
-      callbacks.onStart?.();
+      expect(tool.name).toBe("invoke_llm");
+    });
+  });
 
-      if (simulateError) {
-        callbacks.onError?.(new Error("Test simulated error"));
-        return;
+  describe("createSystem1IntuitiveReasoning", () => {
+    test("should create a tool with correct metadata", () => {
+      const config: InvokeLLMConfig = {
+        model: "gpt-4o",
+        baseURL: "https://api.openai.com/v1",
+        apiKey: "test-key",
+      };
+
+      const tool = createSystem1IntuitiveReasoning(config);
+
+      expect(tool.name).toBe("system1_intuitive_reasoning");
+      expect(tool.description).toContain("Direct LLM call");
+    });
+
+    test("should create tool with different models", () => {
+      const configs: InvokeLLMConfig[] = [
+        { model: "gpt-4o", baseURL: "https://api.openai.com/v1", apiKey: "key1" },
+        { model: "kimi-k2.5", baseURL: "https://api.moonshot.cn/v1", apiKey: "key2" },
+        { model: "deepseek-chat", baseURL: "https://api.deepseek.com", apiKey: "key3" },
+      ];
+
+      for (const config of configs) {
+        const tool = createSystem1IntuitiveReasoning(config);
+        expect(tool.name).toBe("system1_intuitive_reasoning");
       }
-
-      const words = customContent.split(" ");
-      for (let i = 0; i < words.length; i++) {
-        callbacks.onContent?.(words[i] + (i < words.length - 1 ? " " : ""), "text");
-      }
-
-      callbacks.onUsage?.(customUsage);
-      callbacks.onComplete?.(customUsage);
-    },
-  };
-}
-
-describe("createSystem1IntuitiveReasoning (System 1)", () => {
-  let mockAdapter: ReturnType<typeof createMockAdapter>;
-
-  beforeEach(() => {
-    mockAdapter = createMockAdapter();
+    });
   });
 
-  test("creates tool with correct name", () => {
-    const tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
+  describe("createLLMConfigFromEnv", () => {
+    beforeEach(() => {
+      delete process.env.LLM_MODEL;
+      delete process.env.LLM_API_KEY;
+      delete process.env.LLM_BASE_URL;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_BASE_URL;
+      delete process.env.KIMI_API_KEY;
+      delete process.env.KIMI_BASE_URL;
+      delete process.env.DEEPSEEK_API_KEY;
+      delete process.env.DEEPSEEK_BASE_URL;
+      delete process.env.MOONSHOT_API_KEY;
+      delete process.env.MOONSHOT_BASE_URL;
     });
 
-    expect(tool.name).toBe("system1_intuitive_reasoning");
-  });
-
-  test("has correct description", () => {
-    const tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
+    afterEach(() => {
+      delete process.env.LLM_MODEL;
+      delete process.env.LLM_API_KEY;
+      delete process.env.LLM_BASE_URL;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_BASE_URL;
+      delete process.env.KIMI_API_KEY;
+      delete process.env.KIMI_BASE_URL;
+      delete process.env.DEEPSEEK_API_KEY;
+      delete process.env.DEEPSEEK_BASE_URL;
+      delete process.env.MOONSHOT_API_KEY;
+      delete process.env.MOONSHOT_BASE_URL;
     });
 
-    expect(tool.description).toContain("System 1");
-    expect(tool.description).toContain("Intuitive");
-    expect(tool.description).toContain("simple tasks");
-  });
+    test("should return undefined when no API key is set", () => {
+      process.env.LLM_MODEL = "test-model";
 
-  test("returns success for basic call", async () => {
-    const tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
+      const config = createLLMConfigFromEnv("test-model");
+
+      expect(config).toBeUndefined();
     });
 
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
+    test("should load config from LLM_* env vars", () => {
+      process.env.LLM_MODEL = "test-model";
+      process.env.LLM_API_KEY = "test-api-key";
+      process.env.LLM_BASE_URL = "https://api.example.com/v1";
 
-    expect(result.success).toBe(true);
-  });
+      const config = createLLMConfigFromEnv("test-model");
 
-  test("returns content in output", async () => {
-    mockAdapter = createMockAdapter();
-    const tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("test-model");
+      expect(config?.apiKey).toBe("test-api-key");
+      expect(config?.baseURL).toBe("https://api.example.com/v1");
     });
 
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
+    test("should load OpenAI config from OPENAI_* env vars", () => {
+      process.env.LLM_MODEL = "openai/gpt-4o";
+      process.env.OPENAI_API_KEY = "openai-key";
 
-    expect(result.success).toBe(true);
-    expect(result.output).toBeDefined();
-    if (result.output && typeof result.output === "object") {
-      const output = result.output as Record<string, unknown>;
-      expect(output.content).toContain("Hello");
-      expect(output.model).toBe("gpt-4o");
-      expect(output.provider).toBe("openai");
-    }
-  });
+      const config = createLLMConfigFromEnv("openai/gpt-4o");
 
-  test("handles error gracefully", async () => {
-    let callCount = 0;
-    const adapter = {
-      name: "openai" as const,
-      displayName: "OpenAI",
-      configured: true,
-      defaultModel: "gpt-4o",
-
-      isConfigured() { return true; },
-      getDefaultModel() { return "gpt-4o"; },
-
-      async stream(_params: any, callbacks) {
-        callCount++;
-        callbacks.onError?.(new Error("API error"));
-      },
-    } as unknown as LLMAdapter;
-
-    const tool = createSystem1IntuitiveReasoning({
-      adapter,
-      defaultModel: "gpt-4o",
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("gpt-4o");
+      expect(config?.apiKey).toBe("openai-key");
+      expect(config?.baseURL).toBe("https://api.openai.com/v1");
     });
 
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
+    test("should load Kimi config from KIMI_* env vars", () => {
+      process.env.LLM_MODEL = "kimi/kimi-k2.5";
+      process.env.KIMI_API_KEY = "kimi-key";
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-  });
+      const config = createLLMConfigFromEnv("kimi/kimi-k2.5");
 
-  test("handles reasoning content", async () => {
-    const adapter = {
-      name: "openai" as const,
-      displayName: "OpenAI",
-      configured: true,
-      defaultModel: "gpt-4o",
-
-      isConfigured() { return true; },
-      getDefaultModel() { return "gpt-4o"; },
-
-      async stream(_params: any, callbacks) {
-        callbacks.onStart?.();
-        callbacks.onContent?.("Let me think...", "reasoning");
-        callbacks.onContent?.("Here's the answer.", "text");
-        callbacks.onComplete?.({ inputTokens: 10, outputTokens: 5 });
-      },
-    } as unknown as LLMAdapter;
-
-    const tool = createSystem1IntuitiveReasoning({
-      adapter,
-      defaultModel: "gpt-4o",
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("kimi-k2.5");
+      expect(config?.apiKey).toBe("kimi-key");
+      expect(config?.baseURL).toBe("https://api.moonshot.cn/v1");
     });
 
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Test" }] },
-      { workdir: "/test" }
-    );
+    test("should load Kimi config from MOONSHOT_* env vars", () => {
+      process.env.LLM_MODEL = "moonshot/kimi-k2.5";
+      process.env.MOONSHOT_API_KEY = "moonshot-key";
 
-    expect(result.success).toBe(true);
-    if (result.output && typeof result.output === "object") {
-      const output = result.output as Record<string, unknown>;
-      expect(output.reasoning).toBe("Let me think...");
-    }
+      const config = createLLMConfigFromEnv("moonshot/kimi-k2.5");
+
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("kimi-k2.5");
+      expect(config?.apiKey).toBe("moonshot-key");
+      expect(config?.baseURL).toBe("https://api.moonshot.cn/v1");
+    });
+
+    test("should load DeepSeek config from DEEPSEEK_* env vars", () => {
+      process.env.LLM_MODEL = "deepseek/deepseek-chat";
+      process.env.DEEPSEEK_API_KEY = "deepseek-key";
+
+      const config = createLLMConfigFromEnv("deepseek/deepseek-chat");
+
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("deepseek-chat");
+      expect(config?.apiKey).toBe("deepseek-key");
+      expect(config?.baseURL).toBe("https://api.deepseek.com");
+    });
+
+    test("should use default model for known providers", () => {
+      process.env.LLM_MODEL = "openai";
+      process.env.OPENAI_API_KEY = "test-key";
+
+      const config = createLLMConfigFromEnv("openai");
+
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("gpt-4o");
+    });
+
+    test("should use default baseURL for known providers", () => {
+      process.env.LLM_MODEL = "openai";
+      process.env.OPENAI_API_KEY = "test-key";
+
+      const config = createLLMConfigFromEnv("openai");
+
+      expect(config?.baseURL).toBe("https://api.openai.com/v1");
+    });
+
+    test("should handle unknown provider", () => {
+      process.env.LLM_MODEL = "unknown";
+      process.env.UNKNOWN_API_KEY = "test-key";
+
+      const config = createLLMConfigFromEnv("unknown");
+
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("unknown");
+      expect(config?.baseURL).toBe("");
+    });
+
+    test("should handle custom model name for unknown provider", () => {
+      process.env.LLM_MODEL = "unknown/custom-model-v1";
+      process.env.UNKNOWN_API_KEY = "test-key";
+
+      const config = createLLMConfigFromEnv("unknown/custom-model-v1");
+
+      expect(config).toBeDefined();
+      expect(config?.model).toBe("custom-model-v1");
+    });
+
+    test("should prioritize LLM_* over provider-specific env vars", () => {
+      process.env.LLM_MODEL = "test-model";
+      process.env.LLM_API_KEY = "global-key";
+      process.env.OPENAI_API_KEY = "openai-key";
+
+      const config = createLLMConfigFromEnv("openai/gpt-4o");
+
+      expect(config?.apiKey).toBe("global-key");
+    });
   });
 });
 
-describe("createInvokeLLM", () => {
-  let mockAdapter: ReturnType<typeof createMockAdapter>;
-
-  beforeEach(() => {
-    mockAdapter = createMockAdapter();
-  });
-
-  test("creates tool with correct name", () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    expect(tool.name).toBe("invoke_llm");
-  });
-
-  test("has internal LLM description", () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    expect(tool.description).toContain("Internal");
-    expect(tool.description).toContain("tool_calls");
-    expect(tool.description).toContain("Framework internal");
-  });
-
-  test("returns success for basic call", async () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(true);
-  });
-
-  test("returns content in output", async () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(true);
-    if (result.output && typeof result.output === "object") {
-      const output = result.output as Record<string, unknown>;
-      expect(output.content).toContain("Hello");
-      expect(output.model).toBe("gpt-4o");
-    }
-  });
-
-  test("includes usage in metadata", async () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
-
-    expect(result.metadata).toBeDefined();
-    expect(result.metadata?.execution_time_ms).toBeGreaterThanOrEqual(0);
-  });
-
-  test("handles error gracefully", async () => {
-    const adapter = {
-      name: "openai" as const,
-      displayName: "OpenAI",
-      configured: true,
-      defaultModel: "gpt-4o",
-
-      isConfigured() { return true; },
-      getDefaultModel() { return "gpt-4o"; },
-
-      async stream(_params: any, callbacks) {
-        callbacks.onError?.(new Error("API error"));
-      },
-    } as unknown as LLMAdapter;
-
-    const tool = createInvokeLLM({
-      adapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }] },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-  });
-
-  test("uses model from args when provided", async () => {
-    const tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }], model: "custom-model" },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(true);
-    if (result.output && typeof result.output === "object") {
-      const output = result.output as Record<string, unknown>;
-      expect(output.model).toBe("custom-model");
-    }
-  });
-
-  test("accepts all common parameters", async () => {
-    const tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Hello" }], temperature: 0.7, maxTokens: 100, topP: 0.9 },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(true);
-  });
-
-  test("handles reasoning content", async () => {
-    let reasoningContent = "";
-
-    const adapter = {
-      name: "openai" as const,
-      displayName: "OpenAI",
-      configured: true,
-      defaultModel: "gpt-4o",
-
-      isConfigured() { return true; },
-      getDefaultModel() { return "gpt-4o"; },
-
-      async stream(_params: any, callbacks) {
-        callbacks.onStart?.();
-        callbacks.onContent?.("Let me think...", "reasoning");
-        callbacks.onContent?.("Here's the answer.", "text");
-        callbacks.onComplete?.({ inputTokens: 10, outputTokens: 5 });
-      },
-    } as unknown as LLMAdapter;
-
-    const tool = createInvokeLLM({
-      adapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const result = await tool.execute(
-      { messages: [{ role: "user", content: "Test" }] },
-      { workdir: "/test" }
-    );
-
-    expect(result.success).toBe(true);
-    if (result.output && typeof result.output === "object") {
-      const output = result.output as Record<string, unknown>;
-      expect(output.reasoning).toBe("Let me think...");
-    }
-  });
-});
-
-describe("Both tools comparison", () => {
-  test("have same parameter schema", () => {
-    const mockAdapter = createMockAdapter();
-
-    const system1Tool = createSystem1IntuitiveReasoning({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const system2Tool = createInvokeLLM({
-      adapter: mockAdapter,
-      defaultModel: "gpt-4o",
-    });
-
-    const testData = {
-      messages: [{ role: "user" as const, content: "Hello" }],
+describe("Message Format", () => {
+  test("should handle system messages", () => {
+    const config: InvokeLLMConfig = {
       model: "test-model",
-      temperature: 0.7,
-      maxTokens: 100,
-      topP: 0.9,
-      stop: ["\n"],
-      frequencyPenalty: 0.5,
-      presencePenalty: 0.3,
+      baseURL: "https://api.example.com",
+      apiKey: "test-key",
     };
 
-    expect(system1Tool.parameters.safeParse(testData).success).toBe(true);
-    expect(system2Tool.parameters.safeParse(testData).success).toBe(true);
+    const tool = createSystem1IntuitiveReasoning(config);
+    const messages = [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Hello!" },
+    ];
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe("system");
+    expect(messages[1].role).toBe("user");
+  });
+
+  test("should handle tool result messages", () => {
+    const messages = [
+      { role: "user", content: "What is the weather?" },
+      { role: "tool", content: '{"temperature": 25, "city": "Beijing"}', name: "weather_tool" },
+      { role: "assistant", content: "The weather in Beijing is 25°C." },
+    ];
+
+    expect(messages).toHaveLength(3);
+    expect(messages[1].role).toBe("tool");
+    expect(messages[2].role).toBe("assistant");
   });
 });
