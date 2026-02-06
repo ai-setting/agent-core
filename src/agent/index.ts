@@ -174,6 +174,20 @@ export class Agent {
         );
       }
 
+      // Check for empty tool arguments - this can happen with some models like Kimi K2.5
+      if (Object.keys(toolArgs).length === 0) {
+        messages.push({
+          role: "assistant",
+          content: `I need more information to use the ${toolCall.function.name} tool. Please provide the required parameters.`,
+        });
+        messages.push({
+          role: "tool",
+          content: `Error: The model returned empty arguments for "${toolCall.function.name}". Please provide complete arguments including all required parameters.`,
+          name: toolCall.function.name,
+        });
+        continue;
+      }
+
       if (this.isDoomLoop(toolCall.function.name, toolArgs)) {
         throw new Error(
           `Doom loop detected: tool "${toolCall.function.name}" called ${this.config.doomLoopThreshold} times with same arguments`

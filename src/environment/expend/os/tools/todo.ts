@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { ToolInfo } from "../../types/index.js";
+import type { ToolInfo } from "../../../../types/index.js";
 
 // Simple in-memory todo storage (in production, this could use a database or file)
 const todoStorage: Map<string, TodoItem[]> = new Map();

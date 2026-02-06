@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ToolInfo } from "../../types/index.js";
+import type { ToolInfo } from "../../../../types/index.js";
 import { glob as globModule } from "glob";
 
 export interface ReadFileOptions {
@@ -166,7 +166,15 @@ export function createFileTools(): ToolInfo[] {
       }),
       execute: async (args) => {
         try {
-          const content = await readFile(args.path, {
+          const path = String(args.path ?? "");
+          if (!path) {
+            return {
+              success: false,
+              output: "",
+              error: "Missing required parameter: path",
+            };
+          }
+          const content = await readFile(path, {
             encoding: (args.encoding as BufferEncoding) ?? "utf-8",
           });
           return {
@@ -193,13 +201,32 @@ export function createFileTools(): ToolInfo[] {
       }),
       execute: async (args) => {
         try {
-          await writeFile(args.path, args.content, {
+          const path = args.path;
+          const content = args.content;
+          
+          if (!path || typeof path !== "string" || !path.trim()) {
+            return {
+              success: false,
+              output: "",
+              error: `Missing required parameter: 'path' (string). The write_file tool requires a file path to write to. Example: {"path": "agent-intro.md", "content": "# Agent Introduction\n..."}`,
+            };
+          }
+          
+          if (!content || typeof content !== "string") {
+            return {
+              success: false,
+              output: "",
+              error: `Missing required parameter: 'content' (string). The write_file tool requires content to write.`,
+            };
+          }
+          
+          await writeFile(path, content, {
             append: args.append,
             createDirectories: args.createDirs,
           });
           return {
             success: true,
-            output: `Wrote ${args.content.length} bytes to ${args.path}`,
+            output: `Wrote ${content.length} bytes to ${path}`,
           };
         } catch (error) {
           return {

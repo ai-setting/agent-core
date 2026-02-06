@@ -7,8 +7,13 @@
  */
 
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import type { LLMAdapter, LLMMessage, LLMToolCall, LLMUsage, LLMTool } from "../llm/index.js";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
+
+function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
+  return zodToJsonSchema(parameters, "zod");
+}
 
 export interface InvokeLLMConfig {
   adapter: LLMAdapter;
@@ -72,7 +77,7 @@ function createLLMTool(config: InvokeLLMConfig, options: {
           z.object({
             name: z.string(),
             description: z.string().optional(),
-            parameters: z.record(z.unknown()),
+            parameters: z.record(z.string(), z.any()),
           }),
         )
         .optional()
@@ -97,10 +102,39 @@ function createLLMTool(config: InvokeLLMConfig, options: {
       const startTime = Date.now();
       const messages = formatMessages(args.messages as ToolMessage[]);
       const model = getModel(args, config);
-      const allTools = args.tools as LLMTool[] | undefined;
-      const tools = allTools?.filter(
-        (t) => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning"
-      );
+      
+      // Convert ToolInfo[] to LLMTool[] format for the LLM API, filtering out internal tools
+      const inputTools = args.tools as import("../../types").Tool[] | undefined;
+      const tools: LLMTool[] | undefined = inputTools
+        ?.filter(t => t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning")
+        .map(t => {
+          const schema = extractToolSchema(t.parameters) as Record<string, unknown>;
+          const schemaRef = schema.$ref as string | undefined;
+          const definitions = schema.definitions as Record<string, unknown> | undefined;
+          
+          // Flatten schema by replacing $ref with actual definition
+          if (schemaRef && definitions) {
+            const defName = schemaRef.replace("#/definitions/", "");
+            const def = definitions[defName] as Record<string, unknown> | undefined;
+            if (def && def.type === "object" && def.properties) {
+              return {
+                name: t.name,
+                description: t.description ?? "",
+                parameters: {
+                  type: "object",
+                  properties: def.properties,
+                  required: def.required,
+                  additionalProperties: true,
+                },
+              };
+            }
+          }
+          return {
+            name: t.name,
+            description: t.description ?? "",
+            parameters: schema,
+          };
+        });
 
       let textContent = "";
       let reasoningContent = "";

@@ -99,5 +99,5 @@ export {
   DefaultMetricsCollector,
 } from "./base/index.js";
 export { BaseEnvironment } from "./base/base-environment.js";
-export * from "./os/index.js";
+export * from "./expend/os/index.js";
 export type { LLMResult, LLMResponse } from "./llm/index.js";
