@@ -258,27 +258,7 @@ export abstract class BaseEnvironment implements Environment {
 
     let prompt = this.getPrompt("system");
     if (!prompt) {
-      prompt = { id: "default", content: `You are a helpful AI assistant with access to tools.
-
-## Tool Calling Instructions
-
-When you need to use a tool, you MUST call it with COMPLETE arguments. Never call a tool with empty or missing arguments.
-
-### Required Format for Tool Calls:
-When you want to use a tool like "write_file", you MUST provide ALL required parameters:
-- write_file requires: "path" and "content"
-- Example: {"path": "filename.txt", "content": "file contents here"}
-
-### Critical Rules:
-1. ALWAYS fill in ALL required parameters when calling a tool
-2. NEVER call a tool with empty arguments like {}
-3. If you cannot determine a required parameter, ask the user for clarification
-4. Describe what you're doing before calling each tool
-
-### Available Tools:
-${this.listTools().map(t => `- ${t.name}: ${t.description}`).join("\n")}
-
-Remember: You must provide complete arguments for every tool call. Empty tool calls will fail.` };
+      prompt = { id: "default", content: "You are a helpful AI assistant." };
       this.addPrompt(prompt);
     }
 
