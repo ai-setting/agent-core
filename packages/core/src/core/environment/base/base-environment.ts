@@ -106,7 +106,7 @@ export abstract class BaseEnvironment implements Environment {
     }
   }
 
-  private async ensureLLMInitialized(): Promise<void> {
+  protected async ensureLLMInitialized(): Promise<void> {
     if (this.initializationPromise) {
       await this.initializationPromise;
       this.initializationPromise = null;
