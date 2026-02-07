@@ -4,42 +4,51 @@
 
 Agent Core is a lightweight AI Agent framework for operating system environments. This guide outlines the development standards, coding conventions, and best practices for contributing to this project.
 
-## 1.1 Documentation
+### 1.1 Architecture Overview
+
+```
+agent-core/
+├── packages/core/       ← Core framework (Agent, Session, Tool, Environment)
+├── packages/app/       ← Application packages
+│   ├── server/        ← HTTP Server
+│   ├── cli/          ← CLI (tong_work binary)
+│   ├── web/          ← Web Application
+│   └── desktop/       ← Desktop Application
+└── docs/             ← Documentation
+```
+
+### 1.2 Documentation
 
 All design documentation is centralized in the `docs/` folder. **Before implementing any feature, read the relevant design documents first.**
 
-### Documentation Structure
+#### Documentation Structure
 
 ```
 docs/
-├── architecture/           # Architecture design documents
-│   └── overview.md        # Overall application architecture (EventBus, SSE, etc.)
-└── app/                   # Application design documents
-    ├── cli-design.md      # CLI client design
-    ├── server-design.md   # Server design
-    ├── desktop-design.md  # Desktop app design (TODO)
-    └── web-design.md      # Web app design (TODO)
+├── ARCHITECTURE.md           ← Overall architecture (START HERE)
+├── CLI_BUILD_PLAN.md        ← CLI build plan & design
+├── OPENCODE_BUILD_SYSTEM.md ← OpenCode reference research
+├── BINARY_BUILD.md          ← Binary build design
+├── LLM_PROVIDER_ARCHITECTURE.md ← LLM provider integration
+└── *.md                     ← Other design docs
 ```
 
-### Key Design Documents
+#### Quick Reference
 
-| Feature | Document | Description |
-|---------|----------|-------------|
-| Overall Architecture | `docs/architecture/overview.md` | EventBus, SSE, Client-Server communication |
-| EventBus | `docs/architecture/eventbus-design.md` | EventBus implementation details |
-| SSE | `docs/architecture/sse-design.md` | Server-Sent Events implementation |
-| Server | `docs/app/server-design.md` | HTTP Server, EventBus, Session API |
-| CLI | `docs/app/cli-design.md` | Command-line client, AgentClient |
-| Desktop | `docs/app/desktop-design.md` | Desktop application (TODO) |
-| Web | `docs/app/web-design.md` | Web application (TODO) |
+| Scenario | Document |
+|----------|----------|
+| Understand overall architecture | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
+| Build CLI binary | [docs/CLI_BUILD_PLAN.md](./docs/CLI_BUILD_PLAN.md) |
+| Build multi-platform | [docs/BINARY_BUILD.md](./docs/BINARY_BUILD.md) |
+| Add LLM provider | [docs/LLM_PROVIDER_ARCHITECTURE.md](./docs/LLM_PROVIDER_ARCHITECTURE.md) |
+| Understand events | Event docs in docs/ |
 
-### Quick Reference
+#### Package Documentation
 
-- **Implementing EventBus?** → Read `docs/architecture/eventbus-design.md`
-- **Implementing SSE?** → Read `docs/architecture/sse-design.md`
-- **Building Server?** → Read `docs/app/server-design.md`
-- **Building CLI?** → Read `docs/app/cli-design.md`
-- **Integrating invoke_llm events?** → Read `docs/app/server-design.md` Section 2.2
+| Package | README |
+|---------|--------|
+| CLI | [packages/app/cli/README.md](./packages/app/cli/README.md) |
+| Server | [packages/app/server/README.md](./packages/app/server/README.md) |
 
 ## 2. Code Style Guidelines
 
@@ -65,16 +74,69 @@ docs/
 
 ### 2.3 File Organization
 
+#### Monorepo Structure
+
 ```
-src/
+agent-core/
+├── packages/core/          # Core framework
+│   └── src/
+│       ├── types/         # Type definitions
+│       ├── tool/          # Tool framework
+│       ├── environment/   # Environment abstractions
+│       ├── agent/         # Agent logic
+│       ├── llm/           # LLM adapters
+│       └── session/       # Session management
+├── packages/app/          # Applications
+│   ├── server/          ← depends on packages/core
+│   │   └── src/
+│   ├── cli/            ← depends on packages/core, packages/app/server
+│   │   └── src/
+│   │       ├── commands/   # CLI commands (serve, attach, run)
+│   │       ├── tui.ts      # Terminal UI
+│   │       └── direct-runner.ts
+│   ├── web/            ← depends on packages/app/server
+│   └── desktop/         ← depends on packages/app/server
+└── docs/                # Documentation
+```
+
+#### Core Package (`packages/core/src/`)
+
+```
+packages/core/src/
 ├── types/           # Type definitions (interfaces, types)
 ├── tool/           # Tool framework
-├── env/            # Environment abstractions
+├── environment/    # Environment abstractions
 │   └── base/       # Base implementations
 ├── agent/          # Agent logic
 ├── llm/            # LLM adapters
-└── prompt/         # Prompt management
+└── session/        # Session management
 ```
+
+#### CLI Package (`packages/app/cli/src/`)
+
+```
+packages/app/cli/src/
+├── index.ts         # CLI entry point (yargs)
+├── commands/       # Command implementations
+│   ├── serve.ts   # serve command
+│   ├── attach.ts  # attach command
+│   ├── run.ts    # run command
+│   └── version.ts
+├── tui.ts         # Terminal UI
+├── direct-runner.ts
+└── client.ts
+```
+
+#### Server Package (`packages/app/server/src/`)
+
+```
+packages/app/server/src/
+├── index.ts         # Server entry point
+├── app.ts          # Hono application
+├── routes/        # API routes
+│   ├── sessions.ts
+│   └── events.ts
+└── eventbus/      # Event bus
 
 ### 2.4 Export Guidelines
 
