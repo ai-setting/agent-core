@@ -1,13 +1,15 @@
 /**
  * @fileoverview Run Command
  *
- * 直接运行代理任务
+ * 直接运行代理任务 - 内嵌服务器模式（不依赖外部 bun）
+ * 参考 tongcode 的实现方式
  */
 
 import { CommandModule } from "yargs";
-import { spawn } from "child_process";
-import path from "path";
 import fs from "fs";
+import path from "path";
+import { AgentServer } from "../../server/server.js";
+import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
 
 interface RunOptions {
@@ -40,34 +42,6 @@ async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
     }
   } catch {}
   return result;
-}
-
-function findBun(): string | null {
-  const bunNames = process.platform === "win32" ? ["bun.exe", "bun"] : ["bun"];
-
-  const searchDirs = [
-    process.env.BUN_INSTALL,
-    process.env.npm_config_prefix && path.join(process.env.npm_config_prefix, "bun"),
-    path.join(process.env.APPDATA || "", "npm"),
-    path.join(process.env.USERPROFILE || "", ".bun"),
-    path.join(process.env.USERPROFILE || "", "AppData", "Roaming", "npm"),
-    process.env.HOME && path.join(process.env.HOME, ".bun"),
-    "/usr/local/bin",
-    "/opt/homebrew/bin",
-  ].filter(Boolean) as string[];
-
-  for (const dir of searchDirs) {
-    if (dir && fs.existsSync(dir)) {
-      for (const bunName of bunNames) {
-        const bunPath = path.join(dir, bunName);
-        if (fs.existsSync(bunPath)) {
-          return bunPath;
-        }
-      }
-    }
-  }
-
-  return null;
 }
 
 export const RunCommand: CommandModule<{}, RunOptions> = {
@@ -109,101 +83,66 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       process.exit(1);
     }
 
-    const port = args.port;
-    const url = `http://localhost:${port}`;
-    console.log("🚀 启动 tong_work 服务器...");
-
     const workdir = process.cwd();
-    const serverScript = path.join(workdir, "packages", "app", "server", "src", "index.ts");
     const envFile = path.join(workdir, ".env");
-
     const baseEnv = await loadEnvFile(envFile);
 
-    const env = {
-      ...process.env,
-      ...baseEnv,
-      PORT: String(port),
-      LLM_MODEL: args.model || baseEnv.LLM_MODEL || "",
-      LLM_API_KEY: baseEnv.LLM_API_KEY || "",
-      LLM_BASE_URL: baseEnv.LLM_BASE_URL || "",
-    };
+    // 设置环境变量
+    const model = args.model || baseEnv.LLM_MODEL || "";
+    const apiKey = baseEnv.LLM_API_KEY || "";
+    const baseURL = baseEnv.LLM_BASE_URL || "";
+    const port = args.port;
 
-    const bunPath = findBun();
-    if (!bunPath) {
-      console.error("❌ 未找到 bun 运行时");
-      console.error("请确保 Bun 已安装并添加到 PATH");
-      console.error("安装: https://bun.sh");
-      process.exit(1);
+    console.log("🚀 启动 tong_work 服务器...");
+
+    // 创建环境（不依赖外部 bun）
+    let env: ServerEnvironment | undefined;
+    if (model && apiKey) {
+      try {
+        env = new ServerEnvironment({
+          model,
+          apiKey,
+          baseURL,
+        });
+        console.log(`✅ Environment 已创建 (Model: ${model})`);
+      } catch (error) {
+        console.error("❌ 创建 Environment 失败:", error);
+        process.exit(1);
+      }
+    } else {
+      console.log("⚠️  未配置 LLM，Server 将以简化模式运行");
     }
 
-    console.log(`使用 bun: ${bunPath}`);
-
-    const serverProc = spawn(bunPath, ["run", serverScript], {
-      cwd: workdir,
+    // 创建服务器实例
+    const server = new AgentServer({
+      port,
+      hostname: "localhost",
       env,
-      stdio: ["pipe", "pipe", "pipe"],
     });
 
-    let serverReady = false;
+    // 获取 Hono app 实例用于直接调用
+    const app = server.getApp();
 
-    serverProc.stdout?.on("data", (data) => {
-      const msg = data.toString();
-      process.stdout.write(msg);
-      if (msg.includes("Server running at") || msg.includes("按 Ctrl+C")) {
-        serverReady = true;
-      }
+    // 创建本地 fetch 函数（直接调用，不通过 HTTP）
+    const localFetch = async (input: any, init?: any): Promise<Response> => {
+      const request = new Request(input, init);
+      return app.fetch(request);
+    };
+
+    // 创建客户端，使用本地 fetch
+    const client = new TongWorkClient("http://localhost:4096", { 
+      sessionId: args.session,
+      // @ts-ignore - 注入本地 fetch
+      fetch: localFetch,
     });
 
-    serverProc.stderr?.on("data", (data) => {
-      process.stderr.write(data.toString());
-    });
-
-    serverProc.on("error", (err) => {
-      console.error("❌ 服务器启动失败:", err);
-      process.exit(1);
-    });
-
-    serverProc.on("close", (code) => {
-      if (code && serverReady) {
-        process.exit(code);
-      }
-    });
-
-    console.log(`⏳ 等待服务器启动 (${url})...`);
-
-    await new Promise<void>((resolve) => {
-      const checkInterval = setInterval(async () => {
-        try {
-          const client = new TongWorkClient(url);
-          const healthy = await client.healthCheck();
-          if (healthy) {
-            clearInterval(checkInterval);
-            console.log("✅ 服务器已就绪\n");
-            resolve();
-          }
-        } catch {
-          // Server not ready yet
-        }
-      }, 500);
-
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!serverReady) {
-          console.error("❌ 服务器启动超时");
-          serverProc.kill();
-          process.exit(1);
-        }
-      }, 30000);
-    });
+    console.log("✅ 服务器已就绪\n");
 
     try {
-      const client = new TongWorkClient(url, { sessionId: args.session });
-
       if (args.continue && args.session) {
         const messages = await client.getMessages(args.session);
         if (messages.length === 0) {
           console.error("会话不存在或没有消息");
-          serverProc.kill();
           process.exit(1);
         }
         console.log(`继续会话: ${args.session}\n`);
@@ -215,12 +154,10 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
 
       await client.runInteractive(args.session!, message);
 
-      console.log("👋 任务完成，关闭服务器...");
-      serverProc.kill();
+      console.log("\n👋 任务完成！");
       process.exit(0);
     } catch (error) {
       console.error("❌ 执行失败:", error);
-      serverProc.kill();
       process.exit(1);
     }
   },

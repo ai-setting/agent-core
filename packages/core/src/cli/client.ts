@@ -35,11 +35,13 @@ export class TongWorkClient {
   private baseUrl: string;
   private sessionId?: string;
   private password?: string;
+  private fetchFn: typeof fetch;
 
-  constructor(url: string, options?: { sessionId?: string; password?: string }) {
+  constructor(url: string, options?: { sessionId?: string; password?: string; fetch?: typeof fetch }) {
     this.baseUrl = url.replace(/\/$/, "");
     this.sessionId = options?.sessionId;
     this.password = options?.password;
+    this.fetchFn = options?.fetch || fetch;
   }
 
   private getHeaders(): Record<string, string> {
@@ -54,7 +56,7 @@ export class TongWorkClient {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/health`);
+      const res = await this.fetchFn(`${this.baseUrl}/health`);
       return res.ok;
     } catch {
       return false;
@@ -62,7 +64,7 @@ export class TongWorkClient {
   }
 
   async listSessions(): Promise<Session[]> {
-    const res = await fetch(`${this.baseUrl}/sessions`, {
+    const res = await this.fetchFn(`${this.baseUrl}/sessions`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to list sessions: ${res.status}`);
@@ -70,7 +72,7 @@ export class TongWorkClient {
   }
 
   async createSession(title?: string): Promise<Session> {
-    const res = await fetch(`${this.baseUrl}/sessions`, {
+    const res = await this.fetchFn(`${this.baseUrl}/sessions`, {
       method: "POST",
       headers: this.getHeaders(),
       body: JSON.stringify({ title }),
@@ -80,19 +82,19 @@ export class TongWorkClient {
   }
 
   async sendPrompt(sessionId: string, content: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/prompt`, {
+    const res = await this.fetchFn(`${this.baseUrl}/sessions/${sessionId}/prompt`, {
       method: "POST",
       headers: this.getHeaders(),
       body: JSON.stringify({ content }),
     });
     if (!res.ok) {
-      const errData = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(`Failed to send prompt: ${res.status} - ${errData.error ?? 'Unknown error'}`);
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(`Failed to send prompt: ${res.status} - ${err.error ?? 'Unknown error'}`);
     }
   }
 
   async getMessages(sessionId: string): Promise<Message[]> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/messages`, {
+    const res = await this.fetchFn(`${this.baseUrl}/sessions/${sessionId}/messages`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to get messages: ${res.status}`);
@@ -101,7 +103,7 @@ export class TongWorkClient {
 
   async *streamEvents(sessionId: string): AsyncGenerator<StreamEvent> {
     const url = `${this.baseUrl}/events?session=${encodeURIComponent(sessionId)}`;
-    const res = await fetch(url, {
+    const res = await this.fetchFn(url, {
       headers: this.getHeaders(),
     });
 
