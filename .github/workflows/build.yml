@@ -58,12 +58,9 @@ jobs:
           # Linux x64 (native)
           - target: tong_work-linux-x64
             os: ubuntu-latest
-          # macOS x64 (native)
-          - target: tong_work-darwin-x64
-            os: macos-13  # Intel macOS runner
-          # macOS ARM64 (Apple Silicon)
+          # macOS ARM64 (Apple Silicon) - GitHub only provides ARM64 runners for free
           - target: tong_work-darwin-arm64
-            os: macos-latest  # M1/M2 runner
+            os: macos-latest
           # Windows x64 (native)
           - target: tong_work-windows-x64
             os: windows-latest
