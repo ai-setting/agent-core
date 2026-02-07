@@ -38,3 +38,6 @@ bun.lockb
 # Misc
 *.tgz
 .cache/
+packages/app/cli/src.exe
+*.exe
+dist/

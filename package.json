@@ -1,38 +1,22 @@
 {
   "name": "agent-core",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
+  "packageManager": "bun@latest",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "bun test test/unit",
-    "test:coverage": "bun test --coverage",
-    "test:unit": "bun test test/unit",
-    "test:integration": "bun test test/integration",
-    "test:invoke": "bun test-invoke-llm.js",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.37",
-    "@ai-sdk/cerebras": "^2.0.30",
-    "@ai-sdk/cohere": "^3.0.18",
-    "@ai-sdk/deepinfra": "^2.0.31",
-    "@ai-sdk/google": "^3.0.21",
-    "@ai-sdk/groq": "^3.0.21",
-    "@ai-sdk/mistral": "^3.0.18",
-    "@ai-sdk/openai": "^3.0.25",
-    "@ai-sdk/openai-compatible": "^2.0.27",
-    "@ai-sdk/perplexity": "^3.0.17",
-    "@ai-sdk/togetherai": "^2.0.30",
-    "@ai-sdk/xai": "^3.0.47",
-    "ai": "^6.0.73",
-    "glob": "^13.0.1",
-    "zod": "^3.22.4",
-    "zod-to-json-schema": "^3.24.5"
+    "dev": "bun run --cwd packages/core dev",
+    "build": "bun run --cwd packages/core build",
+    "build:binary": "bun run --cwd packages/core build:binary",
+    "build:binary:single": "bun run --cwd packages/core build:binary:single",
+    "build:release": "bun run --cwd packages/core build:release",
+    "start": "bun run --cwd packages/core start",
+    "run": "bun run --cwd packages/core run",
+    "attach": "bun run --cwd packages/core attach",
+    "test": "bun run --cwd packages/core test",
+    "typecheck": "bun run --cwd packages/core typecheck"
   },
   "devDependencies": {
-    "@types/bun": "^1.0.8",
-    "typescript": "^5.3.3"
+    "typescript": "latest"
   }
 }
