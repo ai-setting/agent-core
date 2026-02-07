@@ -28,6 +28,7 @@ export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
 
 export class ServerEnvironment extends BaseEnvironment {
   private sessionId: string;
+  private toolsRegistered: Promise<void>;
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -40,7 +41,16 @@ export class ServerEnvironment extends BaseEnvironment {
     super(envConfig);
     this.sessionId = config?.sessionId || "default";
 
-    this.registerDefaultTools();
+    this.toolsRegistered = this.registerDefaultTools();
+  }
+
+  async waitForReady(): Promise<void> {
+    // Wait for base class LLM initialization
+    await (this as any).ensureLLMInitialized?.();
+    // Wait for tools registration
+    await this.toolsRegistered;
+    // Small delay to ensure everything is settled
+    await new Promise(r => setTimeout(r, 100));
   }
 
   private async registerDefaultTools(): Promise<void> {

@@ -84,14 +84,32 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     }
 
     const workdir = process.cwd();
-    const envFile = path.join(workdir, ".env");
-    const baseEnv = await loadEnvFile(envFile);
+    
+    // Try multiple locations for .env file
+    const envPaths = [
+      path.join(workdir, ".env"),
+      path.join(workdir, "..", "..", ".env"), // From packages/core
+      path.join(workdir, "..", ".env"),
+    ];
+    
+    let baseEnv: Record<string, string> = {};
+    for (const envPath of envPaths) {
+      baseEnv = await loadEnvFile(envPath);
+      if (Object.keys(baseEnv).length > 0) {
+        console.log(`Loaded env from: ${envPath}`);
+        break;
+      }
+    }
 
-    // 设置环境变量
+    // 设置环境变量到 process.env（供 ServerEnvironment 读取）
     const model = args.model || baseEnv.LLM_MODEL || "";
     const apiKey = baseEnv.LLM_API_KEY || "";
     const baseURL = baseEnv.LLM_BASE_URL || "";
     const port = args.port;
+    
+    // Set environment variables for createLLMConfigFromEnv
+    if (apiKey) process.env.LLM_API_KEY = apiKey;
+    if (baseURL) process.env.LLM_BASE_URL = baseURL;
 
     console.log("🚀 启动 tong_work 服务器...");
 
@@ -104,6 +122,8 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
           apiKey,
           baseURL,
         });
+        // Wait for initialization to complete
+        await env.waitForReady();
         console.log(`✅ Environment 已创建 (Model: ${model})`);
       } catch (error) {
         console.error("❌ 创建 Environment 失败:", error);
