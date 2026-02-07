@@ -55,26 +55,18 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux x64
+          # Linux x64 (native)
           - target: tong_work-linux-x64
             os: ubuntu-latest
-            arch: x64
-          # Linux ARM64
-          - target: tong_work-linux-arm64
-            os: ubuntu-latest
-            arch: arm64
-          # macOS x64
+          # macOS x64 (native)
           - target: tong_work-darwin-x64
-            os: macos-latest
-            arch: x64
+            os: macos-13  # Intel macOS runner
           # macOS ARM64 (Apple Silicon)
           - target: tong_work-darwin-arm64
-            os: macos-latest
-            arch: arm64
-          # Windows x64
+            os: macos-latest  # M1/M2 runner
+          # Windows x64 (native)
           - target: tong_work-windows-x64
             os: windows-latest
-            arch: x64
 
     steps:
       - name: Checkout
@@ -105,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: packages/core/dist/${{ matrix.target }}/bin/*
+          path: packages/core/dist/*/bin/*
           if-no-files-found: error
 
   release:
