@@ -22,8 +22,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "build:binary": "bun run scripts/build.ts",
+    "build": "bun run scripts/build.ts",
+    "build:ts": "tsc",
     "build:binary:single": "bun run scripts/build.ts --single",
     "build:release": "RELEASE=1 bun run scripts/build.ts",
     "dev": "bun run --conditions=browser ./src/cli/index.ts",
