@@ -96,6 +96,10 @@ export class AgentServer {
     });
   }
 
+  getApp(): Hono<{ Variables: Variables }> {
+    return this.app;
+  }
+
   async start(): Promise<void> {
     const { port, hostname } = this.config;
     
