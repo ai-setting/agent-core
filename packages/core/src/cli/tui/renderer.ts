@@ -1,12 +1,12 @@
 /**
- * @fileoverview TUI 渲染引擎
+ * @fileoverview TUI 渲染引擎 - 增量更新版本
  * 
- * 参考 OpenCode 设计，实现现代化的终端 UI
+ * 参考 OpenCode 设计，实现无闪烁的增量更新
  */
 
 import { stdin, stdout } from "process";
 import readline from "readline";
-import { defaultTheme, RESET, style, color, border, splitBorder } from "./theme";
+import { RESET, color, border, splitBorder, style } from "./theme";
 
 export interface RenderOptions {
   targetFps?: number;
@@ -37,12 +37,10 @@ export class TUIRenderer {
   private inputBuffer = "";
   private messages: Message[] = [];
   private onSubmit?: (text: string) => void;
-  private renderTimer: Timer | null = null;
-  private lastRender = 0;
-  private scrollOffset = 0;
   private sessionTitle = "";
   private isStreaming = false;
   private statusText = "";
+  private lastContentLength = 0; // 上次渲染的内容长度
   
   // 终端尺寸
   private width = stdout.columns || 80;
@@ -70,44 +68,35 @@ export class TUIRenderer {
     stdin.setEncoding("utf8");
 
     stdin.on("data", (key: string) => {
-      // Ctrl+C
       if (key === "\x03" && this.options.exitOnCtrlC) {
         this.cleanup();
         process.exit(0);
       }
 
-      // Ctrl+L - 清屏
       if (key === "\x0c") {
-        this.scrollOffset = 0;
-        this.render();
+        this.fullRender();
         return;
       }
 
-      // Enter
       if (key === "\r" || key === "\n") {
         if (this.inputBuffer.trim()) {
           this.onSubmit?.(this.inputBuffer);
           this.inputBuffer = "";
-          this.render();
+          this.renderInput();
         }
         return;
       }
 
-      // Backspace
       if (key === "\x7f") {
         this.inputBuffer = this.inputBuffer.slice(0, -1);
-        this.render();
+        this.renderInput();
         return;
       }
 
-      // 忽略控制字符
-      if (key.charCodeAt(0) < 32) {
-        return;
-      }
+      if (key.charCodeAt(0) < 32) return;
 
-      // 普通字符
       this.inputBuffer += key;
-      this.render();
+      this.renderInput();
     });
   }
 
@@ -115,7 +104,7 @@ export class TUIRenderer {
     process.stdout.on("resize", () => {
       this.width = stdout.columns || 80;
       this.height = stdout.rows || 24;
-      this.render();
+      this.fullRender();
     });
   }
 
@@ -125,270 +114,130 @@ export class TUIRenderer {
 
   setSessionTitle(title: string): void {
     this.sessionTitle = title;
-    this.scheduleRender();
+    this.fullRender();
   }
 
   setStreaming(isStreaming: boolean): void {
     this.isStreaming = isStreaming;
-    this.statusText = isStreaming ? "Generating..." : "";
-    this.scheduleRender();
+    this.renderStatus();
   }
 
   setStatus(status: string): void {
     this.statusText = status;
-    this.scheduleRender();
+    this.renderStatus();
   }
 
   addMessage(message: Message): void {
     this.messages.push(message);
-    this.scrollToBottom();
-    this.scheduleRender();
+    this.renderNewMessage(message);
   }
 
   appendToLastMessage(content: string): void {
     if (this.messages.length === 0) return;
-    
     const lastMsg = this.messages[this.messages.length - 1];
     lastMsg.content += content;
-    this.scheduleRender();
+    this.updateLastMessage();
   }
 
   updateLastMessageParts(parts: MessagePart[]): void {
     if (this.messages.length === 0) return;
-    
     const lastMsg = this.messages[this.messages.length - 1];
     lastMsg.parts = parts;
-    this.scheduleRender();
+    this.updateLastMessage();
   }
 
-  scrollToBottom(): void {
-    const contentHeight = this.calculateContentHeight();
-    const visibleHeight = this.height - 6; // 减去 header, input, status
-    this.scrollOffset = Math.max(0, contentHeight - visibleHeight);
+  // 增量更新最后一条消息
+  private updateLastMessage(): void {
+    if (this.messages.length === 0) return;
+    
+    const msg = this.messages[this.messages.length - 1];
+    const content = this.renderMessageContent(msg);
+    
+    // 移动到消息位置并重新渲染
+    const lines = content.split("\n");
+    
+    // 移动到倒数第二行（状态栏上方）
+    stdout.write(`\x1b[${this.height - 2};1H`);
+    
+    // 清除从当前位置到屏幕底部的内容
+    stdout.write("\x1b[J");
+    
+    // 重新渲染输入区和状态栏
+    stdout.write(this.renderInputArea());
+    
+    // 移动光标到输入位置
+    const inputLines = this.inputBuffer.split("\n").length;
+    const cursorLine = this.height - 2 - inputLines;
+    stdout.write(`\x1b[${cursorLine};4H`);
   }
 
-  scrollBy(delta: number): void {
-    const contentHeight = this.calculateContentHeight();
-    const visibleHeight = this.height - 6;
-    const maxOffset = Math.max(0, contentHeight - visibleHeight);
+  // 渲染新消息（追加到末尾）
+  private renderNewMessage(msg: Message): void {
+    const content = this.renderMessageContent(msg);
     
-    this.scrollOffset = Math.max(0, Math.min(maxOffset, this.scrollOffset + delta));
-    this.render();
-  }
-
-  private calculateContentHeight(): number {
-    let height = 0;
-    for (const msg of this.messages) {
-      height += this.calculateMessageHeight(msg);
-    }
-    return height;
-  }
-
-  private calculateMessageHeight(msg: Message): number {
-    const contentWidth = this.width - 6; // 减去边框和padding
-    let height = 0;
+    // 移动到倒数第二行
+    stdout.write(`\x1b[${this.height - 2};1H`);
     
-    if (msg.role === "user") {
-      // 用户消息：上下边框 + 内容行
-      const lines = this.wrapText(msg.content, contentWidth);
-      height = 2 + lines.length; // 2 for borders
-    } else if (msg.role === "assistant" && msg.parts && msg.parts.length > 0) {
-      // AI 消息：基于 parts 计算
-      for (const part of msg.parts) {
-        switch (part.type) {
-          case "reasoning": {
-            const text = part.content || "";
-            const lines = this.wrapText(text, contentWidth - 4);
-            height += lines.length;
-            break;
-          }
-          case "text": {
-            const text = part.content || "";
-            const lines = this.wrapText(text, contentWidth);
-            height += lines.length;
-            break;
-          }
-          case "tool_call":
-          case "tool_result":
-            height += 1;
-            break;
-        }
-      }
-    } else {
-      // 纯文本或系统消息
-      const lines = this.wrapText(msg.content, contentWidth);
-      height = lines.length;
-    }
-    
-    return height;
-  }
-
-  private scheduleRender(): void {
-    if (this.renderTimer) return;
-
-    const elapsed = Date.now() - this.lastRender;
-    
-    // 限制渲染频率，最多每 100ms 渲染一次
-    const minRenderInterval = 100;
-    
-    if (elapsed < minRenderInterval) {
-      this.renderTimer = setTimeout(() => {
-        this.renderTimer = null;
-        this.render();
-      }, minRenderInterval - elapsed);
-      return;
-    }
-
-    this.render();
-  }
-
-  render(): void {
-    this.lastRender = Date.now();
-    
-    // 清屏
-    stdout.write("\x1b[2J\x1b[H");
-
-    let output = "";
-    
-    // Header
-    output += this.renderHeader();
-    
-    // 消息区域
-    output += this.renderMessages();
-    
-    // 输入区域
-    output += this.renderInput();
-    
-    // 状态栏
-    output += this.renderStatus();
-
-    stdout.write(output);
-  }
-
-  private renderHeader(): string {
-    const title = this.sessionTitle || "Tong Work";
-    const truncatedTitle = title.length > this.width - 10 
-      ? title.slice(0, this.width - 13) + "..." 
-      : title;
-    
-    let output = "";
-    
-    // 顶部边框
-    output += color.cyan(border.topLeft + border.horizontal.repeat(this.width - 2) + border.topRight);
-    output += "\n";
-    
-    // 标题行
-    const titlePadding = Math.max(0, this.width - 4 - truncatedTitle.length);
-    const leftPad = Math.floor(titlePadding / 2);
-    const rightPad = titlePadding - leftPad;
-    
-    output += color.cyan(border.vertical);
-    output += " ".repeat(leftPad);
-    output += style.bold(truncatedTitle);
-    output += " ".repeat(rightPad);
-    output += color.cyan(border.vertical);
-    output += "\n";
-    
-    // 分隔线
-    output += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT);
-    output += "\n";
-    
-    return output;
-  }
-
-  private renderMessages(): string {
-    const visibleHeight = this.height - 8; // 减去 header(3) + input(3) + status(2)
-    const contentWidth = this.width - 6;
-    
-    let output = "";
-    let currentHeight = 0;
-    
-    // 收集要显示的消息
-    const visibleMessages: { msg: Message; startLine: number }[] = [];
-    let lineCount = 0;
-    
-    for (const msg of this.messages) {
-      const msgHeight = this.calculateMessageHeight(msg);
-      if (lineCount + msgHeight > this.scrollOffset) {
-        visibleMessages.push({ msg, startLine: lineCount - this.scrollOffset });
-      }
-      lineCount += msgHeight;
-      if (lineCount - this.scrollOffset > visibleHeight) break;
-    }
+    // 清除输入区和状态栏
+    stdout.write("\x1b[J");
     
     // 渲染消息
-    for (const { msg } of visibleMessages) {
-      output += this.renderMessage(msg, contentWidth);
-      currentHeight += this.calculateMessageHeight(msg);
-      if (currentHeight > visibleHeight) break;
-    }
+    stdout.write(content);
     
-    // 填充剩余空间
-    const remainingLines = Math.max(0, visibleHeight - currentHeight);
-    output += "\n".repeat(remainingLines);
-    
-    return output;
+    // 渲染输入区和状态栏
+    stdout.write(this.renderInputArea());
   }
 
-  private renderMessage(msg: Message, contentWidth: number): string {
-    let output = "";
+  // 渲染单条消息的内容（不移动到特定位置）
+  private renderMessageContent(msg: Message): string {
+    let output = "\n";
     
     if (msg.role === "user") {
-      // 用户消息 - 左侧边框（OpenCode 风格）
-      output += this.renderUserMessage(msg, contentWidth);
+      output += this.renderUserMessage(msg);
     } else if (msg.role === "assistant") {
-      // AI 消息
-      output += this.renderAssistantMessage(msg, contentWidth);
+      output += this.renderAssistantMessage(msg);
     } else {
-      // 系统消息
-      output += this.renderSystemMessage(msg, contentWidth);
+      output += this.renderSystemMessage(msg);
     }
     
     return output;
   }
 
-  private renderUserMessage(msg: Message, contentWidth: number): string {
+  private renderUserMessage(msg: Message): string {
     let output = "";
-    const lines = this.wrapText(msg.content, contentWidth);
+    const lines = this.wrapText(msg.content, this.width - 6);
     
-    // 上边框
     output += "  " + color.green(splitBorder.vertical) + "\n";
-    
-    // 内容
     for (const line of lines) {
       output += "  " + color.green(splitBorder.vertical) + " " + line + "\n";
     }
-    
-    // 下边框
     output += "  " + color.green(splitBorder.vertical) + "\n";
     
     return output;
   }
 
-  private renderAssistantMessage(msg: Message, contentWidth: number): string {
+  private renderAssistantMessage(msg: Message): string {
     let output = "";
     
     if (msg.parts && msg.parts.length > 0) {
-      // 有结构化 parts，按 part 渲染
       for (const part of msg.parts) {
         switch (part.type) {
           case "reasoning":
-            output += this.renderReasoning(part, contentWidth);
+            output += this.renderReasoning(part);
             break;
           case "text":
-            output += this.renderTextPart(part, contentWidth);
+            output += this.renderTextPart(part);
             break;
           case "tool_call":
-            output += this.renderToolCall(part, contentWidth);
+            output += this.renderToolCall(part);
             break;
           case "tool_result":
-            output += this.renderToolResult(part, contentWidth);
+            output += this.renderToolResult(part);
             break;
         }
       }
     } else {
-      // 纯文本内容
-      const lines = this.wrapText(msg.content, contentWidth);
+      const lines = this.wrapText(msg.content, this.width - 6);
       for (const line of lines) {
         output += "     " + line + "\n";
       }
@@ -397,20 +246,15 @@ export class TUIRenderer {
     return output;
   }
 
-  private renderReasoning(part: MessagePart, contentWidth: number): string {
+  private renderReasoning(part: MessagePart): string {
     let output = "";
     const text = part.content || "";
-    const lines = this.wrapText(text, contentWidth - 4);
+    const lines = this.wrapText(text, this.width - 10);
     
-    // Thinking: 标签
-    output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray("Thinking: "));
+    if (lines.length === 0) return output;
     
-    // 第一行直接跟在标签后
-    if (lines.length > 0) {
-      output += style.italic(color.gray(lines[0])) + "\n";
-    }
+    output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray("Thinking: " + lines[0])) + "\n";
     
-    // 剩余行
     for (let i = 1; i < lines.length; i++) {
       output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(lines[i])) + "\n";
     }
@@ -418,14 +262,13 @@ export class TUIRenderer {
     return output;
   }
 
-  private renderTextPart(part: MessagePart, contentWidth: number): string {
+  private renderTextPart(part: MessagePart): string {
     let output = "";
-    // 使用 content 渲染完整内容，而不是 delta
     const text = part.content || "";
     
     if (!text.trim()) return output;
     
-    const lines = this.wrapText(text, contentWidth);
+    const lines = this.wrapText(text, this.width - 6);
     for (const line of lines) {
       output += "     " + line + "\n";
     }
@@ -433,21 +276,19 @@ export class TUIRenderer {
     return output;
   }
 
-  private renderToolCall(part: MessagePart, contentWidth: number): string {
+  private renderToolCall(part: MessagePart): string {
     let output = "";
     const toolName = part.toolName || "tool";
     const args = part.toolArgs ? JSON.stringify(part.toolArgs).slice(0, 50) : "";
     
     output += "     " + color.yellow("⚡ " + toolName);
-    if (args) {
-      output += " " + color.gray(args);
-    }
+    if (args) output += " " + color.gray(args);
     output += "\n";
     
     return output;
   }
 
-  private renderToolResult(part: MessagePart, contentWidth: number): string {
+  private renderToolResult(part: MessagePart): string {
     let output = "";
     const toolName = part.toolName || "tool";
     const success = part.success !== false;
@@ -463,73 +304,128 @@ export class TUIRenderer {
     }
     
     output += "     " + iconColor(icon + " " + toolName);
-    if (resultStr) {
-      output += " " + color.gray(resultStr);
-    }
+    if (resultStr) output += " " + color.gray(resultStr);
     output += "\n";
     
     return output;
   }
 
-  private renderSystemMessage(msg: Message, contentWidth: number): string {
+  private renderSystemMessage(msg: Message): string {
     let output = "";
-    const lines = this.wrapText(msg.content, contentWidth);
-    
+    const lines = this.wrapText(msg.content, this.width - 6);
     for (const line of lines) {
       output += "  " + color.gray("• " + line) + "\n";
     }
-    
     return output;
   }
 
-  private renderInput(): string {
+  // 渲染输入区域和状态栏
+  private renderInputArea(): string {
     let output = "";
     
     // 分隔线
-    output += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT);
-    output += "\n";
+    output += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT) + "\n";
     
-    // 输入提示符
+    // 输入内容
     const inputLines = this.wrapText(this.inputBuffer, this.width - 6);
-    
     if (inputLines.length === 0) {
       output += color.cyan(border.vertical) + " " + color.gray("> _") + "\n";
     } else {
-      for (let i = 0; i < inputLines.length; i++) {
-        output += color.cyan(border.vertical) + " " + color.green("> ");
-        output += inputLines[i];
-        if (i === inputLines.length - 1 && this.isStreaming) {
-          output += color.gray("█");
-        }
+      for (const line of inputLines) {
+        output += color.cyan(border.vertical) + " " + color.green("> ") + line;
+        if (this.isStreaming) output += color.gray("█");
         output += "\n";
       }
     }
     
     // 底边框
-    output += color.cyan(border.bottomLeft + border.horizontal.repeat(this.width - 2) + border.bottomRight);
-    output += "\n";
+    output += color.cyan(border.bottomLeft + border.horizontal.repeat(this.width - 2) + border.bottomRight) + "\n";
+    
+    // 状态栏
+    output += this.getStatusLine();
     
     return output;
   }
 
-  private renderStatus(): string {
-    let output = "";
+  private getStatusLine(): string {
+    let output = color.gray(this.statusText || "Enter 发送 · Ctrl+C 退出 · Ctrl+L 清屏");
     
-    if (this.statusText) {
-      output += color.gray(this.statusText);
-    } else {
-      output += color.gray("Enter 发送 · Ctrl+C 退出 · Ctrl+L 清屏");
-    }
-    
-    // 右对齐模型信息（如果有）
-    const rightText = this.isStreaming ? "Generating..." : "";
-    if (rightText) {
-      const leftWidth = output.length;
-      const padding = Math.max(0, this.width - leftWidth - rightText.length - 2);
+    if (this.isStreaming) {
+      const rightText = "Generating...";
+      const padding = Math.max(0, this.width - output.length - rightText.length - 2);
       output += " ".repeat(padding) + color.gray(rightText);
     }
     
-    output += "\n";
+    return output + "\n";
+  }
+
+  // 渲染输入区（用于输入时更新）
+  private renderInput(): void {
+    // 保存光标位置
+    stdout.write("\x1b[s");
+    
+    // 移动到状态栏上方
+    const inputLines = Math.max(1, this.inputBuffer.split("\n").length);
+    const startLine = this.height - 1 - inputLines;
+    stdout.write(`\x1b[${startLine};1H`);
+    
+    // 清除输入区和状态栏
+    for (let i = 0; i < inputLines + 2; i++) {
+      stdout.write("\x1b[K\n");
+    }
+    
+    // 移动回原位
+    stdout.write(`\x1b[${startLine};1H`);
+    
+    // 重新渲染
+    stdout.write(this.renderInputArea());
+    
+    // 恢复光标位置
+    stdout.write("\x1b[u");
+  }
+
+  // 渲染状态栏
+  private renderStatus(): void {
+    // 移动到最后一行
+    stdout.write(`\x1b[${this.height};1H`);
+    stdout.write("\x1b[K");
+    stdout.write(this.getStatusLine());
+  }
+
+  // 全屏渲染（初始化或清屏时使用）
+  fullRender(): void {
+    stdout.write("\x1b[2J\x1b[H");
+    
+    // Header
+    stdout.write(this.renderHeader());
+    
+    // 所有消息
+    for (const msg of this.messages) {
+      stdout.write(this.renderMessageContent(msg));
+    }
+    
+    // 输入区
+    stdout.write(this.renderInputArea());
+  }
+
+  private renderHeader(): string {
+    const title = this.sessionTitle || "Tong Work";
+    const truncatedTitle = title.length > this.width - 10 
+      ? title.slice(0, this.width - 13) + "..." 
+      : title;
+    
+    let output = "";
+    output += color.cyan(border.topLeft + border.horizontal.repeat(this.width - 2) + border.topRight) + "\n";
+    
+    const titlePadding = Math.max(0, this.width - 4 - truncatedTitle.length);
+    const leftPad = Math.floor(titlePadding / 2);
+    const rightPad = titlePadding - leftPad;
+    
+    output += color.cyan(border.vertical);
+    output += " ".repeat(leftPad) + style.bold(truncatedTitle) + " ".repeat(rightPad);
+    output += color.cyan(border.vertical) + "\n";
+    output += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT) + "\n";
+    
     return output;
   }
 
@@ -546,9 +442,7 @@ export class TUIRenderer {
           lines.push(remaining.slice(0, width));
           remaining = remaining.slice(width);
         }
-        if (remaining) {
-          lines.push(remaining);
-        }
+        if (remaining) lines.push(remaining);
       }
     }
     
@@ -559,13 +453,10 @@ export class TUIRenderer {
     stdin.setRawMode(false);
     this.rl.close();
     stdout.write(RESET);
-    stdout.write("\x1b[?25h"); // 显示光标
+    stdout.write("\x1b[?25h");
   }
 }
 
-/**
- * 创建 TUI 渲染器
- */
 export function createRenderer(options: RenderOptions = {}): TUIRenderer {
   return new TUIRenderer(options);
 }
