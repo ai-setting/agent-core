@@ -92,6 +92,9 @@ export class TUIApp {
   private handleEvent(event: TUIStreamEvent): void {
     // 忽略心跳
     if (event.type === "server.heartbeat") return;
+    
+    // 调试日志
+    console.log("[TUI] Received event:", event.type, event);
 
     switch (event.type) {
       case "stream.start":
@@ -167,13 +170,17 @@ export class TUIApp {
   }
 
   private updatePart(event: TUIStreamEvent): void {
-    if (!this.currentMessageId) return;
+    if (!this.currentMessageId) {
+      console.log("[TUI] No currentMessageId, skipping part update");
+      return;
+    }
 
     const isReasoning = event.type === "stream.reasoning";
     const partType = isReasoning ? "reasoning" : "text";
 
     // 查找或创建 part
     const parts = store.parts[this.currentMessageId] || [];
+    console.log("[TUI] Current parts:", parts);
     const existingPart = parts.find((p) => p.type === partType);
 
     const part: MessagePart = {
@@ -182,6 +189,8 @@ export class TUIApp {
       content: event.content || "",
       timestamp: Date.now(),
     };
+
+    console.log("[TUI] Updating part:", part);
 
     storeActions.updatePart(this.currentMessageId, part);
   }
