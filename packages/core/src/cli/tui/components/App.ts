@@ -104,17 +104,14 @@ export class TUIApp {
         
       case "stream.text":
         if (event.delta) {
-          // 如果之前有 reasoning 内容，添加换行分隔
-          if (this.hasReasoningContent && this.isFirstReasoning === false) {
-            this.currentParts.push({ type: "text", content: "\n" });
-            this.hasReasoningContent = false;
-          }
-          
           // 查找或创建 text part
           let textPart = this.currentParts.find(p => p.type === "text");
           if (!textPart) {
-            textPart = { type: "text", content: "", delta: "" };
+            // 如果之前有 reasoning 内容，在文本前添加换行
+            const prefix = this.hasReasoningContent ? "\n\n" : "";
+            textPart = { type: "text", content: prefix, delta: "" };
             this.currentParts.push(textPart);
+            this.hasReasoningContent = false;
           }
           textPart.delta = event.delta;
           textPart.content = (textPart.content || "") + event.delta;
