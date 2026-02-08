@@ -19,6 +19,8 @@ export class TUIApp {
   private isFirstReasoning = true;
   private hasReasoningContent = false;
   private currentParts: MessagePart[] = [];
+  private updateTimer: Timer | null = null;
+  private pendingUpdate = false;
 
   constructor(options: TUIOptions) {
     this.options = options;
@@ -73,6 +75,10 @@ export class TUIApp {
   }
 
   stop(): void {
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+      this.updateTimer = null;
+    }
     this.eventManager.disconnect();
     this.renderer.cleanup();
   }
@@ -168,6 +174,15 @@ export class TUIApp {
       case "stream.completed":
         this.isStreaming = false;
         this.renderer.setStreaming(false);
+        // 确保在流式结束时立即更新 UI
+        if (this.updateTimer) {
+          clearTimeout(this.updateTimer);
+          this.updateTimer = null;
+        }
+        if (this.pendingUpdate && this.currentAssistantMessage && this.currentAssistantMessage.parts) {
+          this.renderer.updateLastMessageParts(this.currentAssistantMessage.parts);
+          this.pendingUpdate = false;
+        }
         this.finalizeAssistantMessage();
         break;
         
@@ -231,8 +246,22 @@ export class TUIApp {
   private updateRendererParts(): void {
     if (this.currentAssistantMessage) {
       this.currentAssistantMessage.parts = [...this.currentParts];
-      this.renderer.updateLastMessageParts(this.currentAssistantMessage.parts);
+      this.pendingUpdate = true;
+      this.scheduleUIUpdate();
     }
+  }
+
+  private scheduleUIUpdate(): void {
+    if (this.updateTimer) return;
+
+    // 批量更新 UI，每 100ms 最多一次
+    this.updateTimer = setTimeout(() => {
+      this.updateTimer = null;
+      if (this.pendingUpdate && this.currentAssistantMessage && this.currentAssistantMessage.parts) {
+        this.renderer.updateLastMessageParts(this.currentAssistantMessage.parts);
+        this.pendingUpdate = false;
+      }
+    }, 100);
   }
 
   private finalizeAssistantMessage(): void {
