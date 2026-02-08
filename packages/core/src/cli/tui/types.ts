@@ -1,5 +1,7 @@
 /**
  * @fileoverview TUI 类型定义
+ * 
+ * 参考 OpenCode 设计
  */
 
 /**
@@ -75,6 +77,16 @@ export function normalizeEvent(raw: TUIStreamEventRaw): TUIStreamEvent {
     code: raw.properties?.code,
     timestamp: raw.timestamp,
   };
+}
+
+/**
+ * TUI 配置选项
+ */
+export interface TUIOptions {
+  url: string;
+  directory?: string;
+  sessionID?: string;
+  password?: string;
 }
 
 export interface TUIMessage {
