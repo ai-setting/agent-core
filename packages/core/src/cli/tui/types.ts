@@ -34,13 +34,13 @@ export interface TUIStreamEventRaw {
  * 客户端使用的扁平化事件格式
  */
 export interface TUIStreamEvent {
-  type: 
-    | "stream.start" 
-    | "stream.text" 
-    | "stream.reasoning" 
-    | "stream.tool.call" 
-    | "stream.tool.result" 
-    | "stream.completed" 
+  type:
+    | "stream.start"
+    | "stream.text"
+    | "stream.reasoning"
+    | "stream.tool.call"
+    | "stream.tool.result"
+    | "stream.completed"
     | "stream.error"
     | "server.connected"
     | "server.heartbeat";
@@ -89,25 +89,29 @@ export interface TUIOptions {
   password?: string;
 }
 
-export interface TUIMessage {
+/**
+ * 消息类型
+ */
+export interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
-  toolCalls?: TUIToolCall[];
+  parts?: MessagePart[];
 }
 
-export interface TUIToolCall {
+/**
+ * 消息 Part 类型
+ * 参考 OpenCode 设计
+ */
+export interface MessagePart {
   id: string;
-  name: string;
-  args: Record<string, unknown>;
+  type: "text" | "reasoning" | "tool_call" | "tool_result";
+  content?: string;
+  delta?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
   result?: unknown;
-  status: "pending" | "completed" | "error";
-}
-
-export interface TUIOptions {
-  url: string;
-  directory?: string;
-  sessionID?: string;
-  password?: string;
+  success?: boolean;
+  timestamp?: number;
 }
