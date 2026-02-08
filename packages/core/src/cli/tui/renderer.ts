@@ -146,42 +146,66 @@ export class TUIRenderer {
     this.updateLastMessage();
   }
 
-  // 增量更新最后一条消息
+  // 增量更新最后一条消息（用于流式内容）
   private updateLastMessage(): void {
     if (this.messages.length === 0) return;
     
     const msg = this.messages[this.messages.length - 1];
+    
+    // 获取当前输入区的行数
+    const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
+    const inputAreaHeight = inputLines + 3; // 输入内容 + 边框(2) + 状态栏(1)
+    
+    // 移动到输入区上方开始清除
+    const clearStartLine = this.height - inputAreaHeight;
+    stdout.write(`\x1b[${clearStartLine};1H`);
+    
+    // 清除输入区和状态栏
+    for (let i = 0; i < inputAreaHeight; i++) {
+      stdout.write("\x1b[K\n");
+    }
+    
+    // 移动回原位
+    stdout.write(`\x1b[${clearStartLine};1H`);
+    
+    // 渲染最后一条消息的最后几行（限制高度避免覆盖）
     const content = this.renderMessageContent(msg);
+    const contentLines = content.split("\n");
+    const maxLines = Math.min(contentLines.length, 20); // 最多显示20行
+    const startIdx = Math.max(0, contentLines.length - maxLines);
     
-    // 移动到消息位置并重新渲染
-    const lines = content.split("\n");
+    for (let i = startIdx; i < contentLines.length; i++) {
+      stdout.write(contentLines[i] + "\n");
+    }
     
-    // 移动到倒数第二行（状态栏上方）
-    stdout.write(`\x1b[${this.height - 2};1H`);
-    
-    // 清除从当前位置到屏幕底部的内容
-    stdout.write("\x1b[J");
-    
-    // 重新渲染输入区和状态栏
+    // 渲染输入区和状态栏
     stdout.write(this.renderInputArea());
     
     // 移动光标到输入位置
-    const inputLines = this.inputBuffer.split("\n").length;
-    const cursorLine = this.height - 2 - inputLines;
+    const cursorLine = this.height - 1;
     stdout.write(`\x1b[${cursorLine};4H`);
   }
 
   // 渲染新消息（追加到末尾）
   private renderNewMessage(msg: Message): void {
-    const content = this.renderMessageContent(msg);
+    // 获取当前输入区的行数
+    const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
+    const inputAreaHeight = inputLines + 3; // 输入内容 + 边框(2) + 状态栏(1)
     
-    // 移动到倒数第二行
-    stdout.write(`\x1b[${this.height - 2};1H`);
+    // 移动到输入区上方开始清除
+    const clearStartLine = this.height - inputAreaHeight;
+    stdout.write(`\x1b[${clearStartLine};1H`);
     
     // 清除输入区和状态栏
-    stdout.write("\x1b[J");
+    for (let i = 0; i < inputAreaHeight; i++) {
+      stdout.write("\x1b[K\n");
+    }
+    
+    // 移动回原位
+    stdout.write(`\x1b[${clearStartLine};1H`);
     
     // 渲染消息
+    const content = this.renderMessageContent(msg);
     stdout.write(content);
     
     // 渲染输入区和状态栏
@@ -361,34 +385,36 @@ export class TUIRenderer {
 
   // 渲染输入区（用于输入时更新）
   private renderInput(): void {
-    // 保存光标位置
-    stdout.write("\x1b[s");
+    // 获取输入区高度
+    const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
+    const inputAreaHeight = inputLines + 3; // 输入内容 + 边框(2) + 状态栏(1)
     
-    // 移动到状态栏上方
-    const inputLines = Math.max(1, this.inputBuffer.split("\n").length);
-    const startLine = this.height - 1 - inputLines;
+    // 移动到输入区开始位置
+    const startLine = this.height - inputAreaHeight + 1;
     stdout.write(`\x1b[${startLine};1H`);
     
     // 清除输入区和状态栏
-    for (let i = 0; i < inputLines + 2; i++) {
+    for (let i = 0; i < inputAreaHeight; i++) {
       stdout.write("\x1b[K\n");
     }
     
     // 移动回原位
     stdout.write(`\x1b[${startLine};1H`);
     
-    // 重新渲染
+    // 重新渲染输入区
     stdout.write(this.renderInputArea());
     
-    // 恢复光标位置
-    stdout.write("\x1b[u");
+    // 移动光标到输入位置（最后一行输入框内）
+    const cursorLine = this.height - 1;
+    const cursorCol = 4 + (this.inputBuffer.length % (this.width - 6));
+    stdout.write(`\x1b[${cursorLine};${cursorCol}H`);
   }
 
   // 渲染状态栏
   private renderStatus(): void {
     // 移动到最后一行
     stdout.write(`\x1b[${this.height};1H`);
-    stdout.write("\x1b[K");
+    stdout.write("\x1b[2K"); // 清除整行
     stdout.write(this.getStatusLine());
   }
 
