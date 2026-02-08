@@ -8,13 +8,16 @@ Agent Core is a lightweight AI Agent framework for operating system environments
 
 ```
 agent-core/
-├── packages/core/       ← Core framework (Agent, Session, Tool, Environment)
+├── packages/core/       ← Core framework with CLI and Server
+│   ├── src/
+│   │   ├── core/       ← Core framework (Agent, Session, Tool, Environment)
+│   │   ├── cli/        ← CLI (tong_work binary)
+│   │   └── server/     ← HTTP Server
+│   └── bin/            ← Binary entry point
 ├── packages/app/       ← Application packages
-│   ├── server/        ← HTTP Server
-│   ├── cli/          ← CLI (tong_work binary)
-│   ├── web/          ← Web Application
-│   └── desktop/       ← Desktop Application
-└── docs/             ← Documentation
+│   ├── web/           ← Web Application (depends on core server)
+│   └── desktop/       ← Desktop Application (depends on core server)
+└── docs/              ← Documentation
 ```
 
 ### 1.2 Documentation
@@ -47,8 +50,7 @@ docs/
 
 | Package | README |
 |---------|--------|
-| CLI | [packages/app/cli/README.md](./packages/app/cli/README.md) |
-| Server | [packages/app/server/README.md](./packages/app/server/README.md) |
+| Core | [packages/core/README.md](./packages/core/README.md) |
 
 ## 2. Code Style Guidelines
 
@@ -78,24 +80,19 @@ docs/
 
 ```
 agent-core/
-├── packages/core/          # Core framework
+├── packages/core/          # Core framework with CLI and Server
 │   └── src/
 │       ├── types/         # Type definitions
 │       ├── tool/          # Tool framework
 │       ├── environment/   # Environment abstractions
 │       ├── agent/         # Agent logic
 │       ├── llm/           # LLM adapters
-│       └── session/       # Session management
+│       ├── session/       # Session management
+│       ├── cli/           # CLI implementation
+│       └── server/        # HTTP Server
 ├── packages/app/          # Applications
-│   ├── server/          ← depends on packages/core
-│   │   └── src/
-│   ├── cli/            ← depends on packages/core, packages/app/server
-│   │   └── src/
-│   │       ├── commands/   # CLI commands (serve, attach, run)
-│   │       ├── tui.ts      # Terminal UI
-│   │       └── direct-runner.ts
-│   ├── web/            ← depends on packages/app/server
-│   └── desktop/         ← depends on packages/app/server
+│   ├── web/            ← depends on packages/core server
+│   └── desktop/         ← depends on packages/core server
 └── docs/                # Documentation
 ```
 
@@ -109,34 +106,21 @@ packages/core/src/
 │   └── base/       # Base implementations
 ├── agent/          # Agent logic
 ├── llm/            # LLM adapters
-└── session/        # Session management
+├── session/        # Session management
+├── cli/            # CLI implementation
+│   ├── index.ts   # CLI entry point
+│   ├── commands/  # Command implementations
+│   ├── client.ts  # HTTP client for server
+│   ├── tui.ts     # Terminal UI
+│   └── direct-runner.ts
+└── server/         # HTTP Server
+    ├── index.ts   # Server entry point
+    ├── server.ts  # Hono server
+    ├── environment.ts  # Server environment
+    ├── session.ts      # Session management
+    ├── routes/         # API routes
+    └── eventbus/       # Event bus
 ```
-
-#### CLI Package (`packages/app/cli/src/`)
-
-```
-packages/app/cli/src/
-├── index.ts         # CLI entry point (yargs)
-├── commands/       # Command implementations
-│   ├── serve.ts   # serve command
-│   ├── attach.ts  # attach command
-│   ├── run.ts    # run command
-│   └── version.ts
-├── tui.ts         # Terminal UI
-├── direct-runner.ts
-└── client.ts
-```
-
-#### Server Package (`packages/app/server/src/`)
-
-```
-packages/app/server/src/
-├── index.ts         # Server entry point
-├── app.ts          # Hono application
-├── routes/        # API routes
-│   ├── sessions.ts
-│   └── events.ts
-└── eventbus/      # Event bus
 
 ### 2.4 Export Guidelines
 

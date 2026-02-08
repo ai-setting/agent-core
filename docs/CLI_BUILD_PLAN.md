@@ -49,13 +49,14 @@ agent-core/
 ```
 packages/core/              ← 基础核心，无外部依赖
 
-packages/app/server/       ← 依赖 packages/core
+packages/core/            ← Core framework with CLI and Server
+    ├── src/cli/         ← CLI implementation
+    ├── src/server/      ← HTTP Server
+    └── src/core/        ← Core framework
     ↓
-packages/app/cli/         ← 依赖 packages/core, packages/app/server
+packages/app/web/         ← depends on packages/core server
     ↓
-packages/app/web/         ← 依赖 packages/app/server
-    ↓
-packages/app/desktop/      ← 依赖 packages/app/server
+packages/app/desktop/      ← depends on packages/core server
 ```
 
 ---
@@ -174,8 +175,10 @@ bun run build:release
 
 ## 六、源码结构
 
+CLI 和 Server 集成在 `packages/core` 中：
+
 ```
-packages/app/cli/src/
+packages/core/src/cli/
 ├── index.ts           # CLI 入口 (yargs)
 ├── commands/
 │   ├── serve.ts      # serve 命令
@@ -184,13 +187,20 @@ packages/app/cli/src/
 │   └── version.ts    # version 命令
 ├── tui.ts            # 终端 UI
 ├── direct-runner.ts   # 直接运行模式
-├── client.ts         # HTTP 客户端
-└── cli-engine.ts     # CLI 引擎
+└── client.ts         # HTTP 客户端
 
-packages/app/cli/bin/
+packages/core/src/server/
+├── index.ts          # Server 入口
+├── server.ts         # Hono 服务器
+├── environment.ts    # Server 环境
+├── session.ts        # 会话管理
+├── routes/           # API 路由
+└── eventbus/         # 事件总线
+
+packages/core/bin/
 └── tong_work         # Shell 入口脚本
 
-packages/app/cli/scripts/
+packages/core/scripts/
 └── build.ts          # 构建脚本
 ```
 
@@ -239,7 +249,7 @@ dist/
 
 ## 九、参考文档
 
-- [CLI README](../packages/app/cli/README.md)
+- [Core README](../packages/core/README.md)
 - [OpenCode 构建体系调研](./OPENCODE_BUILD_SYSTEM.md)
 - [二进制构建设计](./BINARY_BUILD.md)
 - [Bun.build 文档](https://bun.sh/docs/bundler)

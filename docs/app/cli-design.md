@@ -243,23 +243,24 @@ app/cli/
 
 ## 6. 依赖
 
+CLI 集成在 `packages/core` 中，依赖：
+
 ```json
 {
-  "name": "@agent-core/cli",
-  "type": "module",
-  "scripts": {
-    "dev": "bun run src/index.ts",
-    "build": "tsc",
-    "typecheck": "tsc --noEmit"
+  "name": "agent-core",
+  "bin": {
+    "tong_work": "./bin/tong_work"
   },
-  "dependencies": {
-    "eventsource": "^2.0.2",
-    "chalk": "^5.3.0"
-  },
-  "devDependencies": {
-    "@types/eventsource": "^1.1.15",
-    "bun-types": "latest",
-    "typescript": "^5.3.0"
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "import": "./dist/cli/index.js"
+    },
+    "./server": {
+      "import": "./dist/server/index.js"
+    }
   }
 }
 ```
