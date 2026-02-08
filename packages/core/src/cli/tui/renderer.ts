@@ -228,11 +228,14 @@ export class TUIRenderer {
 
     const elapsed = Date.now() - this.lastRender;
     
-    if (elapsed < 16) {
+    // 限制渲染频率，最多每 100ms 渲染一次
+    const minRenderInterval = 100;
+    
+    if (elapsed < minRenderInterval) {
       this.renderTimer = setTimeout(() => {
         this.renderTimer = null;
         this.render();
-      }, 16);
+      }, minRenderInterval - elapsed);
       return;
     }
 
