@@ -40,7 +40,10 @@ export class TUIRenderer {
   private sessionTitle = "";
   private isStreaming = false;
   private statusText = "";
-  private lastContentLength = 0; // 上次渲染的内容长度
+  
+  // 跟踪每个 part 的已渲染长度，实现真正的增量更新
+  private renderedParts: Map<string, number> = new Map();
+  private lastMessageY = 0; // 最后一条消息的起始行号
   
   // 终端尺寸
   private width = stdout.columns || 80;
@@ -128,6 +131,15 @@ export class TUIRenderer {
   }
 
   addMessage(message: Message): void {
+    // 清理旧消息的渲染状态
+    if (message.role === "assistant") {
+      // 只清理当前消息的渲染状态（新消息）
+      for (const key of this.renderedParts.keys()) {
+        if (key.startsWith(message.id)) {
+          this.renderedParts.delete(key);
+        }
+      }
+    }
     this.messages.push(message);
     this.renderNewMessage(message);
   }
@@ -136,27 +148,20 @@ export class TUIRenderer {
     if (this.messages.length === 0) return;
     const lastMsg = this.messages[this.messages.length - 1];
     lastMsg.content += content;
-    this.updateLastMessage();
+    // 简单追加，不重渲染
   }
 
   updateLastMessageParts(parts: MessagePart[]): void {
     if (this.messages.length === 0) return;
     const lastMsg = this.messages[this.messages.length - 1];
+    const oldParts = lastMsg.parts || [];
     lastMsg.parts = parts;
-    this.updateLastMessage();
-  }
-
-  // 增量更新最后一条消息（用于流式内容）
-  private updateLastMessage(): void {
-    if (this.messages.length === 0) return;
     
-    const msg = this.messages[this.messages.length - 1];
-    
-    // 获取当前输入区的行数
+    // 计算输入区高度
     const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
-    const inputAreaHeight = inputLines + 3; // 输入内容 + 边框(2) + 状态栏(1)
+    const inputAreaHeight = inputLines + 3;
     
-    // 移动到输入区上方开始清除
+    // 移动到输入区上方
     const clearStartLine = this.height - inputAreaHeight;
     stdout.write(`\x1b[${clearStartLine};1H`);
     
@@ -168,15 +173,65 @@ export class TUIRenderer {
     // 移动回原位
     stdout.write(`\x1b[${clearStartLine};1H`);
     
-    // 渲染最后一条消息的最后几行（限制高度避免覆盖）
-    const content = this.renderMessageContent(msg);
-    const contentLines = content.split("\n");
-    const maxLines = Math.min(contentLines.length, 20); // 最多显示20行
-    const startIdx = Math.max(0, contentLines.length - maxLines);
-    
-    for (let i = startIdx; i < contentLines.length; i++) {
-      stdout.write(contentLines[i] + "\n");
+    // 只渲染新增或变化的内容
+    let output = "";
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const oldPart = oldParts[i];
+      const partId = `${lastMsg.id}-${i}`;
+      const renderedLen = this.renderedParts.get(partId) || 0;
+      
+      if (part.type === "reasoning") {
+        const content = part.content || "";
+        // 如果内容有更新，渲染新增的部分
+        if (content.length > renderedLen) {
+          const newContent = content.slice(renderedLen);
+          const lines = this.wrapText(newContent, this.width - 10);
+          
+          if (renderedLen === 0 && lines.length > 0) {
+            // 首次渲染，显示 "Thinking: " 前缀
+            output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray("Thinking: " + lines[0])) + "\n";
+            for (let j = 1; j < lines.length; j++) {
+              output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(lines[j])) + "\n";
+            }
+          } else {
+            // 继续追加
+            for (const line of lines) {
+              output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(line)) + "\n";
+            }
+          }
+          
+          this.renderedParts.set(partId, content.length);
+        }
+      } else if (part.type === "text") {
+        const content = part.content || "";
+        // 如果内容有更新，渲染新增的部分
+        if (content.length > renderedLen) {
+          const newContent = content.slice(renderedLen);
+          const lines = this.wrapText(newContent, this.width - 6);
+          
+          for (const line of lines) {
+            output += "     " + line + "\n";
+          }
+          
+          this.renderedParts.set(partId, content.length);
+        }
+      } else if (part.type === "tool_call") {
+        // 工具调用只渲染一次
+        if (!this.renderedParts.has(partId)) {
+          output += this.renderToolCall(part);
+          this.renderedParts.set(partId, 1);
+        }
+      } else if (part.type === "tool_result") {
+        // 工具结果只渲染一次
+        if (!this.renderedParts.has(partId)) {
+          output += this.renderToolResult(part);
+          this.renderedParts.set(partId, 1);
+        }
+      }
     }
+    
+    stdout.write(output);
     
     // 渲染输入区和状态栏
     stdout.write(this.renderInputArea());
