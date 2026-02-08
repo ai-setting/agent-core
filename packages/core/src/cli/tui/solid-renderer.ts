@@ -4,7 +4,7 @@
  * 使用 SolidJS 响应式系统实现无闪烁渲染
  */
 
-import { createEffect } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { stdin, stdout } from "process";
 import readline from "readline";
 import { store, storeActions } from "./store";
@@ -50,6 +50,8 @@ export class SolidTUIRenderer {
   private inputBuffer = "";
   private onSubmit?: (text: string) => void;
   private cleanupFns: Array<() => void> = [];
+  private renderCount = 0;
+  private mounted = false;
 
   constructor() {
     this.rl = readline.createInterface({
@@ -132,17 +134,21 @@ export class SolidTUIRenderer {
    * 初始化渲染
    */
   mount() {
+    this.mounted = true;
     stdout.write(ANSI.HIDE_CURSOR);
     this.fullRender();
 
     // SolidJS 响应式：当 store 变化时重新渲染
+    // 使用 createEffect 追踪 store
     createEffect(() => {
-      // 访问 store 属性以建立依赖
-      const messages = store.messages;
-      const parts = store.parts;
-      const isStreaming = store.isStreaming;
-
-      // 重新渲染（SolidJS 会自动优化，只更新变化的部分）
+      // 追踪 store 的变化
+      // 通过访问 store 属性建立依赖
+      const _ = store.messages.length;
+      const __ = Object.keys(store.parts).length;
+      const ___ = store.isStreaming;
+      
+      // 强制重新渲染
+      this.renderCount++;
       this.render();
     });
   }
@@ -167,6 +173,9 @@ export class SolidTUIRenderer {
    * 增量渲染
    */
   private render() {
+    // 调试日志：显示渲染次数
+    const debugLine = `\x1b[s\x1b[1;1H[Renders: ${this.renderCount}]\x1b[u`;
+    
     // 移动到消息区域下方
     const headerHeight = 3;
     const messagesHeight = this.calculateMessagesHeight();
