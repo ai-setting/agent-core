@@ -181,37 +181,41 @@ export class TUIRenderer {
       const partId = `${lastMsg.id}-${i}`;
       const renderedLen = this.renderedParts.get(partId) || 0;
       
-      if (part.type === "reasoning") {
+      if (part.type === "reasoning" || part.type === "text") {
         const content = part.content || "";
-        // 如果内容有更新，渲染新增的部分
+        const isReasoning = part.type === "reasoning";
+        const prefix = isReasoning ? "Thinking: " : "";
+        const indent = isReasoning ? "  " : "     ";
+        const width = isReasoning ? this.width - 10 : this.width - 6;
+        
+        // 如果内容有更新
         if (content.length > renderedLen) {
-          const newContent = content.slice(renderedLen);
-          const lines = this.wrapText(newContent, this.width - 10);
+          const fullText = prefix + content;
+          const lines = this.wrapText(fullText, width);
+          const oldLines = renderedLen > 0 ? this.wrapText(prefix + content.slice(0, renderedLen), width) : [];
           
-          if (renderedLen === 0 && lines.length > 0) {
-            // 首次渲染，显示 "Thinking: " 前缀
-            output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray("Thinking: " + lines[0])) + "\n";
-            for (let j = 1; j < lines.length; j++) {
+          // 只渲染新增的行
+          for (let j = oldLines.length; j < lines.length; j++) {
+            if (isReasoning) {
               output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(lines[j])) + "\n";
-            }
-          } else {
-            // 继续追加
-            for (const line of lines) {
-              output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(line)) + "\n";
+            } else {
+              output += "     " + lines[j] + "\n";
             }
           }
           
-          this.renderedParts.set(partId, content.length);
-        }
-      } else if (part.type === "text") {
-        const content = part.content || "";
-        // 如果内容有更新，渲染新增的部分
-        if (content.length > renderedLen) {
-          const newContent = content.slice(renderedLen);
-          const lines = this.wrapText(newContent, this.width - 6);
-          
-          for (const line of lines) {
-            output += "     " + line + "\n";
+          // 如果最后一行有更新（未完整换行的情况），需要重新渲染最后一行
+          if (oldLines.length > 0 && lines.length === oldLines.length) {
+            const lastOldLine = oldLines[oldLines.length - 1];
+            const lastNewLine = lines[lines.length - 1];
+            if (lastNewLine.length > lastOldLine.length) {
+              // 回到上一行重新渲染
+              output += "\x1b[1A\x1b[K"; // 上移一行并清除
+              if (isReasoning) {
+                output += "  " + color.gray(splitBorder.vertical) + " " + style.italic(color.gray(lastNewLine)) + "\n";
+              } else {
+                output += "     " + lastNewLine + "\n";
+              }
+            }
           }
           
           this.renderedParts.set(partId, content.length);
