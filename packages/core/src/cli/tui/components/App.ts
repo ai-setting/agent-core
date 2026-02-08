@@ -1,31 +1,24 @@
 /**
- * @fileoverview TUI App 组件
+ * @fileoverview TUI App - SolidJS Version
  * 
- * 参考 OpenCode 设计的主应用组件
+ * 参考 OpenCode 设计，使用 SolidJS 响应式系统
  */
 
-import { TUIRenderer, type Message, type MessagePart, createRenderer } from "../renderer";
+import { SolidTUIRenderer, createRenderer } from "../solid-renderer";
 import { EventStreamManager } from "../hooks/useEventStream";
-import type { TUIStreamEvent, TUIOptions } from "../types";
+import { storeActions, store } from "../store";
+import type { TUIStreamEvent, TUIOptions, Message, MessagePart } from "../types";
 
 export class TUIApp {
-  private renderer: TUIRenderer;
+  private renderer: SolidTUIRenderer;
   private eventManager: EventStreamManager;
   private options: TUIOptions;
-  private messages: Message[] = [];
-  private isStreaming = false;
-  private currentAssistantMessage: Message | null = null;
-  private lastReasoningContent = "";
-  private isFirstReasoning = true;
-  private hasReasoningContent = false;
-  private currentParts: MessagePart[] = [];
+  private currentMessageId?: string;
 
   constructor(options: TUIOptions) {
     this.options = options;
-    
-    this.renderer = new TUIRenderer({
-      exitOnCtrlC: true,
-    });
+
+    this.renderer = createRenderer();
 
     this.eventManager = new EventStreamManager({
       url: options.url,
@@ -45,31 +38,37 @@ export class TUIApp {
     console.clear();
     console.log("正在连接到服务器...");
     console.log(`服务器地址: ${this.options.url}`);
-    
+
     if (this.options.sessionID) {
       console.log(`会话 ID: ${this.options.sessionID}`);
     }
 
     console.log("\n按任意键继续...");
-    
+
     await this.waitForKey();
-    
+
+    // 设置会话ID
+    if (this.options.sessionID) {
+      storeActions.setSessionId(this.options.sessionID);
+    }
+
+    // 初始化渲染器
+    this.renderer.mount();
+
+    // 连接事件流
     this.eventManager.connect();
-    
+
+    // 如果没有会话ID，创建新会话
     if (!this.options.sessionID) {
       try {
         const sessionId = await this.eventManager.createSession("TUI Session");
         this.options.sessionID = sessionId;
-        this.renderer.setSessionTitle(`Session ${sessionId.slice(0, 8)}`);
-        this.addSystemMessage(`已创建新会话`);
+        storeActions.setSessionId(sessionId);
+        this.addSystemMessage("已创建新会话");
       } catch (error) {
         this.addSystemMessage(`创建会话失败: ${(error as Error).message}`);
       }
-    } else {
-      this.renderer.setSessionTitle(`Session ${this.options.sessionID.slice(0, 8)}`);
     }
-
-    this.renderer.fullRender();
   }
 
   stop(): void {
@@ -79,11 +78,11 @@ export class TUIApp {
 
   private handleUserInput(content: string): void {
     this.addUserMessage(content);
-    
-    this.eventManager.sendMessage(content, this.options.sessionID)
+
+    this.eventManager
+      .sendMessage(content, this.options.sessionID)
       .then(() => {
-        this.isStreaming = true;
-        this.renderer.setStreaming(true);
+        storeActions.setStreaming(true);
       })
       .catch((error) => {
         this.addSystemMessage(`发送失败: ${(error as Error).message}`);
@@ -91,89 +90,41 @@ export class TUIApp {
   }
 
   private handleEvent(event: TUIStreamEvent): void {
-    if (event.type === "server.heartbeat") {
-      return;
-    }
+    // 忽略心跳
+    if (event.type === "server.heartbeat") return;
 
     switch (event.type) {
       case "stream.start":
-        this.isStreaming = true;
-        this.renderer.setStreaming(true);
+        storeActions.setStreaming(true);
         this.startAssistantMessage();
         break;
-        
+
       case "stream.text":
-        if (event.delta) {
-          // 查找或创建 text part
-          let textPart = this.currentParts.find(p => p.type === "text");
-          if (!textPart) {
-            // 如果之前有 reasoning 内容，在文本前添加换行
-            const prefix = this.hasReasoningContent ? "\n\n" : "";
-            textPart = { type: "text", content: prefix, delta: "" };
-            this.currentParts.push(textPart);
-            this.hasReasoningContent = false;
-          }
-          textPart.delta = event.delta;
-          textPart.content = (textPart.content || "") + event.delta;
-          
-          this.appendToAssistantMessage(event.delta);
-          this.updateRendererParts();
-        }
-        break;
-        
       case "stream.reasoning":
-        if (event.content) {
-          const newContent = event.content;
-          if (newContent.length > this.lastReasoningContent.length) {
-            const delta = newContent.slice(this.lastReasoningContent.length);
-            
-            // 查找或创建 reasoning part
-            let reasoningPart = this.currentParts.find(p => p.type === "reasoning");
-            if (!reasoningPart) {
-              reasoningPart = { type: "reasoning", content: "" };
-              this.currentParts.push(reasoningPart);
-            }
-            reasoningPart.content = newContent;
-            
-            this.lastReasoningContent = newContent;
-            this.hasReasoningContent = true;
-            this.updateRendererParts();
-          }
+        if (event.content !== undefined) {
+          this.updatePart(event);
         }
         break;
-        
+
       case "stream.tool.call":
         if (event.toolName) {
-          this.currentParts.push({
-            type: "tool_call",
-            toolName: event.toolName,
-            toolArgs: event.toolArgs,
-          });
-          this.updateRendererParts();
+          this.addToolCall(event);
         }
         break;
-        
+
       case "stream.tool.result":
         if (event.toolName) {
-          this.currentParts.push({
-            type: "tool_result",
-            toolName: event.toolName,
-            result: event.result,
-            success: event.success,
-          });
-          this.updateRendererParts();
+          this.addToolResult(event);
         }
         break;
-        
+
       case "stream.completed":
-        this.isStreaming = false;
-        this.renderer.setStreaming(false);
-        this.finalizeAssistantMessage();
+        storeActions.setStreaming(false);
+        this.currentMessageId = undefined;
         break;
-        
+
       case "stream.error":
-        this.isStreaming = false;
-        this.renderer.setStreaming(false);
+        storeActions.setStreaming(false);
         this.addSystemMessage(`错误: ${event.error || "Unknown error"}`);
         break;
     }
@@ -193,69 +144,90 @@ export class TUIApp {
 
   private addUserMessage(content: string): void {
     const message: Message = {
-      id: this.generateId(),
+      id: this.generateId("msg"),
       role: "user",
       content,
       timestamp: Date.now(),
     };
-    
-    this.messages.push(message);
-    this.renderer.addMessage(message);
+
+    storeActions.addMessage(message);
   }
 
   private startAssistantMessage(): void {
-    this.currentAssistantMessage = {
-      id: this.generateId(),
+    const message: Message = {
+      id: this.generateId("msg"),
       role: "assistant",
       content: "",
       timestamp: Date.now(),
       parts: [],
     };
-    
-    this.lastReasoningContent = "";
-    this.isFirstReasoning = true;
-    this.hasReasoningContent = false;
-    this.currentParts = [];
-    
-    this.renderer.addMessage(this.currentAssistantMessage);
+
+    this.currentMessageId = message.id;
+    storeActions.addMessage(message);
   }
 
-  private appendToAssistantMessage(content: string): void {
-    if (!this.currentAssistantMessage) {
-      this.startAssistantMessage();
-    }
-    
-    this.currentAssistantMessage!.content += content;
+  private updatePart(event: TUIStreamEvent): void {
+    if (!this.currentMessageId) return;
+
+    const isReasoning = event.type === "stream.reasoning";
+    const partType = isReasoning ? "reasoning" : "text";
+
+    // 查找或创建 part
+    const parts = store.parts[this.currentMessageId] || [];
+    const existingPart = parts.find((p) => p.type === partType);
+
+    const part: MessagePart = {
+      id: existingPart?.id || this.generateId("part"),
+      type: partType,
+      content: event.content || "",
+      timestamp: Date.now(),
+    };
+
+    storeActions.updatePart(this.currentMessageId, part);
   }
 
-  private updateRendererParts(): void {
-    if (this.currentAssistantMessage) {
-      this.currentAssistantMessage.parts = [...this.currentParts];
-      this.renderer.updateLastMessageParts(this.currentAssistantMessage.parts);
-    }
+  private addToolCall(event: TUIStreamEvent): void {
+    if (!this.currentMessageId) return;
+
+    const part: MessagePart = {
+      id: this.generateId("part"),
+      type: "tool_call",
+      toolName: event.toolName,
+      toolArgs: event.toolArgs,
+      timestamp: Date.now(),
+    };
+
+    storeActions.updatePart(this.currentMessageId, part);
   }
 
-  private finalizeAssistantMessage(): void {
-    if (this.currentAssistantMessage) {
-      this.messages.push(this.currentAssistantMessage);
-      this.currentAssistantMessage = null;
-    }
+  private addToolResult(event: TUIStreamEvent): void {
+    if (!this.currentMessageId) return;
+
+    const part: MessagePart = {
+      id: this.generateId("part"),
+      type: "tool_result",
+      toolName: event.toolName,
+      result: event.result,
+      success: event.success,
+      timestamp: Date.now(),
+    };
+
+    storeActions.updatePart(this.currentMessageId, part);
   }
 
   private addSystemMessage(content: string): void {
     const message: Message = {
-      id: this.generateId(),
+      id: this.generateId("msg"),
       role: "system",
       content,
       timestamp: Date.now(),
     };
-    
-    this.messages.push(message);
-    this.renderer.addMessage(message);
+
+    storeActions.addMessage(message);
   }
 
-  private generateId(): string {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  private generateId(prefix: string): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   private waitForKey(): Promise<void> {
