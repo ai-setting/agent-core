@@ -186,19 +186,38 @@ export class TUIRenderer {
 
   private calculateMessageHeight(msg: Message): number {
     const contentWidth = this.width - 6; // 减去边框和padding
-    const lines = msg.content.split("\n");
-    let height = 2; // 边框和padding
+    let height = 0;
     
-    for (const line of lines) {
-      height += Math.ceil(line.length / contentWidth);
-    }
-    
-    if (msg.parts) {
+    if (msg.role === "user") {
+      // 用户消息：上下边框 + 内容行
+      const lines = this.wrapText(msg.content, contentWidth);
+      height = 2 + lines.length; // 2 for borders
+    } else if (msg.role === "assistant" && msg.parts && msg.parts.length > 0) {
+      // AI 消息：基于 parts 计算
       for (const part of msg.parts) {
-        if (part.type === "tool_call" || part.type === "tool_result") {
-          height += 1;
+        switch (part.type) {
+          case "reasoning": {
+            const text = part.content || "";
+            const lines = this.wrapText(text, contentWidth - 4);
+            height += lines.length;
+            break;
+          }
+          case "text": {
+            const text = part.content || "";
+            const lines = this.wrapText(text, contentWidth);
+            height += lines.length;
+            break;
+          }
+          case "tool_call":
+          case "tool_result":
+            height += 1;
+            break;
         }
       }
+    } else {
+      // 纯文本或系统消息
+      const lines = this.wrapText(msg.content, contentWidth);
+      height = lines.length;
     }
     
     return height;
@@ -398,7 +417,8 @@ export class TUIRenderer {
 
   private renderTextPart(part: MessagePart, contentWidth: number): string {
     let output = "";
-    const text = part.delta || part.content || "";
+    // 使用 content 渲染完整内容，而不是 delta
+    const text = part.content || "";
     
     if (!text.trim()) return output;
     
