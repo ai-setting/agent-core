@@ -1,11 +1,12 @@
 /**
  * @fileoverview Attach Command
  *
- * 附加到运行中的 tong_work 服务器
+ * 附加到运行中的 tong_work 服务器（TUI 版本）
  */
 
 import { CommandModule } from "yargs";
 import { TongWorkClient } from "../client.js";
+import { startTUI } from "../tui/index.js";
 
 interface AttachOptions {
   url: string;
@@ -16,7 +17,7 @@ interface AttachOptions {
 
 export const AttachCommand: CommandModule<object, AttachOptions> = {
   command: "attach <url>",
-  describe: "附加到运行中的 tong_work 服务器",
+  describe: "附加到运行中的 tong_work 服务器（TUI 模式）",
   builder: (yargs) =>
     yargs
       .positional("url", {
@@ -41,6 +42,7 @@ export const AttachCommand: CommandModule<object, AttachOptions> = {
       password: args.password,
     });
 
+    // 检查服务器健康状态
     const healthy = await client.healthCheck();
     if (!healthy) {
       console.error(`❌ 无法连接到服务器: ${args.url}`);
@@ -48,70 +50,19 @@ export const AttachCommand: CommandModule<object, AttachOptions> = {
       process.exit(1);
     }
 
-    console.log(`✅ 已连接到 ${args.url}`);
-
-    if (args.session) {
-      console.log(`会话: ${args.session}\n`);
-    } else {
-      const sessions = await client.listSessions();
-      if (sessions.length > 0) {
-        console.log("可用会话:");
-        for (const s of sessions.slice(0, 5)) {
-          console.log(`  - ${s.id} (${s.title || "无标题"})`);
-        }
-        console.log("");
-      }
-    }
-
-    console.log("=== tong_work 交互模式 ===");
-    console.log("输入消息与 AI 对话，输入 'exit' 退出，输入 'new' 创建新会话\n");
-
-    const readline = await import("readline");
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
+    // 启动 TUI
+    const cleanup = await startTUI({
+      url: args.url,
+      sessionID: args.session,
+      password: args.password,
     });
 
-    let currentSession = args.session;
+    // 保持进程运行
+    await new Promise(() => {
+      // 等待中断信号
+    });
 
-    const sendMessage = async (msg: string) => {
-      if (!currentSession) {
-        const session = await client.createSession();
-        currentSession = session.id;
-        console.log(`创建新会话: ${currentSession}\n`);
-      }
-      await client.runInteractive(currentSession, msg);
-    };
-
-    if (args.session) {
-      await sendMessage("继续对话");
-    }
-
-    const ask = () => {
-      rl.question("> ", async (input) => {
-        const trimmed = input.trim();
-
-        if (trimmed.toLowerCase() === "exit") {
-          console.log("再见！");
-          rl.close();
-          process.exit(0);
-        }
-
-        if (trimmed.toLowerCase() === "new") {
-          currentSession = undefined;
-          console.log("新会话已创建\n");
-          ask();
-          return;
-        }
-
-        if (trimmed) {
-          await sendMessage(trimmed);
-        }
-
-        ask();
-      });
-    };
-
-    ask();
+    // 清理（这行实际上不会执行，因为上面是无限等待）
+    cleanup();
   },
 };
