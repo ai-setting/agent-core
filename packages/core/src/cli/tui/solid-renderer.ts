@@ -173,21 +173,35 @@ export class SolidTUIRenderer {
    * 增量渲染
    */
   private render() {
-    // 调试日志：显示渲染次数
-    const debugLine = `\x1b[s\x1b[1;1H[Renders: ${this.renderCount}]\x1b[u`;
+    this.renderCount++;
     
-    // 移动到消息区域下方
-    const headerHeight = 3;
-    const messagesHeight = this.calculateMessagesHeight();
-    const inputStartLine = headerHeight + messagesHeight + 1;
-
-    stdout.write(ANSI.GOTO(inputStartLine, 1));
-
+    // 调试日志：显示渲染次数和消息数
+    const messagesCount = store.messages.length;
+    const partsCount = Object.keys(store.parts).reduce((acc, id) => acc + (store.parts[id]?.length || 0), 0);
+    
+    // 移动到消息区域开头
+    stdout.write(ANSI.GOTO(4, 1));
+    
     // 清除从当前位置到屏幕底部
     stdout.write("\x1b[J");
-
+    
+    // 重新渲染所有消息
+    for (const message of store.messages) {
+      const parts = store.parts[message.id] || [];
+      stdout.write(this.renderMessage(message, parts));
+    }
+    
     // 渲染输入区
     this.renderInput();
+    
+    // 显示调试信息
+    const debugInfo = `[Msg:${messagesCount} Parts:${partsCount} Renders:${this.renderCount}]`;
+    stdout.write(ANSI.GOTO(this.height, Math.max(0, this.width - debugInfo.length - 2)));
+    stdout.write(color.gray(debugInfo));
+    
+    // 移动光标到输入位置
+    const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
+    stdout.write(ANSI.GOTO(this.height - 1, 4));
   }
 
   private renderHeader() {
