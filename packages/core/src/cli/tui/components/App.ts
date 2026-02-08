@@ -1,23 +1,24 @@
 /**
  * @fileoverview TUI App 组件
  * 
- * 主应用组件，管理状态和事件处理
+ * 参考 OpenCode 设计的主应用组件
  */
 
-import { TUIRenderer } from "../renderer";
+import { TUIRenderer, type Message, type MessagePart } from "../renderer";
 import { EventStreamManager } from "../hooks/useEventStream";
-import type { TUIMessage, TUIStreamEvent, TUIOptions } from "../types";
+import type { TUIStreamEvent, TUIOptions } from "../types";
 
 export class TUIApp {
   private renderer: TUIRenderer;
   private eventManager: EventStreamManager;
   private options: TUIOptions;
-  private messages: TUIMessage[] = [];
+  private messages: Message[] = [];
   private isStreaming = false;
-  private currentAssistantMessage: TUIMessage | null = null;
-  private lastReasoningContent = ""; // 记录上一次的 reasoning 内容
-  private isFirstReasoning = true; // 是否是第一个 reasoning 事件
-  private hasReasoningContent = false; // 是否有过 reasoning 内容
+  private currentAssistantMessage: Message | null = null;
+  private lastReasoningContent = "";
+  private isFirstReasoning = true;
+  private hasReasoningContent = false;
+  private currentParts: MessagePart[] = [];
 
   constructor(options: TUIOptions) {
     this.options = options;
@@ -39,9 +40,6 @@ export class TUIApp {
     this.renderer.setOnSubmit((text) => this.handleUserInput(text));
   }
 
-  /**
-   * 启动 TUI 应用
-   */
   async start(): Promise<void> {
     // 显示启动信息
     console.clear();
@@ -54,43 +52,38 @@ export class TUIApp {
 
     console.log("\n按任意键继续...");
     
-    // 等待用户按键
     await this.waitForKey();
     
-    // 连接到事件流
     this.eventManager.connect();
     
-    // 如果没有会话ID，创建新会话
     if (!this.options.sessionID) {
       try {
         const sessionId = await this.eventManager.createSession("TUI Session");
         this.options.sessionID = sessionId;
-        this.addSystemMessage(`已创建新会话: ${sessionId}`);
+        this.renderer.setSessionTitle(`Session ${sessionId.slice(0, 8)}`);
+        this.addSystemMessage(`已创建新会话`);
       } catch (error) {
         this.addSystemMessage(`创建会话失败: ${(error as Error).message}`);
       }
+    } else {
+      this.renderer.setSessionTitle(`Session ${this.options.sessionID.slice(0, 8)}`);
     }
 
-    // 初始渲染
     this.renderer.render();
   }
 
-  /**
-   * 停止 TUI 应用
-   */
   stop(): void {
     this.eventManager.disconnect();
     this.renderer.cleanup();
   }
 
   private handleUserInput(content: string): void {
-    // 添加用户消息
     this.addUserMessage(content);
     
-    // 发送到服务器
     this.eventManager.sendMessage(content, this.options.sessionID)
       .then(() => {
         this.isStreaming = true;
+        this.renderer.setStreaming(true);
       })
       .catch((error) => {
         this.addSystemMessage(`发送失败: ${(error as Error).message}`);
@@ -98,7 +91,6 @@ export class TUIApp {
   }
 
   private handleEvent(event: TUIStreamEvent): void {
-    // 忽略心跳和连接事件
     if (event.type === "server.heartbeat") {
       return;
     }
@@ -106,73 +98,88 @@ export class TUIApp {
     switch (event.type) {
       case "stream.start":
         this.isStreaming = true;
+        this.renderer.setStreaming(true);
         this.startAssistantMessage();
         break;
         
       case "stream.text":
         if (event.delta) {
-          // 如果之前有 reasoning 内容，先添加换行分隔
-          if (this.hasReasoningContent) {
-            this.appendToAssistantMessage("\n\n");
+          // 如果之前有 reasoning 内容，添加换行分隔
+          if (this.hasReasoningContent && this.isFirstReasoning === false) {
+            this.currentParts.push({ type: "text", content: "\n" });
             this.hasReasoningContent = false;
           }
+          
+          // 查找或创建 text part
+          let textPart = this.currentParts.find(p => p.type === "text");
+          if (!textPart) {
+            textPart = { type: "text", content: "", delta: "" };
+            this.currentParts.push(textPart);
+          }
+          textPart.delta = event.delta;
+          textPart.content = (textPart.content || "") + event.delta;
+          
           this.appendToAssistantMessage(event.delta);
+          this.updateRendererParts();
         }
         break;
         
       case "stream.reasoning":
         if (event.content) {
-          // 计算增量：新内容减去旧内容
           const newContent = event.content;
           if (newContent.length > this.lastReasoningContent.length) {
             const delta = newContent.slice(this.lastReasoningContent.length);
-            if (this.isFirstReasoning) {
-              this.appendToAssistantMessage(`\n\x1b[90mThinking: ${delta}\x1b[0m`);
-              this.isFirstReasoning = false;
-            } else {
-              this.appendToAssistantMessage(`\x1b[90m${delta}\x1b[0m`);
+            
+            // 查找或创建 reasoning part
+            let reasoningPart = this.currentParts.find(p => p.type === "reasoning");
+            if (!reasoningPart) {
+              reasoningPart = { type: "reasoning", content: "" };
+              this.currentParts.push(reasoningPart);
             }
+            reasoningPart.content = newContent;
+            
             this.lastReasoningContent = newContent;
             this.hasReasoningContent = true;
+            this.updateRendererParts();
           }
         }
         break;
         
       case "stream.tool.call":
         if (event.toolName) {
-          this.appendToAssistantMessage(`\n\x1b[33m⚡ ${event.toolName}\x1b[0m`);
-          if (event.toolArgs && Object.keys(event.toolArgs).length > 0) {
-            this.appendToAssistantMessage(` \x1b[90m${JSON.stringify(event.toolArgs)}\x1b[0m`);
-          }
+          this.currentParts.push({
+            type: "tool_call",
+            toolName: event.toolName,
+            toolArgs: event.toolArgs,
+          });
+          this.updateRendererParts();
         }
         break;
         
       case "stream.tool.result":
         if (event.toolName) {
-          const resultStr = typeof event.result === 'string' 
-            ? event.result 
-            : JSON.stringify(event.result);
-          // 截断过长的结果
-          const displayResult = resultStr.length > 100 
-            ? resultStr.substring(0, 100) + '...' 
-            : resultStr;
-          this.appendToAssistantMessage(`\n\x1b[32m✓ ${event.toolName}\x1b[0m \x1b[90m${displayResult}\x1b[0m\n`);
+          this.currentParts.push({
+            type: "tool_result",
+            toolName: event.toolName,
+            result: event.result,
+            success: event.success,
+          });
+          this.updateRendererParts();
         }
         break;
         
       case "stream.completed":
         this.isStreaming = false;
+        this.renderer.setStreaming(false);
         this.finalizeAssistantMessage();
         break;
         
       case "stream.error":
         this.isStreaming = false;
+        this.renderer.setStreaming(false);
         this.addSystemMessage(`错误: ${event.error || "Unknown error"}`);
         break;
     }
-    
-    // 重新渲染
-    this.syncToRenderer();
   }
 
   private handleError(error: Error): void {
@@ -188,7 +195,7 @@ export class TUIApp {
   }
 
   private addUserMessage(content: string): void {
-    const message: TUIMessage = {
+    const message: Message = {
       id: this.generateId(),
       role: "user",
       content,
@@ -196,7 +203,7 @@ export class TUIApp {
     };
     
     this.messages.push(message);
-    this.renderer.addMessage("user", content);
+    this.renderer.addMessage(message);
   }
 
   private startAssistantMessage(): void {
@@ -205,13 +212,15 @@ export class TUIApp {
       role: "assistant",
       content: "",
       timestamp: Date.now(),
+      parts: [],
     };
-    // 重置 reasoning 状态
+    
     this.lastReasoningContent = "";
     this.isFirstReasoning = true;
     this.hasReasoningContent = false;
-    // 立即添加空消息到渲染器，以便后续追加
-    this.renderer.addMessage("assistant", "");
+    this.currentParts = [];
+    
+    this.renderer.addMessage(this.currentAssistantMessage);
   }
 
   private appendToAssistantMessage(content: string): void {
@@ -220,7 +229,13 @@ export class TUIApp {
     }
     
     this.currentAssistantMessage!.content += content;
-    this.renderer.appendToLastMessage(content);
+  }
+
+  private updateRendererParts(): void {
+    if (this.currentAssistantMessage) {
+      this.currentAssistantMessage.parts = [...this.currentParts];
+      this.renderer.updateLastMessageParts(this.currentAssistantMessage.parts);
+    }
   }
 
   private finalizeAssistantMessage(): void {
@@ -231,12 +246,15 @@ export class TUIApp {
   }
 
   private addSystemMessage(content: string): void {
-    this.renderer.addMessage("assistant", `[系统] ${content}`);
-  }
-
-  private syncToRenderer(): void {
-    // 渲染器已经通过 addMessage 和 appendToLastMessage 更新了
-    // 这里可以添加额外的状态同步逻辑
+    const message: Message = {
+      id: this.generateId(),
+      role: "system",
+      content,
+      timestamp: Date.now(),
+    };
+    
+    this.messages.push(message);
+    this.renderer.addMessage(message);
   }
 
   private generateId(): string {
@@ -254,9 +272,6 @@ export class TUIApp {
   }
 }
 
-/**
- * 创建 TUI 应用实例
- */
 export function createTUIApp(options: TUIOptions): TUIApp {
   return new TUIApp(options);
 }
