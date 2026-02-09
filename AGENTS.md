@@ -248,6 +248,8 @@ test/
 
 ### 6.2 Commit Messages
 
+**All commit messages must be written in English.**
+
 ```
 <type>(<scope>): <subject>
 
