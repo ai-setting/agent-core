@@ -6,8 +6,20 @@
 
 import { AgentServer } from "./server.js";
 import { ServerEnvironment } from "./environment.js";
+import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
 
 async function main() {
+  // 立即测试所有 logger
+  console.log("[DEBUG] Logger test START");
+  console.log("[DEBUG] LOG_LEVEL:", process.env.LOG_LEVEL);
+  console.log("[DEBUG] Testing serverLogger...");
+  serverLogger.info("TEST ENTRY - serverLogger working");
+  console.log("[DEBUG] Testing sessionLogger...");
+  sessionLogger.info("TEST ENTRY - sessionLogger working");
+  console.log("[DEBUG] Testing sseLogger...");
+  sseLogger.info("TEST ENTRY - sseLogger working");
+  console.log("[DEBUG] Logger test END");
+
   const port = parseInt(process.env.PORT || "3000");
   const hostname = process.env.HOSTNAME || "0.0.0.0";
   const model = process.env.LLM_MODEL;
