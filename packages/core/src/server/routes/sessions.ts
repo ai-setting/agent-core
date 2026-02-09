@@ -7,6 +7,7 @@
 import { Hono } from "hono";
 import { sessionManager } from "../session.js";
 import type { ServerEnvironment } from "../environment.js";
+import { sessionLogger } from "../logger.js";
 
 interface Env {
   Variables: {
@@ -28,8 +29,15 @@ app.get("/", (c) => {
  * POST /sessions - Create new session
  */
 app.post("/", async (c) => {
-  const body = await c.req.json<{ title?: string }>();
-  const session = sessionManager.create(body?.title);
+  let title: string | undefined;
+  try {
+    const body = await c.req.json<{ title?: string }>();
+    title = body?.title;
+  } catch {
+    // Request body is empty or invalid JSON, that's okay
+    title = undefined;
+  }
+  const session = sessionManager.create(title);
   return c.json(session, 201);
 });
 
@@ -85,23 +93,29 @@ app.post("/:id/prompt", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ content: string }>();
   
+  sessionLogger.info("Received prompt request", { sessionId: id, contentLength: body?.content?.length });
+  
   if (!body?.content) {
+    sessionLogger.warn("Prompt request missing content", { sessionId: id });
     return c.json({ error: "Content is required" }, 400);
   }
   
   // Get or create session (use client-provided ID if creating new)
   let session = sessionManager.get(id);
   if (!session) {
+    sessionLogger.info("Creating new session for prompt", { sessionId: id });
     session = sessionManager.create(undefined, id);
   }
   
   // Add user message
   sessionManager.addMessage(session.id, "user", body.content);
+  sessionLogger.info("Added user message", { sessionId: session.id, messageCount: session.messages.length });
   
   // Get ServerEnvironment from context
   const env = c.get("env");
   
   if (!env) {
+    sessionLogger.error("Server environment not configured");
     return c.json({ error: "Server not configured" }, 503);
   }
   
@@ -111,15 +125,18 @@ app.post("/:id/prompt", async (c) => {
     content: { type: "text" as const, text: m.content },
   }));
   
+  sessionLogger.info("Starting AI processing", { sessionId: session.id, historyLength: messages.length });
+  
   // Trigger async AI processing
   // The response will be streamed via SSE
   env.handle_query(body.content, { session_id: session.id }, messages)
     .then((response: string) => {
+      sessionLogger.info("AI processing completed", { sessionId: session.id, responseLength: response.length });
       // Add assistant response to session
       sessionManager.addMessage(session.id, "assistant", response);
     })
     .catch((error: Error) => {
-      console.error("[Prompt] Error:", error);
+      sessionLogger.error("AI processing failed", { sessionId: session.id, error: error.message });
     });
   
   // Return immediately - client will receive stream via SSE

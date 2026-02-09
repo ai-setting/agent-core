@@ -120,8 +120,13 @@ async function build() {
 
       binaries[name] = VERSION;
       console.log(`  ✓ ${name}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`  ✗ ${name}: ${error}`);
+      if (error?.errors?.length) {
+        for (const e of error.errors) {
+          console.error("    ", e.message ?? e);
+        }
+      }
     }
   }
 

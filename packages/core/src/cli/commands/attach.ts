@@ -2,6 +2,8 @@
  * @fileoverview Attach Command
  *
  * 附加到运行中的 tong_work 服务器（TUI 版本）
+ * 
+ * 使用 SolidJS + OpenTUI 实现现代化终端界面
  */
 
 import { CommandModule } from "yargs";
@@ -50,19 +52,31 @@ export const AttachCommand: CommandModule<object, AttachOptions> = {
       process.exit(1);
     }
 
-    // 启动 TUI
-    const cleanup = await startTUI({
-      url: args.url,
-      sessionID: args.session,
-      password: args.password,
-    });
+    console.log(`✅ 已连接到服务器: ${args.url}`);
+    if (args.session) {
+      console.log(`📋 恢复会话: ${args.session}`);
+    }
+    console.log("🚀 启动 TUI 界面...\n");
 
-    // 保持进程运行
-    await new Promise(() => {
-      // 等待中断信号
-    });
+    try {
+      // 启动 TUI
+      await startTUI({
+        url: args.url,
+        sessionID: args.session,
+        password: args.password,
+        onExit: () => {
+          console.log("\n👋 再见!");
+          process.exit(0);
+        },
+      });
 
-    // 清理（这行实际上不会执行，因为上面是无限等待）
-    cleanup();
+      // 保持进程运行
+      await new Promise(() => {
+        // 无限等待，直到进程被信号终止
+      });
+    } catch (error) {
+      console.error("❌ TUI 启动失败:", error);
+      process.exit(1);
+    }
   },
 };

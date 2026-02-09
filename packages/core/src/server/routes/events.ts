@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { subscribeGlobal } from "../eventbus/global.js";
 import { subscribeToSession } from "../eventbus/bus.js";
+import { sseLogger } from "../logger.js";
 
 const app = new Hono();
 
@@ -32,17 +33,17 @@ const activeConnections = new Map<string, number>();
 app.get("/", async (c) => {
   const sessionId = c.req.query("sessionId");
   
-  // Track connection count for this session
+    // Track connection count for this session
   if (sessionId) {
     const count = activeConnections.get(sessionId) || 0;
     if (count > 0) {
-      console.log(`[SSE] Client reconnected (session: ${sessionId}, connections: ${count + 1})`);
+      sseLogger.info("Client reconnected", { sessionId, connections: count + 1 });
     } else {
-      console.log(`[SSE] Client connected (session: ${sessionId})`);
+      sseLogger.info("Client connected", { sessionId });
     }
     activeConnections.set(sessionId, count + 1);
   } else {
-    console.log(`[SSE] Client connected (no session)`);
+    sseLogger.info("Client connected (no session)");
   }
   
   return streamSSE(c, async (stream) => {
@@ -61,8 +62,14 @@ app.get("/", async (c) => {
       ? subscribeToSession(sessionId, async (event) => {
           if (isClosed) return;
           try {
+            // Flatten event: { type, properties } -> { type, ...properties }
+            const flattenedEvent = {
+              type: event.type,
+              ...(event.properties as object),
+            };
+            sseLogger.debug("Sending event to client", { sessionId, type: event.type });
             await stream.writeSSE({ 
-              data: JSON.stringify(event) 
+              data: JSON.stringify(flattenedEvent) 
             });
           } catch (err) {
             // Client may have disconnected
@@ -72,8 +79,14 @@ app.get("/", async (c) => {
       : subscribeGlobal(async (data) => {
           if (isClosed) return;
           try {
+            // Flatten event: { type, properties } -> { type, ...properties }
+            const flattenedEvent = {
+              type: data.payload.type,
+              ...(data.payload.properties as object),
+            };
+            sseLogger.debug("Sending event to client", { type: data.payload.type });
             await stream.writeSSE({ 
-              data: JSON.stringify(data.payload) 
+              data: JSON.stringify(flattenedEvent) 
             });
           } catch (err) {
             // Client may have disconnected
