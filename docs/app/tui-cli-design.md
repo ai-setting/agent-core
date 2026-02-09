@@ -2,9 +2,13 @@
 
 ## 1. 概述
 
-本文档定义 agent-core CLI 的 TUI（Terminal User Interface）版本设计。基于 OpenCode TUI 架构进行简化，只保留核心功能：
-- 流式展示后端返回
-- 用户输入进行交互
+本文档定义 agent-core CLI 的 TUI（Terminal User Interface）实现。采用自定义响应式 Store + ANSI 终端渲染方案，不依赖 OpenTUI/SolidJS 等外部 UI 框架，保持轻量和可控。
+
+核心功能：
+- SSE 事件流接收与批处理
+- 自定义 ReactiveStore 驱动的响应式渲染
+- ANSI 全屏终端 UI（消息展示 + 输入框 + 状态栏）
+- 支持 text / reasoning / tool_call / tool_result 多种 Part 类型
 
 **架构定位**: TUI CLI 是 Client 层的富界面客户端，通过 SSE 与 Server 通信。
 
@@ -14,19 +18,18 @@
 
 | 库 | 用途 | 版本 |
 |----|------|------|
-| **@opentui/solid** | 终端 UI 渲染引擎 | 最新版 |
-| **solid-js** | 响应式 UI 框架 | ^1.8.x |
 | **eventsource** | SSE 客户端 | ^2.x |
+| **readline** | 终端输入处理 | Node.js 内置 |
 
 ### 2.2 技术选型说明
 
-**为什么使用 OpenTUI？**
-- 专为终端设计的渲染引擎
-- 基于 SolidJS 的响应式框架
-- 支持流式渲染和增量更新
-- 良好的键盘交互支持
+**为什么不使用 OpenTUI/SolidJS？**
+- 减少外部依赖，降低构建复杂度
+- 自定义 ReactiveStore 足以满足当前需求
+- ANSI 直接渲染更轻量，启动更快
+- 完全可控的渲染逻辑，便于调试
 
-**简化原则**
+**设计原则**
 - 不实现完整的消息列表管理
 - 不实现侧边栏和复杂布局
 - 不实现多会话切换
@@ -37,27 +40,27 @@
 ### 3.1 整体架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    TUI CLI Application                       │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │                   TUI App (SolidJS)                    │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │  │
-│  │  │  MessageBox  │  │  InputBox    │  │ StatusBar   │ │  │
-│  │  │  (流式展示)   │  │  (用户输入)   │  │ (状态显示)   │ │  │
-│  │  └──────────────┘  └──────────────┘  └─────────────┘ │  │
-│  └───────────────────────┬────────────────────────────────┘  │
-│                          │                                   │
-│  ┌───────────────────────▼────────────────────────────────┐  │
-│  │                   EventManager                         │  │
-│  │  • SSE 连接 (/events)                                   │  │
-│  │  • 事件批处理                                           │  │
-│  │  • 状态同步                                             │  │
-│  └───────────────────────┬────────────────────────────────┘  │
-│                          │                                   │
-│                          │ SSE (Server-Sent Events)          │
-│                          ▼                                   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                     TUI CLI Application                       │
+│                                                               │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │                    TUIApp (协调层)                       │  │
+│  │  • 事件分发与状态管理                                     │  │
+│  │  • 消息/Part 生命周期管理                                 │  │
+│  └──────┬──────────────────┬──────────────────┬───────────┘  │
+│         │                  │                  │               │
+│  ┌──────▼──────┐  ┌───────▼────────┐  ┌─────▼───────────┐  │
+│  │ TUIRenderer │  │ ReactiveStore  │  │ EventStream     │  │
+│  │ (ANSI 渲染)  │  │ (响应式状态)    │  │ Manager         │  │
+│  │ • Header    │  │ • messages[]   │  │ • SSE 连接       │  │
+│  │ • Messages  │  │ • parts{}      │  │ • 事件批处理     │  │
+│  │ • Input     │  │ • isStreaming   │  │ • 自动重连       │  │
+│  │ • StatusBar │  │ • sessionId    │  │ • HTTP API      │  │
+│  └─────────────┘  └────────────────┘  └────────┬────────┘  │
+│                                                 │            │
+│                                    SSE (Server-Sent Events)  │
+│                                                 ▼            │
+└──────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
                           HTTP Server
@@ -65,341 +68,270 @@
 
 ### 3.2 核心组件
 
-#### 3.2.1 TUI App 入口
+#### 3.2.1 TUI 入口
 
-**文件**: `packages/core/src/cli/tui/app.tsx`
+**文件**: `packages/core/src/cli/tui/index.ts`
 
 ```typescript
-import { render } from "@opentui/solid"
-import { App } from "./components/App"
+import { createTUIApp } from "./components/App.js";
+import type { TUIOptions } from "./types.js";
 
-export async function startTUI(options: TUIOptions) {
-  const cleanup = render(() => (
-    <App 
-      serverUrl={options.url}
-      sessionId={options.sessionID}
-    />
-  ), {
-    targetFps: 30,
-    exitOnCtrlC: true,
-  })
-  
-  return cleanup
+export { createTUIApp } from "./components/App.js";
+export type { TUIOptions } from "./types.js";
+export { store, storeActions, createEffect } from "./store.js";
+
+/**
+ * 启动 TUI（兼容旧 API）
+ */
+export async function startTUI(options: TUIOptions): Promise<() => void> {
+  const app = createTUIApp(options);
+  await app.start();
+  return () => app.stop();
 }
 ```
 
-#### 3.2.2 App 组件
+#### 3.2.2 TUIApp 协调层
 
-**文件**: `packages/core/src/cli/tui/components/App.tsx`
+**文件**: `packages/core/src/cli/tui/components/App.ts`
+
+TUIApp 是核心协调类，负责连接 EventStreamManager、ReactiveStore 和 TUIRenderer：
 
 ```typescript
-import { createSignal, createEffect } from "solid-js"
-import { MessageBox } from "./MessageBox"
-import { InputBox } from "./InputBox"
-import { StatusBar } from "./StatusBar"
-import { useEventStream } from "../hooks/useEventStream"
+export class TUIApp {
+  private renderer: TUIRenderer;
+  private eventManager: EventStreamManager;
+  private options: TUIOptions;
+  private currentMessageId?: string;
 
-export function App(props: { serverUrl: string; sessionId?: string }) {
-  const [messages, setMessages] = createSignal<Message[]>([])
-  const [isStreaming, setIsStreaming] = createSignal(false)
-  const [status, setStatus] = createSignal("就绪")
-  
-  const { sendMessage, events } = useEventStream({
-    url: props.serverUrl,
-    sessionId: props.sessionId,
-  })
-  
-  // 处理流式事件
-  createEffect(() => {
-    const event = events()
-    if (!event) return
-    
-    switch (event.type) {
-      case "text":
-        appendText(event.delta)
-        break
-      case "tool_call":
-        addToolCall(event)
-        break
-      case "completed":
-        setIsStreaming(false)
-        setStatus("完成")
-        break
-      case "error":
-        setIsStreaming(false)
-        setStatus(`错误: ${event.error}`)
-        break
+  constructor(options: TUIOptions) {
+    this.renderer = createRenderer();
+    this.eventManager = new EventStreamManager({
+      url: options.url,
+      sessionId: options.sessionID,
+      password: options.password,
+      onEvent: (event) => this.handleEvent(event),
+      onError: (error) => this.handleError(error),
+      onConnect: () => this.handleConnect(),
+      onDisconnect: () => this.handleDisconnect(),
+    });
+    this.renderer.setOnSubmit((text) => this.handleUserInput(text));
+  }
+
+  async start(): Promise<void> { /* 初始化连接、挂载渲染器 */ }
+  stop(): void { /* 断开连接、清理渲染器 */ }
+}
+```
+
+**事件处理流程**：
+
+```typescript
+private handleEvent(event: TUIStreamEvent): void {
+  switch (event.type) {
+    case "stream.start":
+      storeActions.setStreaming(true);
+      this.startAssistantMessage();
+      break;
+    case "stream.text":
+    case "stream.reasoning":
+      this.updateTextPart(event.type, event.content || event.delta);
+      break;
+    case "stream.tool.call":
+      this.addToolCall(event);
+      break;
+    case "stream.tool.result":
+      this.addToolResult(event);
+      break;
+    case "stream.completed":
+      storeActions.setStreaming(false);
+      break;
+    case "stream.error":
+      storeActions.setStreaming(false);
+      this.addSystemMessage(`错误: ${event.error}`);
+      break;
+  }
+}
+```
+
+#### 3.2.3 TUIRenderer（ANSI 终端渲染器）
+
+**文件**: `packages/core/src/cli/tui/solid-renderer.ts`
+
+负责全屏 ANSI 渲染，订阅 ReactiveStore 变化自动重绘：
+
+```typescript
+export class TUIRenderer {
+  private rl: readline.Interface;
+  private inputBuffer = "";
+  private onSubmit?: (text: string) => void;
+  private isMounted = false;
+
+  mount() {
+    this.isMounted = true;
+    // 订阅 store 变化，自动触发渲染
+    createEffect(() => {
+      const _messages = store.messages;
+      const _parts = store.parts;
+      const _streaming = store.isStreaming;
+      this.render();
+    });
+  }
+
+  private render() {
+    // 全屏重绘：Header + Messages + Input + StatusBar
+    let output = "";
+    output += this.buildHeader();
+    for (const message of store.messages) {
+      output += this.buildMessage(message, store.parts[message.id] || []);
     }
-  })
-  
-  const handleSubmit = async (content: string) => {
-    addUserMessage(content)
-    setIsStreaming(true)
-    setStatus("生成中...")
-    await sendMessage(content)
+    output += this.buildInput();
+    stdout.write(ANSI.CLEAR);
+    stdout.write(output);
   }
-  
-  return (
-    <box flexDirection="column" height="100%">
-      <MessageBox 
-        messages={messages()} 
-        isStreaming={isStreaming()}
-      />
-      <InputBox 
-        onSubmit={handleSubmit}
-        disabled={isStreaming()}
-      />
-      <StatusBar status={status()} />
-    </box>
-  )
 }
 ```
 
-#### 3.2.3 MessageBox 组件
+**渲染布局**：
+- **Header**: 带边框的标题栏，显示 Session ID
+- **Messages**: 按角色区分样式（user=绿色边栏, assistant=Part渲染, system=灰色圆点）
+- **Part 渲染**: reasoning=灰色斜体, text=普通文本, tool_call=黄色闪电, tool_result=绿色/红色勾叉
+- **Input**: 底部输入框，支持退格和回车提交
+- **StatusBar**: 底部状态提示 + 流式生成指示器
 
-**文件**: `packages/core/src/cli/tui/components/MessageBox.tsx`
+#### 3.2.4 ReactiveStore（响应式状态管理）
 
-消息展示区域，支持流式渲染：
+**文件**: `packages/core/src/cli/tui/store.ts`
+
+自定义轻量级响应式 Store，提供类 SolidJS 的 `createEffect` API：
 
 ```typescript
-import { For } from "solid-js"
-
-interface Message {
-  role: "user" | "assistant"
-  content: string
-  toolCalls?: ToolCall[]
+interface SessionStore {
+  messages: any[];
+  parts: Record<string, any[]>;  // messageId -> MessagePart[]
+  sessionId?: string;
+  isStreaming: boolean;
+  status: string;
 }
 
-export function MessageBox(props: { 
-  messages: Message[]
-  isStreaming: boolean 
-}) {
-  return (
-    <scrollbox 
-      flexGrow={1}
-      stickyScroll={true}
-      stickyStart="bottom"
-    >
-      <For each={props.messages}>
-        {(message) => (
-          <MessageItem message={message} />
-        )}
-      </For>
-      
-      {/* 流式指示器 */}
-      <Show when={props.isStreaming}>
-        <text color="gray">●</text>
-      </Show>
-    </scrollbox>
-  )
-}
+class ReactiveStore {
+  private listeners: Set<Listener> = new Set();
+  private batching = false;
 
-function MessageItem(props: { message: Message }) {
-  const isUser = () => props.message.role === "user"
-  
-  return (
-    <box 
-      flexDirection="column"
-      padding={1}
-      border={isUser() ? undefined : ["left"]}
-      borderColor={isUser() ? undefined : "blue"}
-    >
-      <text bold color={isUser() ? "green" : "blue"}>
-        {isUser() ? "用户" : "AI"}
-      </text>
-      
-      <text>{props.message.content}</text>
-      
-      {/* 工具调用展示 */}
-      <Show when={props.message.toolCalls?.length}>
-        <For each={props.message.toolCalls}>
-          {(tool) => <ToolCallItem tool={tool} />}
-        </For>
-      </Show>
-    </box>
-  )
+  subscribe(listener: Listener): () => void { /* ... */ }
+  batch(fn: () => void) { /* 批量更新，只触发一次通知 */ }
+  trigger() { /* 手动触发所有 listener */ }
 }
 ```
 
-#### 3.2.4 InputBox 组件
-
-**文件**: `packages/core/src/cli/tui/components/InputBox.tsx`
-
-用户输入区域：
+**Store Actions**：
 
 ```typescript
-import { createSignal } from "solid-js"
-
-export function InputBox(props: { 
-  onSubmit: (content: string) => void
-  disabled: boolean 
-}) {
-  const [input, setInput] = createSignal("")
-  
-  const handleSubmit = () => {
-    const content = input().trim()
-    if (!content || props.disabled) return
-    
-    props.onSubmit(content)
-    setInput("")
-  }
-  
-  return (
-    <box 
-      flexShrink={0}
-      border={["top"]}
-      padding={1}
-    >
-      <textarea
-        value={input()}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        placeholder={props.disabled ? "等待响应..." : "输入消息 (Enter 发送)"}
-        disabled={props.disabled}
-        maxHeight={3}
-      />
-    </box>
-  )
+export const storeActions = {
+  addMessage(message)    // 添加消息并初始化 parts
+  updatePart(messageId, part)  // 更新或新增 Part
+  setSessionId(sessionId)
+  setStreaming(isStreaming)
+  setStatus(status)
+  reset()                // 重置所有状态
 }
 ```
 
-#### 3.2.5 Event Hook
+#### 3.2.5 EventStreamManager（SSE 事件流管理）
 
 **文件**: `packages/core/src/cli/tui/hooks/useEventStream.ts`
 
-SSE 事件流管理：
+基于类的 SSE 事件流管理器，支持批处理和自动重连：
 
 ```typescript
-import { createSignal, createEffect, onCleanup } from "solid-js"
-import { EventSource } from "eventsource"
+export class EventStreamManager {
+  private eventSource: EventSource | null = null;
+  private eventQueue: TUIStreamEvent[] = [];
+  private flushTimer: Timer | null = null;
 
-export function useEventStream(options: {
-  url: string
-  sessionId?: string
-}) {
-  const [events, setEvents] = createSignal<StreamEvent | null>(null)
-  const [eventSource, setEventSource] = createSignal<EventSource | null>(null)
-  
-  // 批处理队列
-  let queue: StreamEvent[] = []
-  let timer: Timer | undefined
-  let lastFlush = 0
-  
-  const flush = () => {
-    if (queue.length === 0) return
-    const batch = queue
-    queue = []
-    timer = undefined
-    lastFlush = Date.now()
-    
-    // 处理批量事件
-    for (const event of batch) {
-      setEvents(event)
-    }
-  }
-  
-  const handleEvent = (event: StreamEvent) => {
-    queue.push(event)
-    const elapsed = Date.now() - lastFlush
-    
-    if (timer) return
-    // 16ms 内批量处理 (约 60fps)
-    if (elapsed < 16) {
-      timer = setTimeout(flush, 16)
-      return
-    }
-    flush()
-  }
-  
-  createEffect(() => {
-    const url = new URL("/events", options.url)
-    if (options.sessionId) {
-      url.searchParams.set("session", options.sessionId)
-    }
-    
-    const es = new EventSource(url.toString())
-    setEventSource(es)
-    
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        handleEvent(data)
-      } catch {}
-    }
-    
-    es.onerror = () => {
-      handleEvent({ type: "error", error: "连接中断" })
-    }
-    
-    onCleanup(() => {
-      es.close()
-      if (timer) clearTimeout(timer)
-    })
-  })
-  
-  const sendMessage = async (content: string) => {
-    const sessionId = options.sessionId || await createSession()
-    
-    await fetch(`${options.url}/sessions/${sessionId}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    })
-  }
-  
-  return { events, sendMessage }
+  constructor(options: EventStreamOptions) { /* ... */ }
+
+  connect(): void      // 连接 SSE，支持 token 认证
+  disconnect(): void   // 断开连接，清理资源
+  async sendMessage(content: string, sessionId?: string): Promise<void>
+  async createSession(title?: string): Promise<string>
 }
 ```
+
+**关键特性**：
+- **事件批处理**: 16ms 窗口内合并事件（约 60fps），减少渲染次数
+- **事件归一化**: 将服务器原始事件 `TUIStreamEventRaw`（嵌套 properties）转换为扁平化 `TUIStreamEvent`
+- **自动重连**: 连接断开后 3 秒自动重连
+- **认证支持**: 通过 URL 参数传递 token（EventSource 不支持自定义 headers）
 
 ## 4. 目录结构
 
 ```
-packages/core/src/cli/
-├── index.ts                    # CLI 入口
-├── client.ts                   # HTTP 客户端（已存在）
-├── commands/                   # 命令实现
-│   ├── attach.ts              # attach 命令（需要修改）
-│   └── ...
-└── tui/                       # TUI 实现（新增）
-    ├── index.ts               # TUI 入口
-    ├── app.tsx                # 应用根组件
-    ├── components/            # UI 组件
-    │   ├── App.tsx           # 主应用组件
-    │   ├── MessageBox.tsx    # 消息展示区
-    │   ├── InputBox.tsx      # 输入框
-    │   ├── StatusBar.tsx     # 状态栏
-    │   └── ToolCallItem.tsx  # 工具调用展示
-    ├── hooks/                # 自定义 Hooks
-    │   └── useEventStream.ts # SSE 事件管理
-    └── types.ts              # TUI 类型定义
+packages/core/src/cli/tui/
+├── index.ts                    # TUI 入口，导出 startTUI / createTUIApp
+├── types.ts                    # 类型定义（TUIStreamEvent, Message, MessagePart 等）
+├── store.ts                    # ReactiveStore 响应式状态管理
+├── solid-renderer.ts           # TUIRenderer ANSI 终端渲染器
+├── components/
+│   └── App.ts                 # TUIApp 协调层（事件分发、消息管理）
+└── hooks/
+    └── useEventStream.ts      # EventStreamManager SSE 事件流管理
 ```
 
 ## 5. 事件类型
 
-### 5.1 支持的事件
+### 5.1 原始事件格式（服务器端）
 
-| 事件类型 | 描述 | 字段 |
-|---------|------|------|
-| `start` | 开始生成 | - |
-| `text` | 文本增量 | `delta: string` |
-| `reasoning` | 推理过程 | `content: string` |
-| `tool_call` | 工具调用 | `toolName`, `toolArgs` |
-| `tool_result` | 工具结果 | `toolName`, `result` |
-| `completed` | 完成 | - |
-| `error` | 错误 | `error: string` |
+服务器发送嵌套格式的 `TUIStreamEventRaw`：
 
-### 5.2 事件处理流程
+```typescript
+interface TUIStreamEventRaw {
+  type: string;
+  properties: {
+    sessionId?: string;
+    messageId?: string;
+    content?: string;
+    delta?: string;
+    toolName?: string;
+    toolArgs?: Record<string, unknown>;
+    result?: unknown;
+    success?: boolean;
+    error?: string;
+  };
+  timestamp?: number;
+}
+```
+
+### 5.2 客户端扁平化事件
+
+通过 `normalizeEvent()` 转换为扁平化的 `TUIStreamEvent`：
+
+| 事件类型 | 描述 | 关键字段 |
+|---------|------|---------|
+| `stream.start` | 开始生成 | - |
+| `stream.text` | 文本内容 | `content`, `delta` |
+| `stream.reasoning` | 推理过程 | `content`, `delta` |
+| `stream.tool.call` | 工具调用 | `toolName`, `toolArgs` |
+| `stream.tool.result` | 工具结果 | `toolName`, `result`, `success` |
+| `stream.completed` | 完成 | - |
+| `stream.error` | 错误 | `error` |
+| `server.connected` | 连接成功 | - |
+| `server.heartbeat` | 心跳（忽略） | - |
+
+### 5.3 事件处理流程
 
 ```
-Server 发送事件
+Server 发送 TUIStreamEventRaw
     ↓
-EventSource 接收
+EventSource 接收 + JSON.parse
     ↓
-批处理 (16ms 窗口)
+normalizeEvent() 扁平化
     ↓
-SolidJS 状态更新
+事件批处理队列 (16ms 窗口)
     ↓
-OpenTUI 渲染
+TUIApp.handleEvent() 分发
+    ↓
+storeActions 更新 ReactiveStore
+    ↓
+TUIRenderer 自动重绘
 ```
 
 ## 6. 使用方式
@@ -423,29 +355,19 @@ tong_work attach --session abc123
 |--------|------|
 | `Enter` | 发送消息 |
 | `Ctrl+C` | 退出程序 |
-| `↑/↓` | 滚动消息历史 |
+| `Ctrl+L` | 刷新屏幕 |
+| `Backspace` | 删除输入字符 |
 
-## 7. 实现阶段
+## 7. 已完成的实现
 
-### 阶段 1: 基础框架
-- [ ] 安装 @opentui/solid 依赖
-- [ ] 创建 TUI 目录结构
-- [ ] 实现基础 App 组件
-
-### 阶段 2: 核心功能
-- [ ] 实现 MessageBox 组件
-- [ ] 实现 InputBox 组件
-- [ ] 集成 SSE 事件流
-
-### 阶段 3: 完善体验
-- [ ] 添加状态栏
-- [ ] 优化滚动体验
-- [ ] 错误处理和重连
-
-### 阶段 4: 测试验证
-- [ ] 集成测试
-- [ ] 性能测试
-- [ ] 边界情况处理
+- [x] 自定义 ReactiveStore 响应式状态管理
+- [x] ANSI 全屏终端渲染器（TUIRenderer）
+- [x] SSE 事件流管理（EventStreamManager）+ 批处理 + 自动重连
+- [x] TUIApp 协调层（事件分发、消息/Part 生命周期）
+- [x] 多种 Part 类型渲染（text / reasoning / tool_call / tool_result）
+- [x] 事件归一化（TUIStreamEventRaw → TUIStreamEvent）
+- [x] 键盘输入处理（raw mode）
+- [x] 认证支持（password / token）
 
 ## 8. 依赖变更
 
@@ -454,12 +376,12 @@ tong_work attach --session abc123
 ```json
 {
   "dependencies": {
-    "@opentui/solid": "^0.x",
-    "solid-js": "^1.8.x",
     "eventsource": "^2.x"
   }
 }
 ```
+
+> 注：不再依赖 `@opentui/solid` 和 `solid-js`，使用自定义 ReactiveStore + ANSI 渲染替代。
 
 ## 9. 参考文档
 

@@ -1,89 +1,123 @@
 /**
- * @fileoverview SolidJS Store for TUI State Management
- * 
- * 参考 OpenCode 设计，实现响应式状态管理
+ * @fileoverview Reactive Store - Fixed version with array tracking
  */
 
-import { createStore } from "solid-js/store";
-import type { Message, MessagePart } from "./types";
+type Listener = () => void;
 
 export interface SessionStore {
-  messages: Message[];
-  parts: Record<string, MessagePart[]>;  // messageId -> parts
+  messages: any[];
+  parts: Record<string, any[]>;
   sessionId?: string;
   isStreaming: boolean;
   status: string;
 }
 
-// 创建全局 store
-const [store, setStore] = createStore<SessionStore>({
+class ReactiveStore {
+  private listeners: Set<Listener> = new Set();
+  private batching = false;
+  private pending = false;
+
+  constructor(private store: SessionStore) {}
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    // Execute immediately
+    listener();
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify() {
+    if (this.batching) {
+      this.pending = true;
+      return;
+    }
+    
+    this.listeners.forEach((listener) => listener());
+    this.pending = false;
+  }
+
+  batch(fn: () => void) {
+    this.batching = true;
+    fn();
+    this.batching = false;
+    if (this.pending) {
+      this.notify();
+    }
+  }
+
+  // Direct state access
+  get state(): SessionStore {
+    return this.store;
+  }
+
+  // Manual trigger
+  trigger() {
+    this.notify();
+  }
+}
+
+// Create singleton store
+const rawStore: SessionStore = {
   messages: [],
   parts: {},
   sessionId: undefined,
   isStreaming: false,
   status: "",
-});
+};
 
-export { store, setStore };
+const reactiveStore = new ReactiveStore(rawStore);
 
-// Store Actions
+export const store = reactiveStore.state;
+
+// SolidJS-compatible API
+export function createEffect(fn: () => void): () => void {
+  return reactiveStore.subscribe(fn);
+}
+
+// Store Actions - with manual triggering
 export const storeActions = {
-  /**
-   * 添加消息
-   */
-  addMessage(message: Message) {
-    setStore("messages", (msgs) => [...msgs, message]);
-    setStore("parts", message.id, []);
+  addMessage(message: any) {
+    store.messages.push(message);
+    store.parts[message.id] = [];
+    reactiveStore.trigger();
   },
 
-  /**
-   * 更新或添加 Part
-   * 参考 OpenCode: reconcile part by id
-   */
-  updatePart(messageId: string, part: MessagePart) {
-    setStore("parts", messageId, (parts = []) => {
-      const index = parts.findIndex((p) => p.id === part.id);
+  updatePart(messageId: string, part: any) {
+    const parts = store.parts[messageId];
+    if (!parts) {
+      store.parts[messageId] = [part];
+    } else {
+      const index = parts.findIndex((p: any) => p.id === part.id);
       if (index >= 0) {
-        // 更新现有 part（SolidJS 自动追踪变化）
-        return parts.map((p, i) => (i === index ? part : p));
+        parts[index] = part;
       } else {
-        // 新增 part
-        return [...parts, part];
+        parts.push(part);
       }
-    });
+    }
+    reactiveStore.trigger();
   },
 
-  /**
-   * 设置会话ID
-   */
   setSessionId(sessionId: string) {
-    setStore("sessionId", sessionId);
+    store.sessionId = sessionId;
+    reactiveStore.trigger();
   },
 
-  /**
-   * 设置流式状态
-   */
   setStreaming(isStreaming: boolean) {
-    setStore("isStreaming", isStreaming);
+    store.isStreaming = isStreaming;
+    reactiveStore.trigger();
   },
 
-  /**
-   * 设置状态文本
-   */
   setStatus(status: string) {
-    setStore("status", status);
+    store.status = status;
+    reactiveStore.trigger();
   },
 
-  /**
-   * 重置 store
-   */
   reset() {
-    setStore({
-      messages: [],
-      parts: {},
-      sessionId: undefined,
-      isStreaming: false,
-      status: "",
-    });
+    store.messages = [];
+    store.parts = {};
+    store.sessionId = undefined;
+    store.isStreaming = false;
+    store.status = "";
+    reactiveStore.trigger();
   },
 };
