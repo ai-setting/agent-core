@@ -211,12 +211,13 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
         const sessionId = ctx.session_id || (ctx.metadata as any)?.session_id || "default";
         const messageId = (ctx.metadata as any)?.message_id || `msg_${Date.now()}`;
         const env = (ctx as any).env;
+        const eventContext = { session_id: sessionId, message_id: messageId };
         
         if (env?.emitStreamEvent) {
           env.emitStreamEvent({
             type: "start",
             metadata: { model: config.model },
-          }, { session_id: sessionId } as any);
+          }, eventContext);
         }
 
         while (true) {
@@ -249,7 +250,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
                     type: "text",
                     content,
                     delta: delta.content,
-                  }, { session_id: sessionId } as any);
+                  }, eventContext);
                 }
               }
 
@@ -261,7 +262,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
                   env.emitStreamEvent({
                     type: "reasoning",
                     content: reasoningContent,
-                  }, { session_id: sessionId } as any);
+                  }, eventContext);
                 }
               }
 
@@ -293,7 +294,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
                       tool_name: lastTool.function.name,
                       tool_args: JSON.parse(lastTool.function.arguments || "{}"),
                       tool_call_id: lastTool.id,
-                    }, { session_id: sessionId } as any);
+                    }, eventContext);
                   }
                 }
               }
@@ -324,7 +325,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
               type: "completed",
               content,
               metadata: { model: config.model },
-            }, { session_id: sessionId } as any);
+            }, eventContext);
           }
         }
 
