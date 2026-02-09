@@ -1,57 +1,40 @@
 /**
- * @fileoverview SolidJS-based TUI Renderer
- * 
- * 使用 SolidJS 响应式系统实现无闪烁渲染
+ * @fileoverview TUI Renderer - with custom reactive store
  */
 
-import { createEffect, createSignal } from "solid-js";
 import { stdin, stdout } from "process";
 import readline from "readline";
-import { store, storeActions } from "./store";
-import { renderUserMessage, renderSystemMessage, renderPart, wrapText } from "./components";
-import type { TUIOptions } from "./types";
+import { store, createEffect } from "./store";
+import type { Message, MessagePart } from "./types";
 
-// ANSI 控制码
 const ANSI = {
   CLEAR: "\x1b[2J\x1b[H",
   RESET: "\x1b[0m",
   HIDE_CURSOR: "\x1b[?25l",
   SHOW_CURSOR: "\x1b[?25h",
-  SAVE_CURSOR: "\x1b[s",
-  RESTORE_CURSOR: "\x1b[u",
-  CLEAR_LINE: "\x1b[K",
-  UP: (n: number) => `\x1b[${n}A`,
-  DOWN: (n: number) => `\x1b[${n}B`,
-  GOTO: (row: number, col: number) => `\x1b[${row};${col}H`,
 };
 
-// 颜色
 const color = {
   cyan: (text: string) => `\x1b[36m${text}\x1b[0m`,
   green: (text: string) => `\x1b[32m${text}\x1b[0m`,
   gray: (text: string) => `\x1b[90m${text}\x1b[0m`,
+  yellow: (text: string) => `\x1b[33m${text}\x1b[0m`,
+  red: (text: string) => `\x1b[31m${text}\x1b[0m`,
 };
 
 const border = {
-  topLeft: "┌",
-  topRight: "┐",
-  bottomLeft: "└",
-  bottomRight: "┘",
-  horizontal: "─",
-  vertical: "│",
-  leftT: "├",
-  rightT: "┤",
+  topLeft: "┌", topRight: "┐", bottomLeft: "└", bottomRight: "┘",
+  horizontal: "─", vertical: "│", leftT: "├", rightT: "┤", split: "▌",
 };
 
-export class SolidTUIRenderer {
+export class TUIRenderer {
   private rl: readline.Interface;
   private width = stdout.columns || 80;
   private height = stdout.rows || 24;
   private inputBuffer = "";
   private onSubmit?: (text: string) => void;
-  private cleanupFns: Array<() => void> = [];
   private renderCount = 0;
-  private mounted = false;
+  private isMounted = false;
 
   constructor() {
     this.rl = readline.createInterface({
@@ -59,379 +42,201 @@ export class SolidTUIRenderer {
       output: stdout,
       terminal: true,
     });
-
     this.setupInput();
-    this.setupResize();
   }
 
   private setupInput() {
     stdin.setRawMode(true);
     stdin.setEncoding("utf8");
 
-    const handler = (key: string) => {
-      // Ctrl+C
+    stdin.on("data", (key: string) => {
       if (key === "\x03") {
         this.cleanup();
         process.exit(0);
       }
-
-      // Ctrl+L
       if (key === "\x0c") {
-        this.fullRender();
+        this.render();
         return;
       }
-
-      // Enter
       if (key === "\r" || key === "\n") {
         if (this.inputBuffer.trim()) {
           this.onSubmit?.(this.inputBuffer);
           this.inputBuffer = "";
-          this.render();
         }
         return;
       }
-
-      // Backspace
       if (key === "\x7f") {
         this.inputBuffer = this.inputBuffer.slice(0, -1);
-        this.render();
         return;
       }
-
-      // 忽略控制字符
       if (key.charCodeAt(0) < 32) return;
-
-      // 普通字符
       this.inputBuffer += key;
-      this.render();
-    };
-
-    stdin.on("data", handler);
-    this.cleanupFns.push(() => stdin.off("data", handler));
-  }
-
-  private setupResize() {
-    const handler = () => {
-      this.width = stdout.columns || 80;
-      this.height = stdout.rows || 24;
-      this.fullRender();
-    };
-
-    process.stdout.on("resize", handler);
-    this.cleanupFns.push(() => process.stdout.off("resize", handler));
+    });
   }
 
   setOnSubmit(callback: (text: string) => void) {
     this.onSubmit = callback;
   }
 
-  setSessionTitle(title: string) {
-    // 通过 store 更新，响应式渲染
-    // TODO: 添加标题到 store
-  }
-
-  /**
-   * 初始化渲染
-   */
   mount() {
-    this.mounted = true;
+    this.isMounted = true;
     stdout.write(ANSI.HIDE_CURSOR);
-    this.fullRender();
-
-    // SolidJS 响应式：当 store 变化时重新渲染
-    // 使用 createEffect 追踪 store
+    
+    // Subscribe to store changes
     createEffect(() => {
-      // 追踪 store 的变化
-      // 通过访问 store 属性建立依赖
-      const _ = store.messages.length;
-      const __ = Object.keys(store.parts).length;
-      const ___ = store.isStreaming;
+      // Access all reactive data
+      const _messages = store.messages;
+      const _parts = store.parts;
+      const _streaming = store.isStreaming;
       
-      // 强制重新渲染
       this.renderCount++;
       this.render();
     });
   }
 
-  /**
-   * 全屏渲染
-   */
-  private fullRender() {
-    stdout.write(ANSI.CLEAR);
-
-    // Header
-    this.renderHeader();
-
-    // Messages（使用 SolidJS 渲染到字符串）
-    this.renderMessages();
-
-    // Input
-    this.renderInput();
-  }
-
-  /**
-   * 增量渲染
-   */
   private render() {
-    this.renderCount++;
-    
-    // 调试日志：显示渲染次数和消息数
-    const messagesCount = store.messages.length;
-    const partsCount = Object.keys(store.parts).reduce((acc, id) => acc + (store.parts[id]?.length || 0), 0);
-    
-    // 移动到消息区域开头
-    stdout.write(ANSI.GOTO(4, 1));
-    
-    // 清除从当前位置到屏幕底部
-    stdout.write("\x1b[J");
-    
-    // 重新渲染所有消息
-    for (const message of store.messages) {
-      const parts = store.parts[message.id] || [];
-      stdout.write(this.renderMessage(message, parts));
-    }
-    
-    // 渲染输入区
-    this.renderInput();
-    
-    // 显示调试信息
-    const debugInfo = `[Msg:${messagesCount} Parts:${partsCount} Renders:${this.renderCount}]`;
-    stdout.write(ANSI.GOTO(this.height, Math.max(0, this.width - debugInfo.length - 2)));
-    stdout.write(color.gray(debugInfo));
-    
-    // 移动光标到输入位置
-    const inputLines = Math.max(1, this.wrapText(this.inputBuffer, this.width - 6).length);
-    stdout.write(ANSI.GOTO(this.height - 1, 4));
-  }
-
-  private renderHeader() {
-    const title = store.sessionId
-      ? `Session ${store.sessionId.slice(0, 8)}`
-      : "Tong Work";
-    const truncatedTitle =
-      title.length > this.width - 10
-        ? title.slice(0, this.width - 13) + "..."
-        : title;
-
-    const padding = Math.max(0, this.width - 4 - truncatedTitle.length);
-    const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
+    if (!this.isMounted) return;
 
     let output = "";
-    output +=
-      color.cyan(
-        border.topLeft + border.horizontal.repeat(this.width - 2) + border.topRight
-      ) + "\n";
-    output += color.cyan(border.vertical);
-    output += " ".repeat(leftPad) + truncatedTitle + " ".repeat(rightPad);
-    output += color.cyan(border.vertical) + "\n";
-    output +=
-      color.cyan(
-        border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT
-      ) + "\n";
-
+    
+    // Header
+    output += this.buildHeader();
+    
+    // Messages
+    for (const message of store.messages) {
+      const parts = store.parts[message.id] || [];
+      output += this.buildMessage(message, parts);
+    }
+    
+    // Input
+    output += this.buildInput();
+    
+    // Debug
+    const partsCount = Object.values(store.parts).reduce((acc, p) => acc + (p?.length || 0), 0);
+    output += color.gray(`[Msg:${store.messages.length} Parts:${partsCount} Renders:${this.renderCount}]`) + "\n";
+    
+    // Clear and render
+    stdout.write(ANSI.CLEAR);
     stdout.write(output);
   }
 
-  private renderMessages() {
-    // 使用 SolidJS 渲染组件到终端
-    // 这里我们手动构建输出，因为终端不支持 DOM
-    let output = "";
-
-    for (const message of store.messages) {
-      const parts = store.parts[message.id] || [];
-      output += this.renderMessage(message, parts);
-    }
-
-    stdout.write(output);
+  private buildHeader(): string {
+    const title = store.sessionId ? `Session ${store.sessionId.slice(0, 8)}` : "Tong Work";
+    const truncated = title.length > this.width - 10 ? title.slice(0, this.width - 13) + "..." : title;
+    const pad = Math.max(0, this.width - 4 - truncated.length);
+    const leftPad = Math.floor(pad / 2);
+    const rightPad = pad - leftPad;
+    
+    let out = "";
+    out += color.cyan(border.topLeft + border.horizontal.repeat(this.width - 2) + border.topRight) + "\n";
+    out += color.cyan(border.vertical) + " ".repeat(leftPad) + truncated + " ".repeat(rightPad) + color.cyan(border.vertical) + "\n";
+    out += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT) + "\n";
+    return out;
   }
 
-  private renderMessage(message: any, parts: any[]): string {
-    let output = "\n";
-
+  private buildMessage(message: Message, parts: MessagePart[]): string {
+    let out = "\n";
+    
     if (message.role === "user") {
-      output += this.renderUserMessage(message);
+      const lines = this.wrapText(message.content, this.width - 6);
+      out += `  ${color.green(border.split)}\n`;
+      for (const line of lines) {
+        out += `  ${color.green(border.split)} ${line}\n`;
+      }
+      out += `  ${color.green(border.split)}\n`;
     } else if (message.role === "assistant") {
-      output += this.renderAssistantParts(parts);
+      for (const part of parts) {
+        out += this.buildPart(part);
+      }
     } else {
-      output += this.renderSystemMessage(message);
-    }
-
-    return output;
-  }
-
-  private renderUserMessage(message: any): string {
-    const lines = this.wrapText(message.content, this.width - 6);
-    let output = "";
-
-    output += `  ${color.green("▌")}\n`;
-    for (const line of lines) {
-      output += `  ${color.green("▌")} ${line}\n`;
-    }
-    output += `  ${color.green("▌")}\n`;
-
-    return output;
-  }
-
-  private renderAssistantParts(parts: any[]): string {
-    let output = "";
-
-    for (const part of parts) {
-      switch (part.type) {
-        case "reasoning":
-          output += this.renderReasoningPart(part);
-          break;
-        case "text":
-          output += this.renderTextPart(part);
-          break;
-        case "tool_call":
-          output += this.renderToolCallPart(part);
-          break;
-        case "tool_result":
-          output += this.renderToolResultPart(part);
-          break;
+      const lines = this.wrapText(message.content, this.width - 6);
+      for (const line of lines) {
+        out += `  ${color.gray("• " + line)}\n`;
       }
     }
-
-    return output;
+    
+    return out;
   }
 
-  private renderReasoningPart(part: any): string {
-    const text = part.content || "";
-    const lines = this.wrapText(`Thinking: ${text}`, this.width - 10);
-    let output = "";
-
-    for (const line of lines) {
-      output += `  ${color.gray("▌")} \x1b[3m\x1b[90m${line}\x1b[0m\n`;
+  private buildPart(part: MessagePart): string {
+    let out = "";
+    
+    switch (part.type) {
+      case "reasoning": {
+        const text = part.content || "";
+        if (text) {
+          const lines = this.wrapText(`Thinking: ${text}`, this.width - 10);
+          for (const line of lines) {
+            out += `  ${color.gray(border.split)} \x1b[3m\x1b[90m${line}\x1b[0m\n`;
+          }
+        }
+        break;
+      }
+      case "text": {
+        const text = part.content || "";
+        if (text) {
+          const lines = this.wrapText(text, this.width - 6);
+          for (const line of lines) {
+            out += `     ${line}\n`;
+          }
+        }
+        break;
+      }
+      case "tool_call": {
+        const args = part.toolArgs ? JSON.stringify(part.toolArgs).slice(0, 50) : "";
+        out += `     ${color.yellow(`⚡ ${part.toolName}`)}`;
+        if (args) out += ` ${color.gray(args)}`;
+        out += "\n";
+        break;
+      }
+      case "tool_result": {
+        const success = part.success !== false;
+        const icon = success ? "✓" : "✗";
+        const iconColor = success ? color.green : color.red;
+        const result = typeof part.result === "string" ? part.result : JSON.stringify(part.result).slice(0, 80);
+        out += `     ${iconColor(icon + " " + part.toolName)}`;
+        if (result) out += ` ${color.gray(result)}`;
+        out += "\n";
+        break;
+      }
     }
-
-    return output;
+    
+    return out;
   }
 
-  private renderTextPart(part: any): string {
-    const text = part.content || "";
-    if (!text.trim()) return "";
-
-    const lines = this.wrapText(text, this.width - 6);
-    let output = "";
-
-    for (const line of lines) {
-      output += `     ${line}\n`;
-    }
-
-    return output;
-  }
-
-  private renderToolCallPart(part: any): string {
-    const args = part.toolArgs
-      ? JSON.stringify(part.toolArgs).slice(0, 50)
-      : "";
-    let output = `     \x1b[33m⚡ ${part.toolName}\x1b[0m`;
-    if (args) output += ` \x1b[90m${args}\x1b[0m`;
-    return output + "\n";
-  }
-
-  private renderToolResultPart(part: any): string {
-    const success = part.success !== false;
-    const icon = success ? "✓" : "✗";
-    const color = success ? "\x1b[32m" : "\x1b[31m";
-    const result =
-      typeof part.result === "string"
-        ? part.result
-        : JSON.stringify(part.result).slice(0, 80);
-
-    let output = `     ${color}${icon} ${part.toolName}\x1b[0m`;
-    if (result) output += ` \x1b[90m${result}\x1b[0m`;
-    return output + "\n";
-  }
-
-  private renderSystemMessage(message: any): string {
-    const lines = this.wrapText(message.content, this.width - 6);
-    let output = "";
-
-    for (const line of lines) {
-      output += `  \x1b[90m• ${line}\x1b[0m\n`;
-    }
-
-    return output;
-  }
-
-  private renderInput() {
+  private buildInput(): string {
     const lines = this.wrapText(this.inputBuffer, this.width - 6);
-    let output = "";
-
-    // 分隔线
-    output +=
-      color.cyan(
-        border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT
-      ) + "\n";
-
-    // 输入内容
+    let out = "";
+    
+    out += color.cyan(border.leftT + border.horizontal.repeat(this.width - 2) + border.rightT) + "\n";
+    
     if (lines.length === 0) {
-      output += color.cyan(border.vertical) + " " + color.gray("> _") + "\n";
+      out += color.cyan(border.vertical) + " " + color.gray("> _") + "\n";
     } else {
       for (const line of lines) {
-        output += color.cyan(border.vertical) + " " + color.green("> ") + line;
-        if (store.isStreaming) output += color.gray("█");
-        output += "\n";
+        out += color.cyan(border.vertical) + " " + color.green("> ") + line;
+        if (store.isStreaming) out += color.gray("█");
+        out += "\n";
       }
     }
-
-    // 底边框
-    output +=
-      color.cyan(
-        border.bottomLeft +
-          border.horizontal.repeat(this.width - 2) +
-          border.bottomRight
-      ) + "\n";
-
-    // 状态栏
+    
+    out += color.cyan(border.bottomLeft + border.horizontal.repeat(this.width - 2) + border.bottomRight) + "\n";
+    
     const status = store.status || "Enter 发送 · Ctrl+C 退出 · Ctrl+L 清屏";
-    output += color.gray(status);
-
+    out += color.gray(status);
     if (store.isStreaming) {
       const rightText = "Generating...";
       const padding = Math.max(0, this.width - status.length - rightText.length - 2);
-      output += " ".repeat(padding) + color.gray(rightText);
+      out += " ".repeat(padding) + color.gray(rightText);
     }
-
-    output += "\n";
-
-    stdout.write(output);
-  }
-
-  private calculateMessagesHeight(): number {
-    let height = 0;
-
-    for (const message of store.messages) {
-      height += 1; // 消息间距
-
-      if (message.role === "user") {
-        const lines = this.wrapText(message.content, this.width - 6);
-        height += 2 + lines.length; // 边框 + 内容
-      } else if (message.role === "assistant") {
-        const parts = store.parts[message.id] || [];
-        for (const part of parts) {
-          if (part.type === "reasoning" || part.type === "text") {
-            const text = part.content || "";
-            const prefix = part.type === "reasoning" ? "Thinking: " : "";
-            const lines = this.wrapText(prefix + text, this.width - 6);
-            height += lines.length;
-          } else {
-            height += 1;
-          }
-        }
-      }
-    }
-
-    return height;
+    out += "\n";
+    
+    return out;
   }
 
   private wrapText(text: string, width: number): string[] {
     const lines: string[] = [];
-    const paragraphs = text.split("\n");
-
-    for (const para of paragraphs) {
+    for (const para of text.split("\n")) {
       if (para.length <= width) {
         lines.push(para);
       } else {
@@ -443,20 +248,17 @@ export class SolidTUIRenderer {
         if (remaining) lines.push(remaining);
       }
     }
-
     return lines;
   }
 
   cleanup() {
-    this.cleanupFns.forEach((fn) => fn());
+    this.isMounted = false;
     stdin.setRawMode(false);
     this.rl.close();
-    stdout.write(ANSI.RESET);
-    stdout.write(ANSI.SHOW_CURSOR);
-    storeActions.reset();
+    stdout.write(ANSI.RESET + ANSI.SHOW_CURSOR);
   }
 }
 
 export function createRenderer() {
-  return new SolidTUIRenderer();
+  return new TUIRenderer();
 }
