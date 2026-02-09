@@ -1,0 +1,4 @@
+# Bun 配置文件
+# 用于 OpenTUI/Solid JSX 转换
+
+preload = ["@opentui/solid/preload"]
