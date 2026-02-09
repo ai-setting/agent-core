@@ -48,6 +48,8 @@ export interface StoreState {
   isConnected: boolean;
   status: string;
   error: string | null;
+  lastModelName: string | null;
+  lastResponseTimeMs: number | null;
 }
 
 // ============================================================================
@@ -64,7 +66,9 @@ export interface StoreContextValue {
   isConnected: Accessor<boolean>;
   status: Accessor<string>;
   error: Accessor<string | null>;
-  
+  lastModelName: Accessor<string | null>;
+  lastResponseTimeMs: Accessor<number | null>;
+
   // Setters
   setSessionId: Setter<string | null>;
   setSessionTitle: Setter<string | null>;
@@ -74,6 +78,8 @@ export interface StoreContextValue {
   setIsConnected: Setter<boolean>;
   setStatus: Setter<string>;
   setError: Setter<string | null>;
+  setLastModelName: Setter<string | null>;
+  setLastResponseTimeMs: Setter<number | null>;
   
   // Actions
   addMessage: (message: Message) => void;
@@ -100,49 +106,35 @@ export function StoreProvider(props: { children: any }) {
   const [isConnected, setIsConnected] = createSignal(false);
   const [status, setStatus] = createSignal("Ready");
   const [error, setError] = createSignal<string | null>(null);
+  const [lastModelName, setLastModelName] = createSignal<string | null>(null);
+  const [lastResponseTimeMs, setLastResponseTimeMs] = createSignal<number | null>(null);
 
   // Actions
   const addMessage = (message: Message) => {
-    console.log("[STORE] addMessage called", { id: message.id, role: message.role, contentLength: message.content?.length });
     batch(() => {
-      setMessages(prev => {
-        const newMessages = [...prev, message];
-        console.log("[STORE] addMessage completed", { messagesCount: newMessages.length });
-        return newMessages;
-      });
+      setMessages(prev => [...prev, message]);
       if (!parts()[message.id]) {
-        setParts(prev => {
-          console.log("[STORE] initialize parts for message", { messageId: message.id });
-          return { ...prev, [message.id]: [] };
-        });
+        setParts(prev => ({ ...prev, [message.id]: [] }));
       }
     });
   };
 
   const updateMessage = (id: string, updates: Partial<Message>) => {
-    console.log("[STORE] updateMessage", { id, updates: Object.keys(updates) });
     setMessages(prev =>
       prev.map(msg => (msg.id === id ? { ...msg, ...updates } : msg))
     );
   };
 
   const addPart = (messageId: string, part: MessagePart) => {
-    console.log("[STORE] addPart", { messageId, partType: part.type, partContentLength: part.content?.length });
     batch(() => {
-      setParts(prev => {
-        const currentParts = prev[messageId] || [];
-        const newParts = [...currentParts, part];
-        console.log("[STORE] addPart completed", { messageId, partsCount: newParts.length });
-        return {
-          ...prev,
-          [messageId]: newParts,
-        };
-      });
+      setParts(prev => ({
+        ...prev,
+        [messageId]: [...(prev[messageId] || []), part],
+      }));
     });
   };
 
   const updatePart = (messageId: string, partId: string, updates: Partial<MessagePart>) => {
-    console.log("[STORE] updatePart", { messageId, partId, updates: Object.keys(updates) });
     setParts(prev => ({
       ...prev,
       [messageId]: (prev[messageId] || []).map(p =>
@@ -152,7 +144,6 @@ export function StoreProvider(props: { children: any }) {
   };
 
   const clearMessages = () => {
-    console.log("[STORE] clearMessages");
     batch(() => {
       setMessages([]);
       setParts({});
@@ -161,7 +152,6 @@ export function StoreProvider(props: { children: any }) {
   };
 
   const appendMessageContent = (messageId: string, delta: string) => {
-    console.log("[STORE] appendMessageContent", { messageId, deltaLength: delta.length, deltaPreview: delta.substring(0, 50) });
     setMessages(prev =>
       prev.map(msg =>
         msg.id === messageId
@@ -180,6 +170,8 @@ export function StoreProvider(props: { children: any }) {
     isConnected,
     status,
     error,
+    lastModelName,
+    lastResponseTimeMs,
     setSessionId,
     setSessionTitle,
     setMessages,
@@ -188,6 +180,8 @@ export function StoreProvider(props: { children: any }) {
     setIsConnected,
     setStatus,
     setError,
+    setLastModelName,
+    setLastResponseTimeMs,
     addMessage,
     updateMessage,
     addPart,
