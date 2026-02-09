@@ -39,14 +39,11 @@ export function App(props: AppProps) {
   return (
     <box flexDirection="column" width="100%" height="100%">
       <Header />
-      <box flexGrow={1}>
+      <box flexGrow={1} minHeight={0}>
         <MessageList />
       </box>
-      <box height={6} flexShrink={0}>
+      <box flexShrink={0}>
         <InputBox />
-      </box>
-      <box flexDirection="row" justifyContent="center" borderStyle="single">
-        <text>Ctrl+C: Exit | Enter: Send</text>
       </box>
     </box>
   );

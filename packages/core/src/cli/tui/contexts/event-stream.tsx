@@ -66,6 +66,7 @@ export function EventStreamProvider(props: {
   let eventQueue: StreamEvent[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let lastFlush = 0;
+  let streamStartTime = 0;
 
   // 批处理机制 - 16ms 窗口期
   const flushEvents = () => {
@@ -113,10 +114,13 @@ export function EventStreamProvider(props: {
     
     switch (event.type) {
       case "stream.start": {
-        eventLogger.info("=== STREAM START ===", { messageId: event.messageId, model: (event as any).model });
+        const streamEvent = event as StreamEvent & { model?: string };
+        eventLogger.info("=== STREAM START ===", { messageId: event.messageId, model: streamEvent.model });
+        streamStartTime = Date.now();
+        if (streamEvent.model) store.setLastModelName(streamEvent.model);
         store.setIsStreaming(true);
         store.setStatus("Generating...");
-        
+
         // Create assistant message placeholder when stream starts
         if (event.messageId) {
           const assistantMessage: Message = {
@@ -223,6 +227,10 @@ export function EventStreamProvider(props: {
       
       case "stream.completed": {
         eventLogger.info("Stream completed", { messageId: event.messageId });
+        if (streamStartTime > 0) {
+          store.setLastResponseTimeMs(Date.now() - streamStartTime);
+          streamStartTime = 0;
+        }
         store.setIsStreaming(false);
         store.setStatus("Ready");
         break;
