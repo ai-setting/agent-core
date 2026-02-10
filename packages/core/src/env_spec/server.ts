@@ -1,11 +1,11 @@
-import type { Environment } from "../src/core/environment/index.js";
+import type { Environment } from "../core/environment/index.js";
 // 为避免直接绑定到具体 MCP 实现，这里定义一个最小的 Server 接口，
 // 方便后续用实际 MCP Server 适配，当前实现主要用于类型与单测。
 export interface EnvMcpServerLike {
   tool(name: string, handler: (params: unknown) => Promise<unknown> | unknown): void;
 }
 import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "./types.js";
-import type { BaseEnvironment } from "../src/core/environment/base/base-environment.js";
+import type { BaseEnvironment } from "../core/environment/base/base-environment.js";
 import { createBaseEnvDescription, createBaseEnvProfiles, type BaseEnvMeta } from "./base_env/index.js";
 
 /**

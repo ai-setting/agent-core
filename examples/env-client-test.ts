@@ -13,7 +13,7 @@
  */
 
 import { spawn, type Subprocess } from "bun";
-import { EnvClient, type EnvRpcClient } from "../packages/core/env_spec/client.js";
+import { EnvClient, type EnvRpcClient } from "../packages/core/src/env_spec/client.js";
 
 // 配置
 const USE_HTTP = process.argv.includes("--http");

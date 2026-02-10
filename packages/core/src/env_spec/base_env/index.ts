@@ -1,4 +1,4 @@
-import { BaseEnvironment } from "../../src/core/environment/base/base-environment.js";
+import { BaseEnvironment } from "../../core/environment/base/base-environment.js";
 import type { EnvDescription, EnvProfile, AgentSpec } from "../types.js";
 
 export interface BaseEnvMeta {

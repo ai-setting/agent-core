@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { BaseEnvironment } from "../src/core/environment/base/base-environment.js";
-import type { Action, Context, ToolResult } from "../src/core/types/index.js";
+import { BaseEnvironment } from "../core/environment/base/base-environment.js";
+import type { Action, Context, ToolResult } from "../core/types/index.js";
 import { createBaseEnvDescription, createBaseEnvProfiles } from "./base_env/index.js";
 
 class TestEnv extends BaseEnvironment {
