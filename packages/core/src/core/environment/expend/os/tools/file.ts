@@ -1,10 +1,12 @@
 /**
  * @fileoverview File operation tools
+ * Includes cross-platform compatibility for Windows, macOS, and Linux
  */
 
 import { z } from "zod";
 import type { ToolInfo } from "../../../../types/index.js";
 import { glob as globModule } from "glob";
+import { normalizePath, isAbsolute, resolvePath } from "./filesystem.js";
 
 export interface ReadFileOptions {
   encoding?: BufferEncoding;
@@ -16,15 +18,19 @@ export async function readFile(
   options?: ReadFileOptions,
 ): Promise<string> {
   const fs = await import("fs/promises");
+  const pathModule = await import("path");
   const encoding = options?.encoding ?? "utf-8";
   const maxSize = options?.maxSize ?? 1024 * 1024;
 
-  const stat = await fs.stat(path);
+  // Normalize path for cross-platform compatibility
+  const normalizedPath = normalizePath(path);
+
+  const stat = await fs.stat(normalizedPath);
   if (stat.size > maxSize) {
     throw new Error(`File too large: ${stat.size} bytes (max: ${maxSize})`);
   }
 
-  return fs.readFile(path, { encoding });
+  return fs.readFile(normalizedPath, { encoding });
 }
 
 export interface WriteFileOptions {
@@ -42,15 +48,18 @@ export async function writeFile(
   const pathModule = await import("path");
   const encoding = options?.encoding ?? "utf-8";
 
+  // Normalize path for cross-platform compatibility
+  const normalizedPath = normalizePath(path);
+
   if (options?.createDirectories) {
-    const dir = pathModule.dirname(path);
+    const dir = pathModule.dirname(normalizedPath);
     await fs.mkdir(dir, { recursive: true });
   }
 
   if (options?.append) {
-    await fs.appendFile(path, content, encoding);
+    await fs.appendFile(normalizedPath, content, encoding);
   } else {
-    await fs.writeFile(path, content, encoding);
+    await fs.writeFile(normalizedPath, content, encoding);
   }
 }
 
@@ -80,7 +89,8 @@ export async function glob(
 
     for (const match of matches) {
       if (results.size < maxResults) {
-        results.add(match);
+        // Normalize paths for cross-platform compatibility
+        results.add(normalizePath(match));
       }
     }
   }
@@ -139,7 +149,7 @@ export async function grep(
           regex.lastIndex = 0;
           if (regex.test(line)) {
             results.push({
-              file: path.relative(cwd, file),
+              file: normalizePath(path.relative(cwd, file)),
               line: i + 1,
               content: line.trim(),
             });
@@ -166,7 +176,7 @@ export function createFileTools(): ToolInfo[] {
       }),
       execute: async (args) => {
         try {
-          const path = String(args.path ?? "");
+          let path = String(args.path ?? "");
           if (!path) {
             return {
               success: false,
@@ -174,7 +184,12 @@ export function createFileTools(): ToolInfo[] {
               error: "Missing required parameter: path",
             };
           }
-          const content = await readFile(path, {
+
+          // Normalize path for cross-platform compatibility
+          path = normalizePath(path);
+          const absolutePath = isAbsolute(path) ? path : resolvePath(path);
+
+          const content = await readFile(absolutePath, {
             encoding: (args.encoding as BufferEncoding) ?? "utf-8",
           });
           return {
@@ -201,9 +216,9 @@ export function createFileTools(): ToolInfo[] {
       }),
       execute: async (args) => {
         try {
-          const path = args.path;
+          let path = args.path;
           const content = args.content;
-          
+
           if (!path || typeof path !== "string" || !path.trim()) {
             return {
               success: false,
@@ -211,7 +226,7 @@ export function createFileTools(): ToolInfo[] {
               error: `Missing required parameter: 'path' (string). The write_file tool requires a file path to write to. Example: {"path": "agent-intro.md", "content": "# Agent Introduction\n..."}`,
             };
           }
-          
+
           if (!content || typeof content !== "string") {
             return {
               success: false,
@@ -219,8 +234,12 @@ export function createFileTools(): ToolInfo[] {
               error: `Missing required parameter: 'content' (string). The write_file tool requires content to write.`,
             };
           }
-          
-          await writeFile(path, content, {
+
+          // Normalize path for cross-platform compatibility
+          path = normalizePath(path);
+          const absolutePath = isAbsolute(path) ? path : resolvePath(path);
+
+          await writeFile(absolutePath, content, {
             append: args.append,
             createDirectories: args.createDirs,
           });
