@@ -18,6 +18,7 @@ import type {
   Tool,
   ToolInfo,
 } from "../../../types/index.js";
+import { normalizePath } from "./tools/filesystem.js";
 
 /**
  * OS-specific tool execution configuration.
@@ -210,14 +211,15 @@ export class OsEnv extends BaseEnvironment {
 
   resolvePath(path: string): string {
     if (path.startsWith("/") || /^[a-zA-Z]:/.test(path)) {
-      return path;
+      return normalizePath(path);
     }
-    return `${this.workdir}/${path}`;
+    return normalizePath(`${this.workdir}/${path}`);
   }
 
   isPathSafe(path: string): boolean {
     const resolved = this.resolvePath(path);
-    return resolved.startsWith(this.workdir);
+    const normalizedWorkdir = normalizePath(this.workdir);
+    return resolved.startsWith(normalizedWorkdir) || resolved.startsWith(normalizePath(process.cwd()));
   }
 
   protected getDefaultTimeout(toolName: string): number {
