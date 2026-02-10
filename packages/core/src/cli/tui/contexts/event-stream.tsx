@@ -78,11 +78,32 @@ export function EventStreamProvider(props: {
     lastFlush = Date.now();
     
     // Batch all store updates so all result in a single render
-    batch(() => {
-      for (const event of events) {
-        handleEvent(event);
-      }
-    });
+    try {
+      batch(() => {
+        for (const event of events) {
+          try {
+            handleEvent(event);
+          } catch (eventError) {
+            eventLogger.error("Error handling event:", { 
+              type: event.type, 
+              messageId: event.messageId,
+              error: (eventError as Error).message,
+              stack: (eventError as Error).stack,
+            });
+            // 继续处理其他事件，不中断
+          }
+        }
+      });
+    } catch (batchError) {
+      eventLogger.error("Error in batch() execution:", {
+        error: (batchError as Error).message,
+        stack: (batchError as Error).stack,
+        eventCount: events.length,
+        eventTypes: events.map(e => e.type),
+      });
+      // 重新抛出错误以便上层处理
+      throw batchError;
+    }
   };
 
   const queueEvent = (event: StreamEvent) => {
