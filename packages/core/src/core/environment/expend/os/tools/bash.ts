@@ -6,7 +6,7 @@
 import { z } from "zod";
 import type { ToolInfo } from "../../../../types/index.js";
 import { spawn, type ChildProcess } from "child_process";
-import { normalizeGitBashPath, normalizePath, resolvePath } from "./filesystem.js";
+import { normalizeGitBashPath, normalizePath } from "./filesystem.js";
 
 const SIGKILL_TIMEOUT_MS = 200;
 
@@ -32,70 +32,74 @@ export async function bash(
   const timeout = options?.timeout ?? 60000;
   const maxBuffer = options?.maxBuffer ?? 10 * 1024 * 1024;
 
-  const { exec } = await import("child_process");
-
-  // Determine the appropriate shell for the platform
-  const shell = getShell();
+  const { shell, args } = getShellConfig(command);
 
   return new Promise((resolve) => {
-    const execOptions = {
+    let stdout = "";
+    let stderr = "";
+    let killed = false;
+
+    const child = spawn(shell, args, {
       cwd: options?.cwd ?? process.cwd(),
       env: { ...process.env, ...options?.env },
-      encoding: "utf-8" as const,
-      maxBuffer,
-      timeout: Math.floor(timeout / 1000),
-      shell,
-      killSignal: "SIGTERM" as const,
-    };
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
 
-    const child = exec(command, execOptions, (error: Error | null, stdout: string, stderr: string) => {
-        const duration = Date.now() - startTime;
+    child.stdout?.setEncoding("utf-8");
+    child.stderr?.setEncoding("utf-8");
 
-        // Normalize Git Bash paths on Windows
-        const normalizedStdout = process.platform === "win32"
-          ? normalizeGitBashPath(stdout)
-          : stdout;
-        const normalizedStderr = process.platform === "win32"
-          ? normalizeGitBashPath(stderr)
-          : stderr;
+    child.stdout?.on("data", (data: string) => {
+      stdout += data;
+      if (stdout.length > maxBuffer) {
+        child.kill("SIGTERM");
+      }
+    });
 
-        if (error) {
-          if ((error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
-            resolve({
-              success: false,
-              stdout: normalizedStdout,
-              stderr: normalizedStderr,
-              exitCode: null,
-              signal: "SIGTERM",
-              duration,
-            });
-            return;
-          }
+    child.stderr?.on("data", (data: string) => {
+      stderr += data;
+      if (stderr.length > maxBuffer) {
+        child.kill("SIGTERM");
+      }
+    });
 
-          resolve({
-            success: false,
-            stdout: normalizedStdout,
-            stderr: normalizedStderr,
-            exitCode: (error as NodeJS.ErrnoException).code === "ENOENT" ? 127 : 1,
-            signal: null,
-            duration,
-          });
-          return;
-        }
+    child.on("close", (code: number | null, signal: string | null) => {
+      if (killed) return;
+      const duration = Date.now() - startTime;
 
-        resolve({
-          success: true,
-          stdout: normalizedStdout,
-          stderr: normalizedStderr,
-          exitCode: 0,
-          signal: null,
-          duration,
-        });
-      },
-    );
+      const normalizedStdout = process.platform === "win32"
+        ? normalizeGitBashPath(stdout)
+        : stdout;
+      const normalizedStderr = process.platform === "win32"
+        ? normalizeGitBashPath(stderr)
+        : stderr;
+
+      resolve({
+        success: code === 0,
+        stdout: normalizedStdout,
+        stderr: normalizedStderr,
+        exitCode: code,
+        signal,
+        duration,
+      });
+    });
+
+    child.on("error", (error: Error) => {
+      const duration = Date.now() - startTime;
+      resolve({
+        success: false,
+        stdout,
+        stderr: error.message,
+        exitCode: 1,
+        signal: null,
+        duration,
+      });
+    });
 
     if (timeout > 0) {
       setTimeout(() => {
+        killed = true;
         killProcessTree(child);
       }, timeout);
     }
@@ -103,27 +107,37 @@ export async function bash(
 }
 
 /**
- * Get the appropriate shell for the current platform.
+ * Get the appropriate shell and arguments for the current platform.
  *
- * @returns The shell command to use
+ * @param command - The command to execute
+ * @returns The shell path and arguments
  */
-function getShell(): string {
+function getShellConfig(command: string): { shell: string; args: string[] } {
   if (process.platform === "win32") {
-    // On Windows, prefer Git Bash if available, otherwise use cmd.exe
     const gitPath = resolveGitBashPath();
     if (gitPath) {
-      return gitPath;
+      return { shell: gitPath, args: ["-c", command] };
     }
-    return process.env.COMSPEC || "cmd.exe";
+    const comspec = process.env.COMSPEC || "cmd.exe";
+    return { shell: comspec, args: ["/c", command] };
   }
+
   if (process.platform === "darwin") {
-    return "/bin/zsh";
+    const shell = process.env.SHELL || "/bin/zsh";
+    return { shell, args: ["-c", command] };
   }
-  const bashPath = resolveBashPath();
-  if (bashPath) {
-    return bashPath;
+
+  const shell = process.env.SHELL || "sh";
+  const shellName = shell.split("/").pop() || "sh";
+
+  if (shellName === "fish") {
+    const bash = resolveBashPath();
+    if (bash) {
+      return { shell: bash, args: ["-c", command] };
+    }
   }
-  return "/bin/sh";
+
+  return { shell, args: ["-c", command] };
 }
 
 /**
@@ -140,16 +154,18 @@ function resolveGitBashPath(): string | null {
       .split("\n")[0];
 
     if (gitPath) {
-      // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
-      // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-      const bashPath = gitPath.replace(/\\cmd\\git\.exe$/, "\\bin\\bash.exe");
+      const gitRoot = gitPath.replace(/\\[\\]cmd\\[\\]git\.exe$/i, "").replace(/\\[\\]mingw64\\[\\]bin\\[\\]git\.exe$/i, "");
+      const bashPath = `${gitRoot}\\usr\\bin\\bash.exe`;
       const fs = require("fs");
       if (fs.existsSync(bashPath)) {
         return bashPath;
       }
+      const altBashPath = `${gitRoot}\\bin\\bash.exe`;
+      if (fs.existsSync(altBashPath)) {
+        return altBashPath;
+      }
     }
   } catch {
-    // Git not found or where command failed
   }
   return null;
 }
@@ -182,7 +198,6 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
   if (!pid) return;
 
   if (process.platform === "win32") {
-    // On Windows, use taskkill to kill the process tree
     await new Promise<void>((resolve) => {
       const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
         stdio: "ignore",
@@ -194,7 +209,6 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
     return;
   }
 
-  // On Unix-like systems, kill the process group
   try {
     process.kill(-pid, "SIGTERM");
     await new Promise((r) => setTimeout(r, SIGKILL_TIMEOUT_MS));

@@ -95,7 +95,7 @@ export function getDirname(p: string): string {
  */
 export function isSubpath(parent: string, child: string): boolean {
   const rel = relative(parent, child);
-  return !!rel && !rel.startsWith("..") && !rel !== child;
+  return !!rel && !rel.startsWith("..") && rel !== child;
 }
 
 /**
