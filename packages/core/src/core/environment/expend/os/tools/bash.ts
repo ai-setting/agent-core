@@ -6,7 +6,7 @@
 import { z } from "zod";
 import type { ToolInfo } from "../../../../types/index.js";
 import { spawn, type ChildProcess } from "child_process";
-import { normalizeGitBashPath, resolvePath } from "./filesystem.js";
+import { normalizeGitBashPath, normalizePath, resolvePath } from "./filesystem.js";
 
 const SIGKILL_TIMEOUT_MS = 200;
 
@@ -38,19 +38,17 @@ export async function bash(
   const shell = getShell();
 
   return new Promise((resolve) => {
-    const child = exec(
-      command,
-      {
-        cwd: options?.cwd ?? process.cwd(),
-        env: { ...process.env, ...options?.env },
-        encoding: "utf-8",
-        maxBuffer,
-        timeout: Math.floor(timeout / 1000),
-        shell,
-        killSignal: "SIGTERM",
-        detached: process.platform !== "win32",
-      },
-      (error: Error | null, stdout: string, stderr: string) => {
+    const execOptions = {
+      cwd: options?.cwd ?? process.cwd(),
+      env: { ...process.env, ...options?.env },
+      encoding: "utf-8" as const,
+      maxBuffer,
+      timeout: Math.floor(timeout / 1000),
+      shell,
+      killSignal: "SIGTERM" as const,
+    };
+
+    const child = exec(command, execOptions, (error: Error | null, stdout: string, stderr: string) => {
         const duration = Date.now() - startTime;
 
         // Normalize Git Bash paths on Windows
@@ -222,8 +220,20 @@ export function createBashTool(): ToolInfo {
       workdir: z.string().optional().describe("Working directory"),
     }),
     execute: async (args) => {
+      // Normalize and resolve workdir for cross-platform compatibility
+      let normalizedWorkdir: string | undefined;
+      if (args.workdir) {
+        // Expand ~ to home directory
+        const expandedWorkdir = args.workdir.startsWith("~")
+          ? args.workdir.replace(/^~/, process.env.HOME || process.env.USERPROFILE || "")
+          : args.workdir;
+        
+        // Normalize path for the current platform
+        normalizedWorkdir = normalizePath(expandedWorkdir);
+      }
+
       const result = await bash(args.command, {
-        cwd: args.workdir,
+        cwd: normalizedWorkdir,
         timeout: args.timeoutMs,
       });
 
