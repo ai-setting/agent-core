@@ -67,6 +67,8 @@ export function EventStreamProvider(props: {
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let lastFlush = 0;
   let streamStartTime = 0;
+  let currentReasoningMessageId: string | null = null; // Current reasoning phase (reset after tool)
+  let currentTextMessageId: string | null = null; // Final text message (only one)
 
   // 批处理机制 - 16ms 窗口期
   const flushEvents = () => {
@@ -141,77 +143,68 @@ export function EventStreamProvider(props: {
         if (streamEvent.model) store.setLastModelName(streamEvent.model);
         store.setIsStreaming(true);
         store.setStatus("Generating...");
-
-        // Create assistant message placeholder when stream starts
-        if (event.messageId) {
-          const assistantMessage: Message = {
-            id: event.messageId,
-            role: "assistant",
-            content: "",
-            timestamp: Date.now(),
-          };
-          store.addMessage(assistantMessage);
-          eventLogger.info("=== ASSISTANT MSG CREATED ===", { messageId: event.messageId });
-          eventLogger.debug("Current messages after create", { messages: store.messages().map(m => ({ id: m.id, role: m.role, content: m.content?.substring(0, 50) })) });
-        }
+        // Don't create message here - create when we receive specific content
         break;
       }
        
       case "stream.text": {
-        eventLogger.info("=== STREAM TEXT ===", { 
-          messageId: event.messageId, 
-          delta: event.delta,
-          deltaLength: event.delta?.length,
-          currentContentLength: store.messages().find(m => m.id === event.messageId)?.content?.length,
-        });
-        if (event.messageId && event.delta) {
-          store.appendMessageContent(event.messageId, event.delta);
-          const updatedMsg = store.messages().find(m => m.id === event.messageId);
-          eventLogger.debug("After appendMessageContent", { 
-            messageId: event.messageId,
-            newContentLength: updatedMsg?.content?.length,
-            contentPreview: updatedMsg?.content?.substring(0, 100),
-          });
+        // Create/update text message for each response phase
+        eventLogger.info("=== STREAM TEXT ===", { delta: event.delta?.substring(0, 50) });
+        if (event.delta) {
+          // Close current reasoning phase - next reasoning will be new message
+          if (currentReasoningMessageId) {
+            eventLogger.info("Closing reasoning phase due to text");
+            currentReasoningMessageId = null;
+          }
+          
+          // Append to existing text message or create new
+          if (currentTextMessageId) {
+            store.appendMessageContent(currentTextMessageId, event.delta);
+          } else {
+            const textMessage: Message = {
+              id: `text-${Date.now()}`,
+              role: "assistant",
+              content: event.delta,
+              timestamp: Date.now(),
+            };
+            store.addMessage(textMessage);
+            currentTextMessageId = textMessage.id;
+            eventLogger.info("=== TEXT MSG CREATED ===", { messageId: textMessage.id });
+          }
         }
         break;
       }
        
       case "stream.reasoning": {
-        eventLogger.info("=== STREAM REASONING ===", { 
-          messageId: event.messageId, 
-          content: event.content,
-          delta: event.delta,
-          deltaLength: event.delta?.length,
-        });
-        if (event.messageId) {
-          const message = store.messages().find(m => m.id === event.messageId);
-          eventLogger.debug("Found message for reasoning", { messageId: event.messageId, found: !!message });
-          
-          if (message) {
-            // 添加或更新 reasoning part
-            const parts = store.parts()[message.id] || [];
-            const reasoningPart = parts.find(p => p.type === "reasoning");
-            eventLogger.debug("Current reasoning parts", { messageId: event.messageId, partsCount: parts.length, hasReasoningPart: !!reasoningPart });
-            
-            if (reasoningPart) {
-              // reasoning 事件发送的是累积的 content，直接替换
-              eventLogger.debug("Updating reasoning part with accumulated content", { oldLength: reasoningPart.content?.length, newLength: (event.content || "").length });
-              store.updatePart(message.id, reasoningPart.id, { 
-                content: event.content || "" 
-              });
-            } else {
-              const newPartContent = event.content || "";
-              eventLogger.debug("Adding new reasoning part", { contentLength: newPartContent.length, content: newPartContent });
-              store.addPart(message.id, {
-                id: `reasoning-${Date.now()}`,
-                type: "reasoning",
-                content: newPartContent,
-                timestamp: Date.now(),
-              });
-            }
-            
-            const updatedParts = store.parts()[message.id] || [];
-            eventLogger.debug("Updated parts after reasoning", { messageId: event.messageId, parts: updatedParts.map(p => ({ type: p.type, contentLength: p.content?.length })) });
+        // Create/update reasoning message
+        eventLogger.info("=== STREAM REASONING ===", { content: event.content?.substring(0, 50) });
+        if (!currentReasoningMessageId) {
+          // Create new reasoning message
+          const reasoningMessage: Message = {
+            id: `reasoning-${Date.now()}`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+          };
+          store.addMessage(reasoningMessage);
+          currentReasoningMessageId = reasoningMessage.id;
+          eventLogger.info("=== REASONING MSG CREATED ===", { messageId: reasoningMessage.id });
+        }
+        // Update reasoning content
+        if (currentReasoningMessageId) {
+          const parts = store.parts()[currentReasoningMessageId] || [];
+          const reasoningPart = parts.find(p => p.type === "reasoning");
+          if (reasoningPart) {
+            store.updatePart(currentReasoningMessageId, reasoningPart.id, { 
+              content: event.content || "" 
+            });
+          } else {
+            store.addPart(currentReasoningMessageId, {
+              id: `reasoning-part-${Date.now()}`,
+              type: "reasoning",
+              content: event.content || "",
+              timestamp: Date.now(),
+            });
           }
         }
         break;
@@ -219,9 +212,25 @@ export function EventStreamProvider(props: {
       
       case "stream.tool.call": {
         eventLogger.info("Tool call received", { messageId: event.messageId, toolName: event.toolName });
-        if (event.messageId) {
-          store.addPart(event.messageId, {
-            id: `tool-${Date.now()}`,
+        // Close current reasoning phase - next reasoning will be new message
+        if (currentReasoningMessageId) {
+          eventLogger.info("Closing reasoning phase due to tool call");
+          currentReasoningMessageId = null;
+        }
+        // Reset text message - next text will create new message
+        currentTextMessageId = null;
+        // Create separate message for tool call
+        const toolMessage: Message = {
+          id: `tool-${Date.now()}`,
+          role: "assistant",
+          content: `⚡ ${event.toolName || "unknown"}`,
+          timestamp: Date.now(),
+        };
+        store.addMessage(toolMessage);
+        // Store tool args as metadata
+        if (event.toolArgs) {
+          store.addPart(toolMessage.id, {
+            id: `tool-args-${Date.now()}`,
             type: "tool_call",
             toolName: event.toolName || "unknown",
             toolArgs: event.toolArgs,
@@ -233,9 +242,23 @@ export function EventStreamProvider(props: {
       
       case "stream.tool.result": {
         eventLogger.info("Tool result received", { messageId: event.messageId, toolName: event.toolName, success: event.success });
-        if (event.messageId) {
-          store.addPart(event.messageId, {
-            id: `result-${Date.now()}`,
+        // Find the last tool message with matching name
+        const messages = store.messages();
+        const lastToolMessage = [...messages].reverse().find(m => {
+          const parts = store.parts()[m.id] || [];
+          return parts.some((p: any) => p.type === "tool_call" && p.toolName === event.toolName);
+        });
+        
+        if (lastToolMessage) {
+          // Update the tool message with result
+          const existingContent = lastToolMessage.content || "";
+          const resultIcon = event.success ? "✓" : "✗";
+          store.updateMessage(lastToolMessage.id, { 
+            content: `${existingContent} ${resultIcon}` 
+          });
+          // Add result as part
+          store.addPart(lastToolMessage.id, {
+            id: `tool-result-${Date.now()}`,
             type: "tool_result",
             toolName: event.toolName || "unknown",
             result: event.result,
@@ -254,6 +277,8 @@ export function EventStreamProvider(props: {
         }
         store.setIsStreaming(false);
         store.setStatus("Ready");
+        // Reset for next query - only text message, reasoning continues naturally
+        currentTextMessageId = null;
         break;
       }
       

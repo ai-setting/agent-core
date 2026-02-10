@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Agent Core Env Protocol over MCP",
+  "description": "JSON 规范：在 MCP(JSON-RPC) 之上的 Environment 协议。所有方法都按 JSON-RPC 2.0 约定：method 为下述方法名，params/result 结构由本文件描述。",
+  "version": "0.1.0",
+  "mcpVersion": "2025-06-18",
+  "jsonrpc": "2.0",
+  "types": {
+    "EnvDescription": {
+      "description": "env.get_description 的返回结构。",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "version": { "type": "string" },
+        "capabilities": {
+          "type": "object",
+          "description": "环境层面的能力标记，例如是否支持 logs/events/metrics 等。",
+          "properties": {
+            "logs": { "type": "boolean" },
+            "events": { "type": "boolean" },
+            "metrics": { "type": "boolean" },
+            "profiles": { "type": "boolean" },
+            "mcpTools": { "type": "boolean", "description": "是否暴露普通 MCP tools 供调用。" }
+          },
+          "additionalProperties": true
+        },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/types/EnvProfile" }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id", "displayName"],
+      "additionalProperties": false
+    },
+    "AgentSpec": {
+      "description": "Env 中预配置的 Agent 角色（primary: 面向用户；sub: 仅子任务）。",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "type": "string", "enum": ["primary", "sub"] },
+        "promptId": { "type": "string" },
+        "promptOverride": { "type": "string" },
+        "allowedTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deniedTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "metadata": {
+          "type": "object",
+          "description": "可选：展示/调度用的附加信息（例如适用任务、风险说明等）。",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id", "role"],
+      "additionalProperties": false
+    },
+    "EnvProfile": {
+      "description": "一个可切换的 Environment Profile（对应当前 MCP Env 服务下的世界配置）。",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "primaryAgents": {
+          "type": "array",
+          "items": { "$ref": "#/types/AgentSpec" }
+        },
+        "subAgents": {
+          "type": "array",
+          "items": { "$ref": "#/types/AgentSpec" }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id", "displayName", "primaryAgents"],
+      "additionalProperties": false
+    },
+    "LogEntry": {
+      "description": "env.query_logs 的单条日志记录。",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+        "message": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["timestamp", "level", "message"],
+      "additionalProperties": false
+    }
+  },
+  "methods": {
+    "env/get_description": {
+      "description": "返回当前 Environment 实例的描述信息与已知 profiles。",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "result": { "$ref": "#/types/EnvDescription" }
+    },
+    "env/list_profiles": {
+      "description": "列出当前 Environment 支持的所有 EnvProfile。",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": { "$ref": "#/types/EnvProfile" }
+          }
+        },
+        "required": ["profiles"],
+        "additionalProperties": false
+      }
+    },
+    "env/get_profile": {
+      "description": "按 id 获取单个 EnvProfile。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "result": { "$ref": "#/types/EnvProfile" }
+    },
+    "env/list_agents": {
+      "description": "列出环境中定义的 Agent 角色。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string", "enum": ["primary", "sub"] },
+          "profileId": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": { "$ref": "#/types/AgentSpec" }
+          }
+        },
+        "required": ["agents"],
+        "additionalProperties": false
+      }
+    },
+    "env/get_agent": {
+      "description": "按 id 获取单个 AgentSpec。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "profileId": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "result": { "$ref": "#/types/AgentSpec" }
+    },
+    "env/query_logs": {
+      "description": "查询 Environment 产生的结构化日志（非流式）。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": { "type": "string" },
+          "agentId": { "type": "string" },
+          "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+          "since": { "type": "string", "format": "date-time" },
+          "until": { "type": "string", "format": "date-time" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "logs": {
+            "type": "array",
+            "items": { "$ref": "#/types/LogEntry" }
+          }
+        },
+        "required": ["logs"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+

@@ -2,7 +2,8 @@
  * @fileoverview Environment types and interfaces.
  */
 
-import type { Context, Action, ToolResult, Tool, LLMStream, StreamHandler, LLMStreamEvent } from "../types";
+import type { Context, Action, ToolResult, Tool, LLMStream, StreamHandler, LLMStreamEvent, ToolInfo } from "../types";
+import type { LLMMessage, LLMOptions } from "./base/invoke-llm.js";
 
 export type StreamEventType = "text" | "reasoning" | "tool_call" | "tool_result" | "completed" | "error" | "start";
 
@@ -87,6 +88,10 @@ export interface Environment {
   getStream(stream_id: string): LLMStream | undefined;
   pushToSubscribers(event: LLMStreamEvent): void;
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
+  /**
+   * Invoke LLM as a native environment capability
+   */
+  invokeLLM(messages: LLMMessage[], tools?: ToolInfo[], context?: Context, options?: Omit<LLMOptions, "messages" | "tools">): Promise<ToolResult>;
 }
 
 export interface Prompt {

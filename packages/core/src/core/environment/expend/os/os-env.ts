@@ -55,8 +55,6 @@ const DEFAULT_TIMEOUTS: Record<string, number> = {
   file_glob: 5000,
   file_grep: 10000,
   network_fetch: 30000,
-  invoke_llm: 120000,
-  llm: 120000,
   default: 60000,
 };
 
