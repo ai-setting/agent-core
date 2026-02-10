@@ -213,7 +213,7 @@ export async function writeFile(
 /**
  * Simple line-based diff computation.
  */
-function computeDiff(oldContent: string, newContent: string): string {
+export function computeDiff(oldContent: string, newContent: string): string {
   const oldLines = oldContent.split("\n");
   const newLines = newContent.split("\n");
   const diffLines: string[] = [];
