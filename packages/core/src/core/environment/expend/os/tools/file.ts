@@ -6,11 +6,18 @@
 import { z } from "zod";
 import type { ToolInfo } from "../../../../types/index.js";
 import { glob as globModule } from "glob";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { normalizePath, isAbsolute, resolvePath } from "./filesystem.js";
+
+const DEFAULT_READ_LIMIT = 2000;
+const MAX_LINE_LENGTH = 2000;
+const MAX_BYTES = 50 * 1024;
 
 export interface ReadFileOptions {
   encoding?: BufferEncoding;
   maxSize?: number;
+  offset?: number;
+  limit?: number;
 }
 
 export async function readFile(
@@ -22,7 +29,6 @@ export async function readFile(
   const encoding = options?.encoding ?? "utf-8";
   const maxSize = options?.maxSize ?? 1024 * 1024;
 
-  // Normalize path for cross-platform compatibility
   const normalizedPath = normalizePath(path);
 
   const stat = await fs.stat(normalizedPath);
@@ -33,23 +39,158 @@ export async function readFile(
   return fs.readFile(normalizedPath, { encoding });
 }
 
+/**
+ * Read a file with pagination support and formatting.
+ * Similar to OpenCode's read tool with line numbers and truncation.
+ */
+export async function readFileFormatted(
+  path: string,
+  options?: ReadFileOptions,
+): Promise<{ content: string; metadata: { totalLines: number; truncated: boolean; truncatedByBytes?: boolean } }> {
+  const fs = await import("fs/promises");
+  const pathModule = await import("path");
+
+  const normalizedPath = normalizePath(path);
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? DEFAULT_READ_LIMIT;
+
+  const content = await fs.readFile(normalizedPath, { encoding: "utf-8" });
+  const lines = content.split("\n");
+
+  const raw: string[] = [];
+  let bytes = 0;
+  let truncatedByBytes = false;
+
+  for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
+    const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i];
+    const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0);
+    if (bytes + size > MAX_BYTES) {
+      truncatedByBytes = true;
+      break;
+    }
+    raw.push(line);
+    bytes += size;
+  }
+
+  const numberedLines = raw.map((line, index) => {
+    const lineNum = (index + offset + 1).toString().padStart(5, "0");
+    return `${lineNum}| ${line}`;
+  });
+
+  const totalLines = lines.length;
+  const lastReadLine = offset + raw.length;
+  const hasMoreLines = totalLines > lastReadLine;
+  const truncated = hasMoreLines || truncatedByBytes;
+
+  let output = "<file>\n";
+  output += numberedLines.join("\n");
+
+  if (truncatedByBytes) {
+    output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`;
+  } else if (hasMoreLines) {
+    output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`;
+  } else {
+    output += `\n\n(End of file - total ${totalLines} lines)`;
+  }
+  output += "\n</file>";
+
+  return {
+    content: output,
+    metadata: { totalLines, truncated, truncatedByBytes },
+  };
+}
+
+/**
+ * Check if a file is binary.
+ * Based on extension and content analysis.
+ */
+export async function isBinaryFile(filepath: string): Promise<boolean> {
+  const ext = filepath.split(".").pop()?.toLowerCase() ?? "";
+
+  const binaryExtensions = [
+    "zip", "tar", "gz", "exe", "dll", "so", "class", "jar", "war",
+    "7z", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "odt", "ods", "odp", "bin", "dat", "obj", "o", "a", "lib",
+    "wasm", "pyc", "pyo", "db", "sqlite", "db3",
+  ];
+
+  if (binaryExtensions.includes(ext)) {
+    return true;
+  }
+
+  try {
+    const buffer = readFileSync(filepath);
+    if (buffer.length === 0) return false;
+
+    const checkLength = Math.min(4096, buffer.length);
+    let nonPrintableCount = 0;
+
+    for (let i = 0; i < checkLength; i++) {
+      if (buffer[i] === 0) return true;
+      if (buffer[i] < 9 || (buffer[i] > 13 && buffer[i] < 32)) {
+        nonPrintableCount++;
+      }
+    }
+
+    return nonPrintableCount / checkLength > 0.3;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find similar files when a file is not found.
+ */
+export function findSimilarFiles(filepath: string): string[] {
+  try {
+    const dir = filepath.split("/").slice(0, -1).join("/");
+    const base = filepath.split("/").pop() ?? "";
+
+    if (!existsSync(dir)) return [];
+
+    const entries = readdirSync(dir);
+    return entries
+      .filter(
+        (entry) =>
+          entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+      )
+      .map((entry) => `${dir}/${entry}`)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 export interface WriteFileOptions {
   encoding?: BufferEncoding;
   append?: boolean;
   createDirectories?: boolean;
+  diff?: boolean;
 }
 
 export async function writeFile(
   path: string,
   content: string,
   options?: WriteFileOptions,
-): Promise<void> {
+): Promise<{ success: boolean; output: string; diff?: string }> {
   const fs = await import("fs/promises");
   const pathModule = await import("path");
   const encoding = options?.encoding ?? "utf-8";
 
-  // Normalize path for cross-platform compatibility
   const normalizedPath = normalizePath(path);
+
+  let diff: string | undefined;
+
+  if (options?.diff) {
+    try {
+      const existing = await fs.readFile(normalizedPath, { encoding: "utf-8" }).catch(() => "");
+      if (existing) {
+        diff = computeDiff(existing, content);
+      }
+    } catch {
+      // File doesn't exist yet, no diff
+    }
+  }
 
   if (options?.createDirectories) {
     const dir = pathModule.dirname(normalizedPath);
@@ -61,6 +202,41 @@ export async function writeFile(
   } else {
     await fs.writeFile(normalizedPath, content, encoding);
   }
+
+  return {
+    success: true,
+    output: `Wrote ${content.length} bytes to ${path}`,
+    diff,
+  };
+}
+
+/**
+ * Simple line-based diff computation.
+ */
+function computeDiff(oldContent: string, newContent: string): string {
+  const oldLines = oldContent.split("\n");
+  const newLines = newContent.split("\n");
+  const diffLines: string[] = [];
+
+  const maxLines = Math.max(oldLines.length, newLines.length);
+
+  for (let i = 0; i < maxLines; i++) {
+    const oldLine = oldLines[i];
+    const newLine = newLines[i];
+
+    if (oldLine === newLine) {
+      diffLines.push(`  ${newLine ?? ""}`);
+    } else {
+      if (oldLine !== undefined) {
+        diffLines.push(`- ${oldLine}`);
+      }
+      if (newLine !== undefined) {
+        diffLines.push(`+ ${newLine}`);
+      }
+    }
+  }
+
+  return diffLines.join("\n");
 }
 
 export interface GlobOptions {
@@ -166,13 +342,20 @@ export async function grep(
 }
 
 export function createFileTools(): ToolInfo[] {
+  const createMetadata = (extra?: Record<string, unknown>): ToolResultMetadata => ({
+    execution_time_ms: Date.now(),
+    ...extra,
+  });
+
   return [
     {
       name: "read_file",
-      description: "Read the contents of a file",
+      description: "Read the contents of a file with optional pagination and formatting",
       parameters: z.object({
         path: z.string().describe("Path to the file to read"),
         encoding: z.string().optional().describe("File encoding (default: utf-8)"),
+        offset: z.number().optional().describe("Line number to start reading from (0-based, default: 0)"),
+        limit: z.number().optional().describe("Number of lines to read (default: 2000)"),
       }),
       execute: async (args) => {
         try {
@@ -182,12 +365,68 @@ export function createFileTools(): ToolInfo[] {
               success: false,
               output: "",
               error: "Missing required parameter: path",
+              metadata: createMetadata(),
             };
           }
 
-          // Normalize path for cross-platform compatibility
           path = normalizePath(path);
           const absolutePath = isAbsolute(path) ? path : resolvePath(path);
+
+          const { stat } = await import("fs/promises");
+
+          try {
+            const fileStat = await stat(absolutePath);
+            if (fileStat.size > (1024 * 1024)) {
+              return {
+                success: false,
+                output: "",
+                error: `File too large: ${fileStat.size} bytes (max: 1MB)`,
+                metadata: createMetadata({ output_size: fileStat.size }),
+              };
+            }
+          } catch {
+            const suggestions = findSimilarFiles(absolutePath);
+            if (suggestions.length > 0) {
+              return {
+                success: false,
+                output: "",
+                error: `File not found: ${path}\n\nDid you mean one of these?\n${suggestions.join("\n")}`,
+                metadata: createMetadata({ suggestions }),
+              };
+            }
+            return {
+              success: false,
+              output: "",
+              error: `File not found: ${path}`,
+              metadata: createMetadata(),
+            };
+          }
+
+          const isBinary = await isBinaryFile(absolutePath);
+          if (isBinary) {
+            return {
+              success: false,
+              output: "",
+              error: `Cannot read binary file: ${path}`,
+              metadata: createMetadata({ is_binary: true }),
+            };
+          }
+
+          if (args.offset !== undefined || args.limit !== undefined) {
+            const result = await readFileFormatted(absolutePath, {
+              offset: args.offset,
+              limit: args.limit,
+            });
+            return {
+              success: true,
+              output: result.content,
+              metadata: createMetadata({
+                total_lines: result.metadata.totalLines,
+                truncated: result.metadata.truncated,
+                truncated_by_bytes: result.metadata.truncatedByBytes,
+              }),
+            };
+          }
 
           const content = await readFile(absolutePath, {
             encoding: (args.encoding as BufferEncoding) ?? "utf-8",
@@ -195,12 +434,14 @@ export function createFileTools(): ToolInfo[] {
           return {
             success: true,
             output: content,
+            metadata: createMetadata({ output_size: content.length }),
           };
         } catch (error) {
           return {
             success: false,
             output: "",
             error: `Failed to read file: ${(error as Error).message}`,
+            metadata: createMetadata({ error: (error as Error).message }),
           };
         }
       },
@@ -213,6 +454,7 @@ export function createFileTools(): ToolInfo[] {
         content: z.string().describe("Content to write to the file"),
         append: z.boolean().optional().describe("Append to file instead of overwrite"),
         createDirs: z.boolean().optional().describe("Create parent directories if they don't exist"),
+        showDiff: z.boolean().optional().describe("Show diff when overwriting existing file"),
       }),
       execute: async (args) => {
         try {
@@ -224,6 +466,7 @@ export function createFileTools(): ToolInfo[] {
               success: false,
               output: "",
               error: `Missing required parameter: 'path' (string). The write_file tool requires a file path to write to. Example: {"path": "agent-intro.md", "content": "# Agent Introduction\n..."}`,
+              metadata: createMetadata(),
             };
           }
 
@@ -232,26 +475,38 @@ export function createFileTools(): ToolInfo[] {
               success: false,
               output: "",
               error: `Missing required parameter: 'content' (string). The write_file tool requires content to write.`,
+              metadata: createMetadata(),
             };
           }
 
-          // Normalize path for cross-platform compatibility
           path = normalizePath(path);
           const absolutePath = isAbsolute(path) ? path : resolvePath(path);
 
-          await writeFile(absolutePath, content, {
+          const result = await writeFile(absolutePath, content, {
             append: args.append,
             createDirectories: args.createDirs,
+            diff: args.showDiff,
           });
+
+          let output = result.output;
+          if (result.diff) {
+            output += `\n\n${result.diff}`;
+          }
+
           return {
             success: true,
-            output: `Wrote ${content.length} bytes to ${path}`,
+            output,
+            metadata: createMetadata({
+              output_size: content.length,
+              file_path: absolutePath,
+            }),
           };
         } catch (error) {
           return {
             success: false,
             output: "",
             error: `Failed to write file: ${(error as Error).message}`,
+            metadata: createMetadata({ error: (error as Error).message }),
           };
         }
       },
@@ -273,12 +528,16 @@ export function createFileTools(): ToolInfo[] {
           return {
             success: true,
             output: results.join("\n"),
+            metadata: createMetadata({
+              result_count: results.length,
+            }),
           };
         } catch (error) {
           return {
             success: false,
             output: "",
             error: `Failed to glob: ${(error as Error).message}`,
+            metadata: createMetadata({ error: (error as Error).message }),
           };
         }
       },
@@ -311,12 +570,16 @@ export function createFileTools(): ToolInfo[] {
           return {
             success: true,
             output,
+            metadata: createMetadata({
+              match_count: results.length,
+            }),
           };
         } catch (error) {
           return {
             success: false,
             output: "",
             error: `Failed to grep: ${(error as Error).message}`,
+            metadata: createMetadata({ error: (error as Error).message }),
           };
         }
       },
