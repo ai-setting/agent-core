@@ -14,7 +14,7 @@
  * - 输出: 每行一个 JSON-RPC 响应
  */
 
-import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "../packages/core/env_spec/types.js";
+import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "../packages/core/src/env_spec/types.js";
 
 // 模拟的环境数据
 const mockEnv: EnvDescription = {
