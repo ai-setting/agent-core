@@ -16,7 +16,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-10
+最后更新：2026-02-10（已补充 Env 协议 JSON 规范与 Env client/server SDK 雏形）
 
 ---
 
@@ -61,7 +61,7 @@
 | 治理（超时/重试/并发） | 统一策略入口（per-tool override） | [WIP] | manager 已存在；需要补齐“策略可配置/可观测/可回放”的闭环 | `packages/core/src/core/environment/base/{timeout,retry,concurrency}.ts` |
 | 可靠性（恢复） | tool error recovery / fallback | [WIP] | 有 `recovery.ts` 但需定义清晰策略与事件 | `.../base/recovery.ts` |
 | Metrics | 可观测指标采集 | [WIP] | metrics collector 已存在但需接入端到端展示/导出 | `.../base/metrics.ts` |
-| MCP | 连接/发现/将 MCP tool 装配进 env | [TODO] | 目前代码中无系统性 MCP 入口 | （待创建） |
+| MCP | 连接/发现/将 MCP tool 装配进 env | [WIP] | 已有 Env 协议 JSON 规范与 Env client/server 封装雏形，下一步接入真实 MCP client/server 传输层 | `packages/core/env_spec/**` |
 | Skills | 从目录/配置加载技能→注册为工具 | [TODO] | 目前未形成技能加载与隔离体系 | （待创建） |
 | Sub-agents | 子代理编排、权限收敛、并行探索 | [TODO] | 目前未看到 sub-agent 相关实现 | （待创建） |
 | Env 原生接口 | 运行日志查询、事件回放、审计查询 | [TODO] | 目前主要是 console log + SSE 推送，没有统一查询接口 | （待创建） |
