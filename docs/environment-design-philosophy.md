@@ -243,7 +243,7 @@ const profile: EnvProfileConfig = {
 
 - **环境描述相关**：
   - `env.get_description`：返回当前环境的 id、displayName、capabilities、支持的 profiles 等
-  - `env.list_profiles` / `env.get_profile`：列出或查询 `EnvProfileConfig`（包含 `EnvReference` + agents 配置）
+  - `env.list_profiles` / `env.get_profile`：列出或查询 `EnvProfileConfig`（由 Env 服务自己管理 profiles 与 agents 配置）
 - **Agent / Prompt 相关**：
   - `env.list_agents` / `env.get_agent`：返回 `AgentSpec` 列表或单个 agent 详情（primary/sub、prompt、工具白名单等）
   - `env.list_prompts` / `env.get_prompt`：按 env/agent 维度返回 prompt 元信息
@@ -257,7 +257,16 @@ const profile: EnvProfileConfig = {
 - **对 agent-core 来说**：它们刚好与本文件中的 `EnvProfileConfig` / `AgentSpec` / 日志与事件模型一一对应  
   → core SDK 可以提供：
   - **Env 协议 Server 端封装**：一行代码把任意 `Environment` 暴露为符合 Env 协议的 MCP 服务
-  - **Env 协议 Client 端封装**：一行代码把任意 Env-MCP 服务映射成本地的 `Environment`/`EnvProfile` 对象
+  - **Env 协议 Client 端封装**：一行代码把任意 Env-MCP 服务映射成本地可消费的 `EnvDescription` / `EnvProfile` / `AgentSpec` / `LogEntry` 对象
+
+在当前实现中：
+
+- Env 协议的 JSON 规范位于：`packages/core/env_spec/json_spec/env-protocol.json`
+- TypeScript 类型与 SDK：
+  - `packages/core/env_spec/types.ts`：`EnvDescription` / `EnvProfile` / `AgentSpec` / `LogEntry`
+  - `packages/core/env_spec/client.ts`：`EnvClient`（基于抽象 `EnvRpcClient`，可对接任意 MCP Client）
+  - `packages/core/env_spec/server.ts`：`createEnvMcpServer` / `createBaseEnvMcpServer`
+  - `packages/core/env_spec/base_env`：从 `BaseEnvironment` 推导默认 `EnvDescription` / `EnvProfile`
 
 这让我们可以在不发明“第二套协议”的前提下，直接利用 MCP 生态完成 Environment 级别的发现、装配与切换。
 
