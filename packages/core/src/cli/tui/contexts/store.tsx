@@ -152,6 +152,16 @@ export function StoreProvider(props: { children: any }) {
   };
 
   const appendMessageContent = (messageId: string, delta: string) => {
+    // 参数验证
+    if (!messageId) {
+      console.warn("[Store] appendMessageContent called with empty messageId");
+      return;
+    }
+    if (typeof delta !== "string") {
+      console.warn("[Store] appendMessageContent called with non-string delta:", typeof delta, delta);
+      return;
+    }
+    
     setMessages(prev =>
       prev.map(msg =>
         msg.id === messageId
