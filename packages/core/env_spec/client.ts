@@ -1,4 +1,3 @@
-import { Client } from "@modelcontextprotocol/client";
 import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "./types.js";
 
 /**
@@ -8,8 +7,12 @@ import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "./types.js
  * - 基于 @modelcontextprotocol/client，提供针对 Env 协议的类型安全封装
  * - 不重复实现传输层，只聚焦在方法名与参数/返回类型
  */
+export interface EnvRpcClient {
+  call(method: string, params: unknown): Promise<unknown>;
+}
+
 export class EnvClient {
-  constructor(private client: Client) {}
+  constructor(private client: EnvRpcClient) {}
 
   async getDescription(): Promise<EnvDescription> {
     const result = await this.client.call("env/get_description", {});
