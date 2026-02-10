@@ -19,7 +19,6 @@
 - **Docs 入口**：`docs/README.md`
 - **设计理念**：`docs/environment-design-philosophy.md`
 - **进度与路线图**：`docs/DEVELOPMENT_PROGRESS.md`
-- **历史设计稿（参考）**：`docs/old/`
 
 ---
 
