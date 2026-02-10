@@ -96,9 +96,10 @@
 
 ## 4. 文档索引
 
+- **环境设计理念**: [environment-design-philosophy.md](../environment-design-philosophy.md) — Environment 为 Agent 提供环境（Agents 配置、工具集、特化 Env）
 - **整体架构**: [architecture/overview.md](./overview.md) (本文档)
-- **Server 设计**: [app/server-design.md](./app/server-design.md)
-- **CLI 设计**: [app/cli-design.md](./app/cli-design.md)
+- **Server 设计**: [app/server-design.md](../app/server-design.md)
+- **CLI 设计**: [app/cli-design.md](../app/cli-design.md)
 - **Desktop 设计**: (待补充)
 - **Web 设计**: (待补充)
 
