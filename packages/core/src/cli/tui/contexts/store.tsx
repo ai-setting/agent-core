@@ -84,6 +84,7 @@ export interface StoreContextValue {
   // Actions
   addMessage: (message: Message) => void;
   updateMessage: (id: string, updates: Partial<Message>) => void;
+  moveMessageToEnd: (messageId: string) => void;
   addPart: (messageId: string, part: MessagePart) => void;
   updatePart: (messageId: string, partId: string, updates: Partial<MessagePart>) => void;
   clearMessages: () => void;
@@ -116,6 +117,14 @@ export function StoreProvider(props: { children: any }) {
       if (!parts()[message.id]) {
         setParts(prev => ({ ...prev, [message.id]: [] }));
       }
+    });
+  };
+
+  const moveMessageToEnd = (messageId: string) => {
+    setMessages(prev => {
+      const message = prev.find(m => m.id === messageId);
+      if (!message) return prev;
+      return [...prev.filter(m => m.id !== messageId), message];
     });
   };
 
@@ -194,6 +203,7 @@ export function StoreProvider(props: { children: any }) {
     setLastResponseTimeMs,
     addMessage,
     updateMessage,
+    moveMessageToEnd,
     addPart,
     updatePart,
     clearMessages,

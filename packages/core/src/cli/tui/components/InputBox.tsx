@@ -7,6 +7,7 @@
 
 import { createSignal, onCleanup, createEffect, Show, For } from "solid-js";
 import { useStore, useEventStream, useTheme } from "../contexts/index.js";
+import { tuiLogger } from "../logger.js";
 
 const STREAMING_DOT_COUNT = 5;
 const STREAMING_TICK_MS = 120;
@@ -19,6 +20,7 @@ export function InputBox() {
   const [input, setInput] = createSignal("");
   const [isSubmitting, setIsSubmitting] = createSignal(false);
   const [streamingDotIndex, setStreamingDotIndex] = createSignal(0);
+  const [inputKey, setInputKey] = createSignal(0); // 用于强制重新渲染 input
 
   createEffect(() => {
     if (!store.isStreaming()) return;
@@ -30,18 +32,56 @@ export function InputBox() {
   });
 
   const handleSubmit = async () => {
-    const content = input().trim();
-    if (!content || store.isStreaming() || isSubmitting()) return;
+    const content = lastInputValue.trim();
+    tuiLogger.info("[InputBox] handleSubmit", { content: JSON.stringify(content), lastInputValue: JSON.stringify(lastInputValue) });
+    
+    if (!content) {
+      tuiLogger.info("[InputBox] REJECTED: empty");
+      return;
+    }
+    if (store.isStreaming()) {
+      tuiLogger.info("[InputBox] REJECTED: streaming");
+      return;
+    }
+    if (isSubmitting()) {
+      tuiLogger.info("[InputBox] REJECTED: submitting");
+      return;
+    }
 
+    tuiLogger.info("[InputBox] ACCEPTED", { content });
     setIsSubmitting(true);
     setInput("");
+    lastInputValue = ""; // Clear after submission
 
     try {
       await eventStream.sendPrompt(content);
+      tuiLogger.info("[InputBox] sendPrompt success");
     } catch (err) {
-      console.error("Failed to send:", err);
+      tuiLogger.error("[InputBox] sendPrompt failed", { error: String(err) });
     } finally {
       setIsSubmitting(false);
+      setInputKey(k => k + 1); // Force re-render input to reset internal state
+      tuiLogger.info("[InputBox] reset done");
+    }
+  };
+
+  // Track the last input value for submission (work around OpenTUI onSubmit issue)
+  let lastInputValue = "";
+  let lastEnterTime = 0;
+  
+  const handleChange = (value: string) => {
+    lastInputValue = value;
+    tuiLogger.info("[InputBox] onChange", { value: JSON.stringify(value) });
+    setInput(value);
+    
+    // Detect Enter key (OpenTUI appends newline)
+    if (value.includes('\n') && Date.now() - lastEnterTime > 100) {
+      lastEnterTime = Date.now();
+      const cleanValue = value.replace(/\n/g, '');
+      tuiLogger.info("[InputBox] Enter detected", { cleanValue: JSON.stringify(cleanValue) });
+      lastInputValue = cleanValue;
+      setInput(cleanValue);
+      setTimeout(() => handleSubmit(), 0);
     }
   };
 
@@ -60,14 +100,20 @@ export function InputBox() {
         height={1}
       >
         <box flexGrow={1} minWidth={0}>
-          <input
-            flexGrow={1}
-            value={input()}
-            onChange={(value: string) => setInput(value)}
-            onSubmit={handleSubmit}
-            placeholder={store.isStreaming() ? "AI is thinking..." : "Type a message..."}
-            focused={true}
-          />
+          {(() => {
+            // Force re-render by using inputKey in a function
+            const _ = inputKey();
+            return (
+              <input
+                flexGrow={1}
+                value={input()}
+                onChange={handleChange}
+                onSubmit={handleSubmit}
+                placeholder={store.isStreaming() ? "AI is thinking..." : "Type a message..."}
+                focused={true}
+              />
+            );
+          })()}
         </box>
         <box flexDirection="row" flexShrink={0} marginLeft={1} alignItems="center">
           <text fg={theme.theme().muted}>tab agents</text>

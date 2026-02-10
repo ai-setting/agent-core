@@ -61,15 +61,13 @@ export class ServerEnvironment extends BaseEnvironment {
       const osTools = toolsModule.createOsTools();
       const todoTools = toolsModule.createTodoTools();
 
-      const filteredTools = [...osTools, ...todoTools].filter(
-        (t) =>
-          t.name !== "invoke_llm" && t.name !== "system1_intuitive_reasoning"
-      );
+      // All tools are external - LLM capabilities are native to Environment
+      const allTools = [...osTools, ...todoTools];
 
-      for (const tool of filteredTools) {
+      for (const tool of allTools) {
         this.registerTool(tool);
       }
-      console.log(`[ServerEnvironment] Registered ${filteredTools.length} tools`);
+      console.log(`[ServerEnvironment] Registered ${allTools.length} tools`);
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");

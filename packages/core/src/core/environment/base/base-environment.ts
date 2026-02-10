@@ -25,7 +25,15 @@ import {
   DefaultMetricsCollector,
   AggregatedMetrics,
 } from "./index.js";
-import { createInvokeLLM, createSystem1IntuitiveReasoning, type InvokeLLMConfig } from "./invoke-llm.js";
+import { 
+  invokeLLM, 
+  intuitiveReasoning, 
+  type InvokeLLMConfig, 
+  type LLMOptions, 
+  type LLMMessage,
+  type LLMOutput,
+  type StreamEventHandler 
+} from "./invoke-llm.js";
 
 export interface BaseEnvironmentConfig {
   timeoutManager?: TimeoutManager;
@@ -268,7 +276,14 @@ export abstract class BaseEnvironment implements Environment {
       this.addPrompt(prompt);
     }
 
-    const agent = new Agent(event, this as Environment, this.listTools(), prompt, context ?? {}, undefined, history);
+    // Generate a stable messageId for this query
+    const messageId = `msg_${Date.now()}`;
+    const agentContext = {
+      ...context,
+      message_id: messageId,
+    };
+
+    const agent = new Agent(event, this as Environment, this.listTools(), prompt, agentContext, undefined, history);
     return agent.run();
   }
 
@@ -447,11 +462,114 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   configureLLM(config: InvokeLLMConfig): void {
-    const invokeLlmTool = createInvokeLLM(config);
-    this.registerTool(invokeLlmTool);
+    this.llmConfig = config;
+  }
 
-    const system1Tool = createSystem1IntuitiveReasoning(config);
-    this.registerTool(system1Tool);
+  protected llmConfig?: InvokeLLMConfig;
+
+  /**
+   * Invoke LLM as a native environment capability
+   * This is the primary way for agents to interact with LLM
+   */
+  async invokeLLM(
+    messages: LLMMessage[],
+    tools?: ToolInfo[],
+    context?: Context,
+    options?: Omit<LLMOptions, "messages" | "tools">
+  ): Promise<ToolResult> {
+    console.log("[BaseEnvironment.invokeLLM] Called");
+    await this.ensureLLMInitialized();
+    console.log("[BaseEnvironment.invokeLLM] LLM initialized, config exists:", !!this.llmConfig);
+
+    if (!this.llmConfig) {
+      console.log("[BaseEnvironment.invokeLLM] ERROR: LLM not configured");
+      return {
+        success: false,
+        output: "",
+        error: "LLM not configured. Call configureLLM() first.",
+        metadata: {
+          execution_time_ms: 0,
+        },
+      };
+    }
+
+    const ctx = context || ({} as Context);
+    console.log("[BaseEnvironment.invokeLLM] Calling invokeLLM with", messages.length, "messages");
+
+    const eventHandler: StreamEventHandler = {
+      onStart: (metadata) => {
+        console.log("[BaseEnvironment.invokeLLM] onStart callback");
+        this.emitStreamEvent({ type: "start", metadata }, ctx);
+      },
+      onText: (content, delta) => {
+        this.emitStreamEvent({ type: "text", content, delta }, ctx);
+      },
+      onReasoning: (content) => {
+        this.emitStreamEvent({ type: "reasoning", content }, ctx);
+      },
+      onToolCall: (toolName, toolArgs, toolCallId) => {
+        this.emitStreamEvent(
+          { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId },
+          ctx
+        );
+      },
+      onCompleted: (content, metadata) => {
+        console.log("[BaseEnvironment.invokeLLM] onCompleted callback");
+        this.emitStreamEvent({ type: "completed", content, metadata }, ctx);
+      },
+    };
+
+    const result = await invokeLLM(
+      this.llmConfig,
+      {
+        messages,
+        tools,
+        ...options,
+        stream: true,
+      },
+      {
+        workdir: process.cwd(),
+        session_id: ctx.session_id,
+        message_id: ctx.message_id,
+        metadata: ctx.metadata,
+      },
+      eventHandler
+    );
+    
+    console.log("[BaseEnvironment.invokeLLM] invokeLLM returned, success:", result.success);
+    return result;
+  }
+
+  /**
+   * Simple non-streaming LLM call for intuitive reasoning
+   */
+  async intuitiveReasoning(
+    messages: LLMMessage[],
+    options?: Omit<LLMOptions, "messages" | "tools" | "stream">
+  ): Promise<ToolResult> {
+    await this.ensureLLMInitialized();
+
+    if (!this.llmConfig) {
+      return {
+        success: false,
+        output: "",
+        error: "LLM not configured. Call configureLLM() first.",
+        metadata: {
+          execution_time_ms: 0,
+        },
+      };
+    }
+
+    return intuitiveReasoning(
+      this.llmConfig,
+      {
+        messages,
+        ...options,
+      },
+      {
+        workdir: process.cwd(),
+      }
+    );
   }
 
   protected abstract getDefaultTimeout(toolName: string): number;
