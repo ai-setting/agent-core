@@ -48,13 +48,24 @@ function AssistantMessage(props: { message: any }) {
 
   const isStreamingThis = () => store.isStreaming() && isLastMessage();
 
+  // Use a ref to store the raw SyntaxStyle instance to avoid SolidJS reactivity wrapping
+  let rawSyntaxStyleRef: SyntaxStyle | null = null;
+
   /** Only use markdown when we have a real SyntaxStyle instance (has getStyle). */
   const validSyntaxStyle = createMemo(() => {
     const style = syntaxStyle();
-    if (!style) return null;
+    if (!style) {
+      rawSyntaxStyleRef = null;
+      return null;
+    }
     // Check if getStyle exists and is a function (SyntaxStyle has getStyle(name: string): StyleDefinition | undefined)
     const hasGetStyle = typeof (style as unknown as { getStyle?: (name: string) => unknown }).getStyle === "function";
-    if (!hasGetStyle) return null;
+    if (!hasGetStyle) {
+      rawSyntaxStyleRef = null;
+      return null;
+    }
+    // Store the raw reference to bypass SolidJS reactivity
+    rawSyntaxStyleRef = style;
     return style;
   });
 
@@ -99,19 +110,38 @@ function AssistantMessage(props: { message: any }) {
             </box>
           }
         >
-          {(style: SyntaxStyle) => (
-            <box flexDirection="column">
-              <markdown
-                content={displayContent()}
-                syntaxStyle={style}
-                streaming={isStreamingThis()}
-                conceal={false}
-              />
-              <Show when={isStreamingThis()}>
-                <text fg={theme.theme().foreground}>▊</text>
-              </Show>
-            </box>
-          )}
+          {(style: SyntaxStyle) => {
+            // 使用 ref 中的原始对象，避免 SolidJS 响应式包装
+            const rawStyle = rawSyntaxStyleRef || style;
+            
+            // 调试日志
+            console.log("[MessageList] Rendering markdown:", {
+              callbackParam: {
+                type: typeof style,
+                constructor: style?.constructor?.name,
+                hasGetStyle: typeof style?.getStyle === "function",
+              },
+              rawRef: {
+                type: typeof rawStyle,
+                constructor: rawStyle?.constructor?.name,
+                hasGetStyle: typeof rawStyle?.getStyle === "function",
+              },
+            });
+            
+            return (
+              <box flexDirection="column">
+                <markdown
+                  content={displayContent()}
+                  syntaxStyle={rawStyle}
+                  streaming={isStreamingThis()}
+                  conceal={false}
+                />
+                <Show when={isStreamingThis()}>
+                  <text fg={theme.theme().foreground}>▊</text>
+                </Show>
+              </box>
+            );
+          }}
         </Show>
       </box>
 
