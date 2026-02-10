@@ -39,8 +39,13 @@ export async function bash(
     let stderr = "";
     let killed = false;
 
+    const cwd = options?.cwd ?? process.cwd();
+    const normalizedCwd = process.platform === "win32" && cwd.startsWith("/")
+      ? normalizeGitBashPath(cwd)
+      : cwd;
+
     const child = spawn(shell, args, {
-      cwd: options?.cwd ?? process.cwd(),
+      cwd: normalizedCwd,
       env: { ...process.env, ...options?.env },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -154,9 +159,9 @@ function resolveGitBashPath(): string | null {
       .split("\n")[0];
 
     if (gitPath) {
-      const gitRoot = gitPath.replace(/\\[\\]cmd\\[\\]git\.exe$/i, "").replace(/\\[\\]mingw64\\[\\]bin\\[\\]git\.exe$/i, "");
-      const bashPath = `${gitRoot}\\usr\\bin\\bash.exe`;
+      const gitRoot = gitPath.replace(/\\cmd\\git\.exe$/i, "").replace(/\\mingw64\\bin\\git\.exe$/i, "");
       const fs = require("fs");
+      const bashPath = `${gitRoot}\\usr\\bin\\bash.exe`;
       if (fs.existsSync(bashPath)) {
         return bashPath;
       }
