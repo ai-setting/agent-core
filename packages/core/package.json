@@ -51,8 +51,6 @@
     "@ai-sdk/togetherai": "^2.0.30",
     "@ai-sdk/xai": "^3.0.47",
     "@opentui/solid": "^0.1.73",
-    "@modelcontextprotocol/client": "^1.0.0",
-    "@modelcontextprotocol/server": "^1.0.0",
     "@types/eventsource": "^3.0.0",
     "@types/node": "^25.2.1",
     "ai": "^6.0.73",
