@@ -43,6 +43,13 @@ import {
 } from "./invoke-llm.js";
 import { Session } from "../../session/index.js";
 import type { SessionCreateOptions } from "../../session/types.js";
+import { withEventHook, withEventHookVoid } from "./with-event-hook.js";
+
+/** Session lifecycle events for subscribers */
+export type SessionEvent =
+  | { type: "session.created"; sessionId: string; title: string; directory?: string }
+  | { type: "session.updated"; sessionId: string; updates: Record<string, unknown> }
+  | { type: "session.deleted"; sessionId: string };
 
 export interface BaseEnvironmentConfig {
   timeoutManager?: TimeoutManager;
@@ -64,6 +71,11 @@ export interface BaseEnvironmentConfig {
    * Called during invoke_llm streaming response
    */
   onStreamEvent?: (event: StreamEvent, context: Context) => void | Promise<void>;
+  /**
+   * Hook for session lifecycle events (created, updated, deleted)
+   * Called when session operations complete
+   */
+  onSessionEvent?: (event: SessionEvent) => void | Promise<void>;
 }
 
 export interface ToolRegistration {
@@ -103,6 +115,10 @@ export abstract class BaseEnvironment implements Environment {
     // Set stream event hook from config
     if (config?.onStreamEvent) {
       this.onStreamEvent = config.onStreamEvent;
+    }
+    // Set session event hook from config
+    if (config?.onSessionEvent) {
+      this.onSessionEvent = config.onSessionEvent;
     }
 
     if (this.systemPrompt) {
@@ -213,10 +229,21 @@ export abstract class BaseEnvironment implements Environment {
   /**
    * Session 管理：委托给 core/session 的 Session 与 Storage。
    * 子类可覆盖以使用其他 session 实现（如持久化存储）。
+   * 通过 withEventHook 注入 session 生命周期事件，供 onSessionEvent 订阅。
    */
-  createSession(options?: SessionCreateOptions): Session {
-    return Session.create(options);
-  }
+  createSession = withEventHook(
+    (options?: SessionCreateOptions) => Session.create(options),
+    {
+      after: (self, session) => {
+        self.emitSessionEvent?.({
+          type: "session.created",
+          sessionId: session.id,
+          title: session.title,
+          directory: session.directory,
+        });
+      },
+    }
+  );
 
   getSession(id: string): Session | undefined {
     return Session.get(id);
@@ -226,17 +253,49 @@ export abstract class BaseEnvironment implements Environment {
     return Session.list();
   }
 
-  updateSession(id: string, payload: { title?: string; metadata?: Record<string, unknown> }): void {
-    const s = Session.get(id);
-    if (s) {
-      if (payload.title !== undefined) s.setTitle(payload.title);
-      if (payload.metadata) for (const [k, v] of Object.entries(payload.metadata)) s.setMetadata(k, v);
+  updateSession = withEventHookVoid(
+    (id: string, payload: { title?: string; metadata?: Record<string, unknown> }): boolean => {
+      const s = Session.get(id);
+      if (s) {
+        if (payload.title !== undefined) s.setTitle(payload.title);
+        if (payload.metadata) for (const [k, v] of Object.entries(payload.metadata)) s.setMetadata(k, v);
+        return true;
+      }
+      return false;
+    },
+    {
+      after: (self, updated, id, payload) => {
+        if (updated) {
+          self.emitSessionEvent?.({
+            type: "session.updated",
+            sessionId: id,
+            updates: payload as Record<string, unknown>,
+          });
+        }
+      },
     }
-  }
+  );
 
-  deleteSession(id: string): void {
-    Session.get(id)?.delete();
-  }
+  deleteSession = withEventHookVoid(
+    (id: string): { deleted: boolean; sessionId: string } => {
+      const s = Session.get(id);
+      if (s) {
+        s.delete();
+        return { deleted: true, sessionId: id };
+      }
+      return { deleted: false, sessionId: id };
+    },
+    {
+      after: (self, result) => {
+        if (result.deleted) {
+          self.emitSessionEvent?.({
+            type: "session.deleted",
+            sessionId: result.sessionId,
+          });
+        }
+      },
+    }
+  );
 
   addPrompt(prompt: Prompt): void {
     this.prompts.set(prompt.id, prompt);
@@ -644,10 +703,17 @@ export abstract class BaseEnvironment implements Environment {
   };
 
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
+  onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
   protected emitStreamEvent(event: StreamEvent, context: Context): void | Promise<void> {
     if (this.onStreamEvent) {
       return this.onStreamEvent(event, context);
+    }
+  }
+
+  protected emitSessionEvent(event: SessionEvent): void | Promise<void> {
+    if (this.onSessionEvent) {
+      return this.onSessionEvent(event);
     }
   }
 }
