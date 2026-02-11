@@ -41,7 +41,7 @@ export function App(props: AppProps) {
   return (
     <box flexDirection="column" width="100%" height="100%">
       <Header />
-      <box flexGrow={1} minHeight={0}>
+      <box flexGrow={1} minHeight={0} overflow="hidden">
         <MessageList />
       </box>
       <InputBox />

@@ -190,7 +190,7 @@ export function MessageList() {
   const store = useStore();
 
   return (
-    <scrollbox flexGrow={1} padding={1} stickyScroll stickyStart="bottom">
+    <scrollbox width="100%" height="100%" padding={1} stickyScroll stickyStart="bottom">
       <Show
         when={store.messages().length > 0}
         fallback={
