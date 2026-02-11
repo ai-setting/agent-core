@@ -39,6 +39,22 @@ export function InputBox() {
   // textarea ref
   let textareaRef: any = null;
 
+  // 监听 dialog 关闭，自动聚焦输入框
+  createEffect(() => {
+    const wasOpen = dialog.isOpen();
+    if (!wasOpen && textareaRef) {
+      // Dialog 关闭了，聚焦输入框
+      tuiLogger.info("[InputBox] Dialog closed, focusing textarea");
+      try {
+        if (textareaRef.focus) {
+          textareaRef.focus();
+        }
+      } catch (err) {
+        tuiLogger.warn("[InputBox] Failed to focus textarea", { error: String(err) });
+      }
+    }
+  });
+
   // 使用 effect 来处理命令结果显示，确保在 Solid 渲染上下文中
   createEffect(() => {
     const result = pendingResult();
