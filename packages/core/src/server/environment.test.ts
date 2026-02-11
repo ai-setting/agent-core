@@ -173,6 +173,67 @@ describe("ServerEnvironment", () => {
 
     unsubscribe();
   });
+
+  it("should publish session events to EventBus", async () => {
+    const sessionEvents: { type: string; sessionId: string; title?: string }[] = [];
+
+    // Use subscribeGlobal to receive events from any session
+    const { subscribeGlobal } = await import("./eventbus/global.js");
+    const unsub = subscribeGlobal((data) => {
+      const { type, properties } = data.payload as { type: string; properties: { sessionId: string; title?: string } };
+      if (type === "session.created") {
+        sessionEvents.push({ type: "session.created", sessionId: properties.sessionId, title: properties.title });
+      } else if (type === "session.deleted") {
+        sessionEvents.push({ type: "session.deleted", sessionId: properties.sessionId });
+      }
+    });
+
+    // Create session - should emit session.created
+    const session = env.createSession!({ title: "Test Session" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(sessionEvents.length).toBe(1);
+    expect(sessionEvents[0].type).toBe("session.created");
+    expect(sessionEvents[0].sessionId).toBe(session.id);
+    expect(sessionEvents[0].title).toBe("Test Session");
+
+    // Delete session - should emit session.deleted
+    env.deleteSession!(session.id);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(sessionEvents.length).toBe(2);
+    expect(sessionEvents[1].type).toBe("session.deleted");
+    expect(sessionEvents[1].sessionId).toBe(session.id);
+
+    unsub();
+  });
+
+  it("should publish session.updated when updateSession succeeds", async () => {
+    const sessionEvents: { type: string; sessionId: string; updates?: Record<string, unknown> }[] = [];
+
+    const { subscribeGlobal } = await import("./eventbus/global.js");
+    const unsub = subscribeGlobal((data) => {
+      const { type, properties } = data.payload as { type: string; properties: { sessionId: string; updates?: Record<string, unknown> } };
+      if (type === "session.updated") {
+        sessionEvents.push({ type: "session.updated", sessionId: properties.sessionId, updates: properties.updates });
+      }
+    });
+
+    // Create session first
+    const session = env.createSession!({ title: "Original Title" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Update session
+    env.updateSession!(session.id, { title: "Updated Title" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(sessionEvents.length).toBe(1);
+    expect(sessionEvents[0].type).toBe("session.updated");
+    expect(sessionEvents[0].sessionId).toBe(session.id);
+    expect(sessionEvents[0].updates?.title).toBe("Updated Title");
+
+    unsub();
+  });
 });
 
 // Test the full flow: Environment -> EventBus -> GlobalBus

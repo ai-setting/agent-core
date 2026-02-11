@@ -7,6 +7,7 @@
 import {
   BaseEnvironment,
   BaseEnvironmentConfig,
+  type SessionEvent,
 } from "../core/environment/base/base-environment.js";
 import type { Context } from "../core/types/context.js";
 import type { Action } from "../core/types/action.js";
@@ -21,6 +22,11 @@ import {
   StreamCompletedEvent,
   StreamErrorEvent,
 } from "./eventbus/events/stream.js";
+import {
+  SessionCreatedEvent,
+  SessionUpdatedEvent,
+  SessionDeletedEvent,
+} from "./eventbus/events/session.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -35,6 +41,9 @@ export class ServerEnvironment extends BaseEnvironment {
       ...config,
       onStreamEvent: (event: StreamEvent, context: Context) => {
         this.handleStreamEvent(event, context);
+      },
+      onSessionEvent: (event: SessionEvent) => {
+        this.handleSessionEvent(event);
       },
     };
 
@@ -227,6 +236,40 @@ export class ServerEnvironment extends BaseEnvironment {
           "[ServerEnvironment] Unknown stream event type:",
           event.type
         );
+    }
+  }
+
+  private async handleSessionEvent(event: SessionEvent): Promise<void> {
+    const sessionId = event.sessionId || this.sessionId;
+    switch (event.type) {
+      case "session.created":
+        await Bus.publish(
+          SessionCreatedEvent,
+          {
+            sessionId: event.sessionId,
+            title: event.title,
+            directory: event.directory,
+          },
+          sessionId
+        );
+        break;
+      case "session.updated":
+        await Bus.publish(
+          SessionUpdatedEvent,
+          {
+            sessionId: event.sessionId,
+            updates: event.updates,
+          },
+          sessionId
+        );
+        break;
+      case "session.deleted":
+        await Bus.publish(
+          SessionDeletedEvent,
+          { sessionId: event.sessionId },
+          sessionId
+        );
+        break;
     }
   }
 }
