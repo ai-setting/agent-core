@@ -6,7 +6,7 @@
 
 import { render } from "@opentui/solid";
 import { App } from "./components/index.js";
-import { StoreProvider, ThemeProvider, MarkdownStyleProvider, EventStreamProvider, CommandProvider } from "./contexts/index.js";
+import { StoreProvider, ThemeProvider, MarkdownStyleProvider, EventStreamProvider, CommandProvider, DialogProvider } from "./contexts/index.js";
 
 export interface TUIOptions {
   url: string;
@@ -31,10 +31,12 @@ export async function startTUI(options: TUIOptions): Promise<void> {
         <MarkdownStyleProvider>
           <EventStreamProvider initialUrl={options.url} password={options.password}>
             <CommandProvider serverUrl={options.url} sessionId={options.sessionID}>
-              <App
-                sessionId={options.sessionID}
-                onExit={handleExit}
-              />
+              <DialogProvider>
+                <App
+                  sessionId={options.sessionID}
+                  onExit={handleExit}
+                />
+              </DialogProvider>
             </CommandProvider>
           </EventStreamProvider>
         </MarkdownStyleProvider>
