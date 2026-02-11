@@ -70,8 +70,12 @@ export function DialogStack(props: DialogStackProps) {
               </box>
             </Show>
 
-            {/* Dialog 内容 */}
-            <box flexGrow={1} flexDirection="column" overflow="scroll">
+            {/* Dialog 内容 - 使用固定高度防止增长 */}
+            <box 
+              flexDirection="column" 
+              overflow="scroll"
+              height="100%"
+            >
               {current().element()}
             </box>
           </box>
