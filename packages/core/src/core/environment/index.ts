@@ -78,6 +78,49 @@ export interface HistoryMessage {
   name?: string;
 }
 
+/** 与 env spec AgentSpec 结构兼容，用于从 Environment 推导 profiles/agents */
+export interface EnvironmentAgentSpec {
+  id: string;
+  role: "primary" | "sub";
+  promptId?: string;
+  promptOverride?: string;
+  allowedTools?: string[];
+  deniedTools?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+/** 与 env spec EnvProfile 结构兼容，用于从 Environment 推导 listProfiles/listAgents/getAgent */
+export interface EnvironmentProfile {
+  id: string;
+  displayName: string;
+  primaryAgents: EnvironmentAgentSpec[];
+  subAgents?: EnvironmentAgentSpec[];
+  metadata?: Record<string, unknown>;
+}
+
+/** 与 env spec LogEntry 结构兼容 */
+export type EnvironmentLogLevel = "debug" | "info" | "warn" | "error";
+
+export interface EnvironmentLogEntry {
+  timestamp: string;
+  level: EnvironmentLogLevel;
+  message: string;
+  sessionId?: string;
+  agentId?: string;
+  toolName?: string;
+  context?: Record<string, unknown>;
+}
+
+/** queryLogs 参数，与 env spec 一致 */
+export interface EnvironmentQueryLogsParams {
+  sessionId?: string;
+  agentId?: string;
+  level?: EnvironmentLogLevel;
+  since?: string;
+  until?: string;
+  limit?: number;
+}
+
 export interface Environment {
   handle_query(query: string, context?: Context, history?: HistoryMessage[]): Promise<string>;
   handle_action(action: Action, context: Context): Promise<ToolResult>;
@@ -92,6 +135,18 @@ export interface Environment {
    * Invoke LLM as a native environment capability
    */
   invokeLLM(messages: LLMMessage[], tools?: ToolInfo[], context?: Context, options?: Omit<LLMOptions, "messages" | "tools">): Promise<ToolResult>;
+
+  /**
+   * 可选：返回当前 Environment 的 profiles（用于 env MCP describe/list_profiles/list_agents/get_agent）。
+   * 未实现时由 env_spec 从 getPrompt/getTools 推导默认 profile。
+   */
+  getProfiles?(): EnvironmentProfile[] | Promise<EnvironmentProfile[]>;
+
+  /**
+   * 可选：查询结构化日志（用于 env MCP query_logs、capabilities.logs）。
+   * 未实现则不暴露 query_logs，capabilities.logs 为 false。
+   */
+  queryLogs?(params: EnvironmentQueryLogsParams): Promise<EnvironmentLogEntry[]>;
 }
 
 export interface Prompt {

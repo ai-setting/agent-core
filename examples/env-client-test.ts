@@ -1,158 +1,27 @@
 #!/usr/bin/env bun
 /**
- * @fileoverview Env MCP Client 测试示例
- * 
- * 演示如何：
- * 1. 以子进程方式启动 env-mcp-server
- * 2. 通过 stdio 或 HTTP 与 server 通信
- * 3. 使用 EnvClient 调用所有接口
- * 
+ * @fileoverview Env MCP Client 测试示例（与 info_feed_mcp 同构）
+ *
+ * 支持两种传输层：
+ * - Stdio（默认）：spawn 子进程，createEnvClient(StdioClientTransport)
+ * - HTTP 远程：ENV_MCP_HTTP_URL 指向已启动的 env-mcp-server-http，createEnvClient(StreamableHTTPClientTransport)
+ *
  * 用法:
- *   bun run examples/env-client-test.ts          # 使用 stdio 模式（默认）
- *   bun run examples/env-client-test.ts --http   # 使用 HTTP 模式
+ *   bun run examples/env-client-test.ts
+ *   bun run examples/env-client-test.ts -- examples/env-mcp-server.ts   # 指定 stdio server 脚本
+ *   ENV_MCP_SERVER=examples/env-mcp-server.ts bun run examples/env-client-test.ts
+ *   ENV_MCP_HTTP_URL=http://localhost:3000 bun run examples/env-client-test.ts   # HTTP 远程模式（需先启动 env-mcp-server-http.ts）
  */
 
-import { spawn, type Subprocess } from "bun";
-import { EnvClient, type EnvRpcClient } from "../packages/core/src/env_spec/client.js";
+import {
+  createEnvClient,
+  EnvClient,
+  StdioClientTransport,
+  StreamableHTTPClientTransport,
+  type Transport,
+} from "../packages/core/src/env_spec/client.js";
 
-// 配置
-const USE_HTTP = process.argv.includes("--http");
-const SERVER_PORT = 3457;
-
-/**
- * Stdio RPC Client - 通过子进程 stdio 通信
- */
-class StdioRpcClient implements EnvRpcClient {
-  private process: Subprocess;
-  private requestId = 0;
-  private pendingRequests = new Map<string | number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-  private decoder = new TextDecoder();
-  private buffer = "";
-
-  constructor(serverScript: string) {
-    // 启动 server 子进程
-    const bunPath = process.execPath;
-    this.process = spawn([bunPath, "run", serverScript], {
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "pipe",
-    });
-
-    // 监听 server 输出
-    this.process.stdout.pipeTo(
-      new WritableStream({
-        write: (chunk: Uint8Array) => {
-          this.buffer += this.decoder.decode(chunk, { stream: true });
-          
-          const lines = this.buffer.split("\n");
-          this.buffer = lines.pop() || "";
-          
-          for (const line of lines) {
-            this.handleResponse(line.trim());
-          }
-        },
-      })
-    );
-
-    // 转发 stderr 到 console
-    this.process.stderr.pipeTo(
-      new WritableStream({
-        write: (chunk: Uint8Array) => {
-          process.stderr.write(chunk);
-        },
-      })
-    );
-  }
-
-  private handleResponse(line: string) {
-    if (!line) return;
-    
-    try {
-      const response = JSON.parse(line);
-      const pending = this.pendingRequests.get(response.id);
-      
-      if (pending) {
-        this.pendingRequests.delete(response.id);
-        
-        if (response.error) {
-          pending.reject(new Error(response.error.message));
-        } else {
-          pending.resolve(response.result);
-        }
-      }
-    } catch (err) {
-      console.error("[Client] Failed to parse response:", line);
-    }
-  }
-
-  async call(method: string, params: unknown): Promise<unknown> {
-    const id = ++this.requestId;
-    const request = {
-      jsonrpc: "2.0",
-      id,
-      method,
-      params,
-    };
-
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      
-      // 发送请求到 server
-      this.process.stdin.write(JSON.stringify(request) + "\n");
-      
-      // 设置超时
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error(`Request timeout: ${method}`));
-        }
-      }, 5000);
-    });
-  }
-
-  async close() {
-    this.process.kill();
-    await this.process.exited;
-  }
-}
-
-/**
- * HTTP RPC Client - 通过 HTTP 通信
- */
-class HttpRpcClient implements EnvRpcClient {
-  private baseUrl: string;
-
-  constructor(port: number) {
-    this.baseUrl = `http://localhost:${port}`;
-  }
-
-  async call(method: string, params: unknown): Promise<unknown> {
-    const request = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method,
-      params,
-    };
-
-    const response = await fetch(`${this.baseUrl}/rpc`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    
-    return result.result;
-  }
-}
+const DEFAULT_SERVER_SCRIPT = "examples/env-mcp-server.ts";
 
 /**
  * 运行所有测试
@@ -172,8 +41,8 @@ async function runTests(client: EnvClient) {
     console.log(`   Name: ${desc.displayName}`);
     console.log(`   Version: ${desc.version}`);
     console.log(`   Capabilities:`, desc.capabilities);
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 2: List Profiles
@@ -186,8 +55,8 @@ async function runTests(client: EnvClient) {
       console.log(`   ${i + 1}. ${p.id} - ${p.displayName}`);
       console.log(`      Agents: ${p.primaryAgents.length}`);
     });
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 3: Get Profile
@@ -198,8 +67,8 @@ async function runTests(client: EnvClient) {
     console.log("✅ Success");
     console.log(`   Profile: ${profile.displayName}`);
     console.log(`   Agents:`, profile.primaryAgents.map((a) => a.id).join(", "));
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 4: List All Agents
@@ -212,8 +81,8 @@ async function runTests(client: EnvClient) {
       console.log(`   ${i + 1}. ${a.id} (${a.role})`);
       console.log(`      Tools: ${a.allowedTools?.join(", ") || "none"}`);
     });
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 5: List Primary Agents
@@ -224,8 +93,8 @@ async function runTests(client: EnvClient) {
     console.log("✅ Success");
     console.log(`   Found ${agents.length} primary agents`);
     agents.forEach((a) => console.log(`   - ${a.id}`));
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 6: Get Agent
@@ -238,8 +107,8 @@ async function runTests(client: EnvClient) {
     console.log(`   Role: ${agent.role}`);
     console.log(`   Prompt: ${agent.promptId}`);
     console.log(`   Allowed Tools: ${agent.allowedTools?.join(", ")}`);
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 7: Query All Logs
@@ -252,8 +121,8 @@ async function runTests(client: EnvClient) {
     logs.forEach((log) => {
       console.log(`   [${log.level.toUpperCase()}] ${log.message.substring(0, 50)}${log.message.length > 50 ? "..." : ""}`);
     });
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 8: Query Logs by Session
@@ -266,8 +135,8 @@ async function runTests(client: EnvClient) {
     logs.forEach((log) => {
       console.log(`   [${log.timestamp}] ${log.message}`);
     });
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 9: Query Logs by Level
@@ -278,8 +147,8 @@ async function runTests(client: EnvClient) {
     console.log("✅ Success");
     console.log(`   Error logs: ${logs.length}`);
     logs.forEach((log) => console.log(`   ❌ ${log.message}`));
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   // Test 10: Query Logs with Limit
@@ -289,8 +158,8 @@ async function runTests(client: EnvClient) {
     const logs = await client.queryLogs({ limit: 2 });
     console.log("✅ Success");
     console.log(`   Returned ${logs.length} logs (limited to 2)`);
-  } catch (err: any) {
-    console.log("❌ Failed:", err.message);
+  } catch (err: unknown) {
+    console.log("❌ Failed:", err instanceof Error ? err.message : err);
   }
 
   console.log("\n========================================");
@@ -298,53 +167,40 @@ async function runTests(client: EnvClient) {
   console.log("========================================\n");
 }
 
-/**
- * 主函数
- */
-async function main() {
-  let rpcClient: StdioRpcClient | HttpRpcClient;
-  let serverProcess: ReturnType<typeof spawn> | null = null;
+function getServerScript(): string {
+  const fromEnv = process.env.ENV_MCP_SERVER;
+  if (fromEnv) return fromEnv;
+  const arg = process.argv.indexOf("--");
+  if (arg !== -1 && process.argv[arg + 1]) return process.argv[arg + 1];
+  return DEFAULT_SERVER_SCRIPT;
+}
 
-  if (USE_HTTP) {
-    console.log("🌐 Using HTTP mode");
-    console.log(`   Starting server on port ${SERVER_PORT}...`);
-    
-    // 启动 HTTP server 子进程
-    const bunPath = process.execPath;
-    serverProcess = spawn([bunPath, "run", "examples/env-mcp-server.ts", "--http"], {
-      env: { ...process.env, PORT: String(SERVER_PORT) },
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    
-    // 等待 server 启动
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    rpcClient = new HttpRpcClient(SERVER_PORT);
+async function main() {
+  const httpUrl = process.env.ENV_MCP_HTTP_URL;
+  let transport: Transport;
+
+  if (httpUrl) {
+    console.log("🔌 Using MCP SDK StreamableHTTPClientTransport (HTTP 远程模式)");
+    console.log(`   URL: ${httpUrl}\n`);
+    transport = new StreamableHTTPClientTransport(new URL(httpUrl));
+    // connect() 会自动调用 transport.start()，无需在此 start
   } else {
-    console.log("🔌 Using Stdio mode");
-    console.log("   Starting server as subprocess...");
-    
-    rpcClient = new StdioRpcClient("examples/env-mcp-server.ts");
-    
-    // 等待 server 就绪
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    const serverScript = getServerScript();
+    console.log("🔌 Using MCP SDK StdioClientTransport");
+    console.log(`   Spawning: bun run ${serverScript}\n`);
+    transport = new StdioClientTransport({
+      command: "bun",
+      args: ["run", serverScript],
+    });
   }
 
-  const client = new EnvClient(rpcClient);
+  const envClient = await createEnvClient(transport);
 
   try {
-    await runTests(client);
+    await runTests(envClient);
   } finally {
-    console.log("🧹 Cleaning up...");
-    
-    if (rpcClient instanceof StdioRpcClient) {
-      await rpcClient.close();
-    } else if (serverProcess) {
-      serverProcess.kill();
-      await serverProcess.exited;
-    }
-    
+    console.log("🧹 Closing transport...");
+    await transport.close();
     console.log("✅ Done!");
   }
 }
