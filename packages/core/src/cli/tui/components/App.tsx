@@ -8,7 +8,9 @@ import { onMount } from "solid-js";
 import { Header } from "./Header.js";
 import { MessageList } from "./MessageList.js";
 import { InputBox } from "./InputBox.js";
+import { DialogStack } from "./DialogStack.js";
 import { useStore, useEventStream } from "../contexts/index.js";
+import { tuiLogger } from "../logger.js";
 
 interface AppProps {
   sessionId?: string;
@@ -43,6 +45,8 @@ export function App(props: AppProps) {
         <MessageList />
       </box>
       <InputBox />
+      {/* Dialog 栈渲染 */}
+      <DialogStack />
     </box>
   );
 }

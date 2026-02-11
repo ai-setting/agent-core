@@ -17,12 +17,12 @@ export const echoCommand: Command = {
   argsDescription: "message to echo",
 
   async execute(context: CommandContext, args: string): Promise<CommandResult> {
-    const message = args.trim() || "Hello from Agent Core!";
+    const input = args.trim();
 
     return {
       success: true,
-      message: `Echoed: ${message}`,
-      data: { echoed: message, sessionId: context.sessionId },
+      message: input,
+      data: { echoed: input, sessionId: context.sessionId },
     };
   },
 };

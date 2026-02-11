@@ -4,10 +4,11 @@
  * 使用 textarea + CommandPalette ref 模式
  */
 
-import { createSignal, onCleanup, createEffect, Show, For } from "solid-js";
-import { useStore, useEventStream, useTheme, useCommand } from "../contexts/index.js";
+import { createSignal, onCleanup, createEffect, Show, For, type JSX } from "solid-js";
+import { useStore, useEventStream, useTheme, useCommand, useDialog } from "../contexts/index.js";
 import { tuiLogger } from "../logger.js";
 import { CommandPalette, type CommandPaletteRef } from "./CommandPalette.js";
+import { CommandDialog } from "./CommandDialog.js";
 
 const STREAMING_DOT_COUNT = 5;
 const STREAMING_DOT_TICK_MS = 120;
@@ -15,21 +16,72 @@ const STREAMING_DOT_TICK_MS = 120;
 // 模块级标志位：是否正在清空/设置 textarea（用于忽略事件）
 let isClearingFlag = false;
 
+interface PendingCommandResult {
+  name: string;
+  success: boolean;
+  message?: string;
+}
+
 export function InputBox() {
   const store = useStore();
   const eventStream = useEventStream();
   const theme = useTheme();
+  const dialog = useDialog();
+  const command = useCommand();
 
   const [input, setInput] = createSignal("");
   const [isSubmitting, setIsSubmitting] = createSignal(false);
   const [streamingDotIndex, setStreamingDotIndex] = createSignal(0);
-  
-  const command = useCommand();
+  const [pendingResult, setPendingResult] = createSignal<PendingCommandResult | null>(null);
 
   // CommandPalette ref - OpenCode 风格
   let commandPalette: CommandPaletteRef | null = null;
   // textarea ref
   let textareaRef: any = null;
+
+  // 使用 effect 来处理命令结果显示，确保在 Solid 渲染上下文中
+  createEffect(() => {
+    const result = pendingResult();
+    if (!result) return;
+
+    tuiLogger.info("[InputBox] Showing command result dialog", { name: result.name });
+
+    const currentTheme = theme.theme();
+
+    dialog.push(
+      () => (
+        <box flexDirection="column" padding={2} width="100%" height="100%">
+          <box flexDirection="row" alignItems="center" height={1} marginBottom={1}>
+            <text fg={result.success ? currentTheme.success : currentTheme.error}>
+              {result.success ? "✓" : "✗"}
+            </text>
+            <text fg={currentTheme.foreground} marginLeft={1}>
+              {result.success ? "Success" : "Failed"}
+            </text>
+          </box>
+          <Show when={result.message}>
+            <box
+              flexDirection="column"
+              padding={1}
+              borderStyle="single"
+              borderColor={currentTheme.border}
+              marginTop={1}
+              flexGrow={1}
+            >
+              <text fg={currentTheme.foreground}>{result.message}</text>
+            </box>
+          </Show>
+          <box flexDirection="row" height={1} marginTop={1}>
+            <text fg={currentTheme.muted}>Press Enter or Esc to close</text>
+          </box>
+        </box>
+      ),
+      { title: `Result: /${result.name}` }
+    );
+
+    // 清除 pending 状态
+    setPendingResult(null);
+  });
 
   createEffect(() => {
     if (!store.isStreaming()) return;
@@ -114,24 +166,15 @@ export function InputBox() {
   // 执行命令
   const executeCommand = async (name: string, args: string) => {
     tuiLogger.info("[InputBox] Executing command via context", { name, args });
-    
+
     const result = await command.executeCommand(name, args);
-    
-    if (result.success) {
-      store.addMessage({
-        id: `cmd-result-${Date.now()}`,
-        role: "system",
-        content: `✓ /${name}: ${result.message || "Executed successfully"}`,
-        timestamp: Date.now(),
-      });
-    } else {
-      store.addMessage({
-        id: `cmd-error-${Date.now()}`,
-        role: "system",
-        content: `✗ /${name} failed: ${result.message || "Unknown error"}`,
-        timestamp: Date.now(),
-      });
-    }
+
+    // 设置 pending result，由 effect 处理对话框显示
+    setPendingResult({
+      name,
+      success: result.success,
+      message: result.message,
+    });
   };
 
   const modelLabel = () => store.lastModelName() || "OpenCode Zen";
@@ -234,13 +277,21 @@ export function InputBox() {
                   e.preventDefault();
                   return;
                 }
-                
+
+                // 检查 Ctrl+P 快捷键（打开 Command Dialog）
+                if ((e.ctrlKey || e.control) && (e.key === "p" || e.name === "p")) {
+                  tuiLogger.info("[InputBox] Ctrl+P pressed, opening CommandDialog");
+                  e.preventDefault();
+                  dialog.replace(() => <CommandDialog />, { title: "Commands" });
+                  return;
+                }
+
                 // 先让 CommandPalette 处理
                 if (commandPalette?.onKeyDown(e.name || e.key)) {
                   e.preventDefault();
                   return;
                 }
-                
+
                 // CommandPalette 不处理时
                 if (e.name === "return" || e.key === "Enter") {
                   handleSubmit();
@@ -252,9 +303,9 @@ export function InputBox() {
             />
           </box>
           <box flexDirection="row" flexShrink={0} marginLeft={1} alignItems="center">
-            <text fg={theme.theme().muted}>tab agents</text>
+            <text fg={theme.theme().muted}>ctrl+p cmds</text>
             <text fg={theme.theme().muted}> · </text>
-            <text fg={theme.theme().muted}>ctrl+e zst</text>
+            <text fg={theme.theme().muted}>/ commands</text>
           </box>
         </box>
 
