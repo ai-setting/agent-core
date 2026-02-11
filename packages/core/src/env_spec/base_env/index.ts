@@ -1,5 +1,17 @@
-import { BaseEnvironment } from "../../core/environment/base/base-environment.js";
+import type { Environment } from "../../core/environment/index.js";
 import type { EnvDescription, EnvProfile, AgentSpec } from "../types.js";
+
+/**
+ * 仅用于从 env 推导 EnvServerOptions 的最小接口（getPrompt、getTools 必选；getProfiles、queryLogs 可选）。
+ * 完整 Environment 或 BaseEnvironment 自然满足；测试/示例可用仅实现此接口的轻量对象。
+ */
+export type EnvOptionsSource = Pick<Environment, "getPrompt" | "getTools"> &
+  Partial<
+    Pick<
+      Environment,
+      "getProfiles" | "queryLogs"
+    >
+  >;
 
 export interface BaseEnvMeta {
   /** 当前 Environment 的标识（例如 "os-env", "server-env"） */
@@ -11,51 +23,52 @@ export interface BaseEnvMeta {
 }
 
 /**
- * 从 BaseEnvironment 推导出一个默认的 EnvDescription。
+ * 从 Environment 推导出默认的 EnvDescription。
  *
- * 约定：
- * - 使用 system prompt（id: "system"）作为默认 primary agent 的 promptId（如果存在）
- * - 默认只有一个 profile，id 为 "default"
+ * @param profiles 若传入则直接使用（用于 createBaseEnvMcpServerOptions 中先异步 getProfiles 再拼 description）；否则用 createBaseEnvProfiles(env, meta)
+ * - 若 env 实现 queryLogs，则 capabilities.logs = true
  */
 export function createBaseEnvDescription(
-  env: BaseEnvironment,
-  meta: BaseEnvMeta = {}
+  env: EnvOptionsSource,
+  meta: BaseEnvMeta = {},
+  profiles?: EnvProfile[]
 ): EnvDescription {
   const id = meta.id ?? "base-env";
   const displayName = meta.displayName ?? "Base Environment";
-
-  const profiles = createBaseEnvProfiles(env, meta);
+  const resolvedProfiles = profiles ?? createBaseEnvProfiles(env, meta);
 
   return {
     id,
     displayName,
     version: meta.version,
     capabilities: {
-      logs: false, // 默认不声明日志能力，由具体 Env 子类声明
-      events: true, // BaseEnvironment 支持流式事件 hook
+      logs: typeof env.queryLogs === "function",
+      events: true,
       metrics: true,
       profiles: true,
       mcpTools: false,
     },
-    profiles,
+    profiles: resolvedProfiles,
   };
 }
 
 /**
- * 从 BaseEnvironment 推导出一个默认的 EnvProfile 列表。
+ * 从 Environment 推导出 EnvProfile 列表。
  *
- * 当前实现：
- * - 一个 profile: "default"
- * - 一个 primary agent: "default"，promptId 优先指向 "system"
- * - allowedTools 为当前 env 已注册的所有工具名称
+ * - 若 env 实现 getProfiles()，直接使用其返回值（与 EnvProfile 结构兼容，作类型断言）。
+ * - 否则：一个 profile "default"，一个 primary agent "default"，promptId 指向 "system"（若存在），allowedTools 为 env.getTools() 工具名。
  */
 export function createBaseEnvProfiles(
-  env: BaseEnvironment,
+  env: EnvOptionsSource,
   meta: BaseEnvMeta = {}
 ): EnvProfile[] {
-  const tools = (env as any).listTools?.() as { name: string }[] | undefined;
-  const toolNames = tools ? tools.map((t) => t.name) : [];
+  if (typeof env.getProfiles === "function") {
+    const out = env.getProfiles();
+    if (Array.isArray(out)) return out as EnvProfile[];
+    // 异步 getProfiles 由 createBaseEnvMcpServerOptions 的 listProfiles 处理，此处仅同步路径
+  }
 
+  const toolNames = env.getTools().map((t) => t.name);
   const hasSystemPrompt = !!env.getPrompt("system");
 
   const primaryAgent: AgentSpec = {

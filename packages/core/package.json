@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@ai-sdk/anthropic": "^3.0.37",
     "@ai-sdk/cerebras": "^2.0.30",
     "@ai-sdk/cohere": "^3.0.18",

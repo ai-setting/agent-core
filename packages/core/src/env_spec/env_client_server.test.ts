@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { EnvClient, type EnvRpcClient } from "./client.js";
+import { EnvClient, type EnvMcpClientLike } from "./client.js";
 import { createEnvMcpServer, type EnvMcpServerLike } from "./server.js";
 import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "./types.js";
 
@@ -10,17 +10,30 @@ class MockServer implements EnvMcpServerLike {
   }
 }
 
-class MockRpcClient implements EnvRpcClient {
-  constructor(
-    private server: MockServer
-  ) {}
+/** In-memory 适配器：实现 EnvMcpClientLike，把 callTool 转成对 MockServer.tools 的调用，供单测使用 */
+class MockRpcClient implements EnvMcpClientLike {
+  constructor(private server: MockServer) {}
 
-  async call(method: string, params: unknown): Promise<unknown> {
-    const handler = this.server.tools.get(method);
+  async callTool(params: { name: string; arguments?: unknown }): Promise<{
+    content?: Array<{ type: string; text?: string }>;
+    isError?: boolean;
+  }> {
+    const handler = this.server.tools.get(params.name);
     if (!handler) {
-      throw new Error(`No handler for method ${method}`);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ error: `No handler for tool ${params.name}` }) }],
+        isError: true,
+      };
     }
-    return await handler(params);
+    try {
+      const result = await Promise.resolve(handler(params.arguments ?? {}));
+      return { content: [{ type: "text", text: JSON.stringify(result) }], isError: false };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) }],
+        isError: true,
+      };
+    }
   }
 }
 
@@ -430,7 +443,7 @@ describe("EnvClient & EnvServer (in-memory integration)", () => {
       });
 
       const client = new EnvClient(new MockRpcClient(server));
-      await expect(client.listProfiles()).rejects.toThrow("No handler for method env/list_profiles");
+      await expect(client.listProfiles()).rejects.toThrow("No handler for tool env/list_profiles");
     });
   });
 });

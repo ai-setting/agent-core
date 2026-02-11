@@ -1,21 +1,24 @@
 #!/usr/bin/env bun
 /**
- * @fileoverview Env MCP Server 示例（与 info_feed_mcp 同构）
+ * @fileoverview Env MCP Server HTTP 示例（Streamable HTTP 传输层）
  *
- * 使用 MCP SDK：EnvMCPServer + StdioServerTransport，只做 server.connect(transport)。
- * 不手写 stdio/HTTP，启动方式由调用方或配置文件（如 .json 的 command）决定。
+ * 与 env-mcp-server.ts 同构：同一份 EnvServerOptions，仅传输层改为
+ * WebStandardStreamableHTTPServerTransport，用 Bun.serve 暴露 HTTP。
  *
  * 用法:
- *   bun run examples/env-mcp-server.ts
+ *   bun run examples/env-mcp-server-http.ts
+ *   # 默认 http://localhost:3000，可通过 PORT=3001 覆盖
  *
- * 或由 MCP 配置启动，例如:
- *   { "command": ["bun", "run", "examples/env-mcp-server.ts"] }
+ * 测试（先启动本 server，再另开终端）:
+ *   ENV_MCP_HTTP_URL=http://localhost:3000 bun run examples/env-client-test.ts
  */
 
-import { EnvMCPServer, StdioServerTransport } from "../packages/core/src/env_spec/server.js";
+import {
+  EnvMCPServer,
+  WebStandardStreamableHTTPServerTransport,
+} from "../packages/core/src/env_spec/server.js";
 import type { EnvDescription, EnvProfile, AgentSpec, LogEntry } from "../packages/core/src/env_spec/types.js";
 
-// 模拟的环境数据
 const mockEnv: EnvDescription = {
   id: "demo-env",
   displayName: "Demo Environment",
@@ -120,7 +123,16 @@ const server = new EnvMCPServer({
   },
 });
 
-const transport = new StdioServerTransport();
+// 使用 stateful 模式（sessionIdGenerator），同一 transport 可处理多请求/多 session
+const transport = new WebStandardStreamableHTTPServerTransport({
+  sessionIdGenerator: () => crypto.randomUUID(),
+});
 await server.connect(transport);
 
-console.error("Env MCP Server started on stdio");
+const port = Number(process.env.PORT ?? 3000);
+Bun.serve({
+  port,
+  fetch: (req) => transport.handleRequest(req),
+});
+
+console.error(`Env MCP Server (HTTP) started at http://localhost:${port}`);

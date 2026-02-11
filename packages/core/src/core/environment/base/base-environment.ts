@@ -4,7 +4,14 @@
  */
 
 import { z } from "zod";
-import { Environment, Prompt, StreamEvent, HistoryMessage } from "../index.js";
+import {
+  Environment,
+  Prompt,
+  StreamEvent,
+  HistoryMessage,
+  type EnvironmentProfile,
+  type EnvironmentAgentSpec,
+} from "../index.js";
 import {
   Context,
   Action,
@@ -177,6 +184,28 @@ export abstract class BaseEnvironment implements Environment {
 
   getTools(): Tool[] {
     return this.listTools();
+  }
+
+  /**
+   * 默认实现：从 getPrompt("system") 与 listTools() 推导单一默认 profile，
+   * 供 env MCP describe/list_profiles/list_agents/get_agent 使用。子类可覆盖。
+   */
+  getProfiles(): EnvironmentProfile[] {
+    const toolNames = this.listTools().map((t) => t.name);
+    const hasSystemPrompt = !!this.getPrompt("system");
+    const primaryAgent: EnvironmentAgentSpec = {
+      id: "default",
+      role: "primary",
+      promptId: hasSystemPrompt ? "system" : undefined,
+      allowedTools: toolNames,
+    };
+    return [
+      {
+        id: "default",
+        displayName: "Default Profile",
+        primaryAgents: [primaryAgent],
+      },
+    ];
   }
 
   addPrompt(prompt: Prompt): void {
