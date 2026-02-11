@@ -63,7 +63,7 @@ describe("base_env helpers", () => {
     expect(profiles.length).toBe(1);
     const profile = profiles[0];
     expect(profile.id).toBe("default");
-    // BaseEnvironment.getProfiles() 提供时直接使用其返回值，displayName 为默认 "Default Profile"
+    // BaseEnvironment 实现 getProfiles() 时直接使用其返回值，displayName 为默认 "Default Profile"
     expect(profile.displayName).toBe("Default Profile");
     expect(profile.primaryAgents.length).toBe(1);
 

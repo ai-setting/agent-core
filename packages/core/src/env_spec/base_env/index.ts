@@ -2,16 +2,10 @@ import type { Environment } from "../../core/environment/index.js";
 import type { EnvDescription, EnvProfile, AgentSpec } from "../types.js";
 
 /**
- * 仅用于从 env 推导 EnvServerOptions 的最小接口（getPrompt、getTools 必选；getProfiles、queryLogs 可选）。
- * 完整 Environment 或 BaseEnvironment 自然满足；测试/示例可用仅实现此接口的轻量对象。
+ * 仅用于从 env 推导 EnvServerOptions 的最小接口；类型均来自 core Environment，env_spec 不向 core 注入定义。
  */
 export type EnvOptionsSource = Pick<Environment, "getPrompt" | "getTools"> &
-  Partial<
-    Pick<
-      Environment,
-      "getProfiles" | "queryLogs"
-    >
-  >;
+  Partial<Pick<Environment, "getProfiles" | "queryLogs">>;
 
 export interface BaseEnvMeta {
   /** 当前 Environment 的标识（例如 "os-env", "server-env"） */

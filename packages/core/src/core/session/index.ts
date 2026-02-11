@@ -30,7 +30,7 @@
  */
 
 export { Session } from "./session";
-export type { SessionInfo, MessageInfo, Part, MessageWithParts, HistoryMessage } from "./types";
+export type { SessionInfo, MessageInfo, Part, MessageWithParts, HistoryMessage, SessionCreateOptions } from "./types";
 export { ID } from "./id";
 export { Storage } from "./storage";
 export { SessionCompaction, type CompactionConfig, type CompactionStatus, type CompactionResult, type CompactionEnv, type CompactionCondition } from "./compaction";

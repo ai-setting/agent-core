@@ -16,7 +16,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-10（已补充 Env 协议 JSON 规范与 Env client/server SDK 雏形）
+最后更新：2026-02-11（Environment 接口新增可选 session 管理方法，BaseEnvironment 委托 core/session 实现；文档同步）
 
 ---
 
@@ -47,7 +47,7 @@
 
 | 能力域 | 目标能力 | 状态 | 现状/备注 | 关键代码路径（示例） |
 |---|---|---|---|---|
-| Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
+| Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |
 | LLM | invoke_llm 作为工具 + stream hook | [DONE] | 流式事件通过 `onStreamEvent` 向上抛 | `.../base/invoke-llm.ts`、`.../base/base-environment.ts` |
@@ -55,7 +55,7 @@
 | Server 事件总线 | publish/subscribe，支持 session scope | [DONE] | bus + global broadcast 已落地 | `packages/core/src/server/eventbus/*` |
 | SSE 推送 | `/events` 推送 EventBus 事件 | [DONE] | 已支持 sessionId 过滤 + heartbeat | `packages/core/src/server/routes/events.ts` |
 | CLI/TUI | 客户端消费 SSE/事件流 | [WIP] | 有大量 TUI 组件与事件流 context，但仍需统一“协议/事件 schema”与回放 | `packages/core/src/cli/tui/**` |
-| 会话（Session） | 会话状态/历史/压缩 | [WIP] | 存在 session 模块与 compaction，但与“可回放/可审计”尚未统一 | `packages/core/src/core/session/**` |
+| 会话（Session） | 会话状态/历史/压缩 | [WIP] | Session/Storage 已存在；Environment 可选 createSession/getSession/listSessions/updateSession/deleteSession，BaseEnvironment 委托 core/session；与“可回放/可审计”尚未统一 | `packages/core/src/core/session/**`、`.../environment/index.ts`、`.../base/base-environment.ts` |
 | OS Env | 本地工作目录/环境变量/路径安全 | [DONE] | `OsEnv` 已具备，并注册 OS tools | `packages/core/src/core/environment/expend/os/os-env.ts` |
 | OS Tools | bash/file/glob/grep 等 | [DONE] | OS tools 已存在，带测试用例 | `packages/core/src/core/environment/expend/os/tools/**` |
 | 治理（超时/重试/并发） | 统一策略入口（per-tool override） | [WIP] | manager 已存在；需要补齐“策略可配置/可观测/可回放”的闭环 | `packages/core/src/core/environment/base/{timeout,retry,concurrency}.ts` |
