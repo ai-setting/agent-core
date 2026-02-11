@@ -41,6 +41,8 @@ import {
   type LLMOutput,
   type StreamEventHandler 
 } from "./invoke-llm.js";
+import { Session } from "../../session/index.js";
+import type { SessionCreateOptions } from "../../session/types.js";
 
 export interface BaseEnvironmentConfig {
   timeoutManager?: TimeoutManager;
@@ -188,7 +190,7 @@ export abstract class BaseEnvironment implements Environment {
 
   /**
    * 默认实现：从 getPrompt("system") 与 listTools() 推导单一默认 profile，
-   * 供 env MCP describe/list_profiles/list_agents/get_agent 使用。子类可覆盖。
+   * 供 env_spec 做 describeEnv/listProfiles/listAgents/getAgent 推导。子类可覆盖。
    */
   getProfiles(): EnvironmentProfile[] {
     const toolNames = this.listTools().map((t) => t.name);
@@ -206,6 +208,34 @@ export abstract class BaseEnvironment implements Environment {
         primaryAgents: [primaryAgent],
       },
     ];
+  }
+
+  /**
+   * Session 管理：委托给 core/session 的 Session 与 Storage。
+   * 子类可覆盖以使用其他 session 实现（如持久化存储）。
+   */
+  createSession(options?: SessionCreateOptions): Session {
+    return Session.create(options);
+  }
+
+  getSession(id: string): Session | undefined {
+    return Session.get(id);
+  }
+
+  listSessions(): Session[] {
+    return Session.list();
+  }
+
+  updateSession(id: string, payload: { title?: string; metadata?: Record<string, unknown> }): void {
+    const s = Session.get(id);
+    if (s) {
+      if (payload.title !== undefined) s.setTitle(payload.title);
+      if (payload.metadata) for (const [k, v] of Object.entries(payload.metadata)) s.setMetadata(k, v);
+    }
+  }
+
+  deleteSession(id: string): void {
+    Session.get(id)?.delete();
   }
 
   addPrompt(prompt: Prompt): void {

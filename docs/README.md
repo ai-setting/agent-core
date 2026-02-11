@@ -12,6 +12,7 @@
 
 - [Environment 设计理念（统一运行时上下文）](./environment-design-philosophy.md)
 - [开发进度与路线图（Progress & Roadmap）](./DEVELOPMENT_PROGRESS.md)
+- [Env Spec 设计与实现（从 Environment 推导 MCP options、Stdio/HTTP 传输）](./env-spec-design-and-implementation.md)
 
 ## 现阶段仍有效的历史设计稿（位于 `docs/old/`）
 
