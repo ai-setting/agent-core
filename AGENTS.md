@@ -71,6 +71,39 @@
 - 事件 flatten 格式是否一致（server 侧 `{type, properties}` → `{type, ...properties}`）
 - sessionId 的一致性与过滤行为
 
+### 3.3 TUI 界面测试规范（必须遵守）
+
+**对于涉及 TUI 改动的功能，必须通过以下方式验证：**
+
+1. **启动完整环境**：
+   ```bash
+   # Terminal 1: 启动 Server
+   bun run start
+   
+   # Terminal 2: 启动 TUI
+   bun run attach http://localhost:3000
+   ```
+
+2. **模拟用户操作**：
+   - 在 TUI 中执行具体操作（如输入 `/` 触发命令面板）
+   - 观察界面响应和状态变化
+
+3. **验证日志输出**：
+   - 查看 `tui.log` 确认逻辑执行
+   - 关键操作应有明确日志标记，如：
+     ```
+     [CommandContext] Opening command palette
+     [CommandContext] Refreshing commands from server
+     [InputBox] Detected command
+     ```
+
+4. **验收标准**：
+   - TUI 界面有预期响应（弹窗、状态变化等）
+   - 日志文件记录完整的操作链路
+   - 无异常错误或崩溃
+
+**TUI 日志位置**：`~/.config/tong_work/logs/tui.log`
+
 ---
 
 ## 4. 日志规范（必须先看日志再猜）

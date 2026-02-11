@@ -7,6 +7,8 @@
 import { AgentServer } from "./server.js";
 import { ServerEnvironment } from "./environment.js";
 import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
+import { CommandRegistry } from "./command/index.js";
+import { echoCommand } from "./command/built-in/echo.js";
 
 async function main() {
   // 立即测试所有 logger
@@ -29,6 +31,13 @@ async function main() {
   console.log("╔════════════════════════════════════════════════════════════╗");
   console.log("║     Agent Core Server                                      ║");
   console.log("╚════════════════════════════════════════════════════════════╝");
+  console.log();
+
+  // 注册内置 Commands
+  console.log("📝 注册 Commands...");
+  const commandRegistry = CommandRegistry.getInstance();
+  commandRegistry.register(echoCommand);
+  console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   console.log();
 
   let env: ServerEnvironment | undefined;
