@@ -42,9 +42,7 @@ export function App(props: AppProps) {
       <box flexGrow={1} minHeight={0}>
         <MessageList />
       </box>
-      <box flexShrink={0}>
-        <InputBox />
-      </box>
+      <InputBox />
     </box>
   );
 }
