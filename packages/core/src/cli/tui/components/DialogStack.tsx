@@ -4,7 +4,7 @@
  * 渲染当前 Dialog 栈，处理层级显示和背景遮罩
  */
 
-import { Show, For, createSignal, onMount, onCleanup } from "solid-js";
+import { Show } from "solid-js";
 import { useDialog, useTheme, type DialogItem } from "../contexts/index.js";
 import { tuiLogger } from "../logger.js";
 
@@ -39,15 +39,15 @@ export function DialogStack(props: DialogStackProps) {
         />
       </Show>
 
-      {/* Dialog 栈 - 只渲染栈顶 */}
+      {/* Dialog 栈 - 只渲染栈顶，居中显示 */}
       <Show when={dialog.currentDialog()}>
         {(current: () => DialogItem) => (
           <box
             position="absolute"
-            top={2}
-            left={2}
-            right={2}
-            bottom={2}
+            top="30%"
+            left="20%"
+            width="60%"
+            height="40%"
             flexDirection="column"
             borderStyle="single"
             borderColor={theme.theme().primary}
