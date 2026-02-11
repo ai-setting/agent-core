@@ -50,7 +50,20 @@ export function InputBox() {
 
     dialog.push(
       () => (
-        <box flexDirection="column" padding={2} width="100%" height="100%">
+        <box flexDirection="column" padding={1} width="100%" height="100%">
+          {/* 隐藏的 input 用于捕获 ESC 键 */}
+          <input
+            width={0}
+            value=""
+            opacity={0}
+            focused={true}
+            onKeyDown={(e: any) => {
+              if (e.name === "escape" || e.key === "Escape") {
+                tuiLogger.info("[CommandResult] ESC pressed, closing");
+                dialog.pop();
+              }
+            }}
+          />
           <box flexDirection="row" alignItems="center" height={1} marginBottom={1}>
             <text fg={result.success ? currentTheme.success : currentTheme.error}>
               {result.success ? "✓" : "✗"}
@@ -66,13 +79,12 @@ export function InputBox() {
               borderStyle="single"
               borderColor={currentTheme.border}
               marginTop={1}
-              flexGrow={1}
             >
               <text fg={currentTheme.foreground}>{result.message}</text>
             </box>
           </Show>
           <box flexDirection="row" height={1} marginTop={1}>
-            <text fg={currentTheme.muted}>Press Enter or Esc to close</text>
+            <text fg={currentTheme.muted}>Press ESC to close</text>
           </box>
         </box>
       ),
