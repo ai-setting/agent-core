@@ -1,0 +1,104 @@
+[
+  // ==================== Primary Agent ====================
+  {
+    "id": "os_agent",
+    "role": "primary",
+    "promptId": "system",
+    "promptOverride": "You are an operating system assistant. You can execute bash commands, read/write files, search with grep, and perform various system operations. Always be careful with destructive operations and confirm before making significant changes.",
+    "allowedTools": [
+      "bash",
+      "file_read",
+      "file_write",
+      "file_glob",
+      "grep",
+      "glob",
+      "read",
+      "edit"
+    ],
+    "deniedTools": [
+      "file_delete",
+      "rm_rf"
+    ],
+    "metadata": {
+      "name": "OS Assistant",
+      "description": "General purpose OS operations agent",
+      "maxConcurrency": 5,
+      "timeout": 30000,
+      "safeMode": true,
+      "categories": ["system", "files", "shell"]
+    }
+  },
+
+  // ==================== Sub Agents ====================
+  {
+    "id": "file_agent",
+    "role": "sub",
+    "promptId": "file_expert",
+    "promptOverride": "You are a file operations specialist. You excel at reading, writing, searching, and organizing files. You understand various file formats and can help with file transformations.",
+    "allowedTools": [
+      "file_read",
+      "file_write",
+      "file_glob",
+      "grep",
+      "glob",
+      "read"
+    ],
+    "metadata": {
+      "name": "File Expert",
+      "specialty": "file_operations",
+      "maxFileSize": 10485760,
+      "supportedFormats": ["txt", "json", "yaml", "md", "js", "ts", "py"]
+    }
+  },
+
+  {
+    "id": "git_agent",
+    "role": "sub",
+    "promptId": "git_expert",
+    "allowedTools": [
+      "bash",
+      "file_read",
+      "grep"
+    ],
+    "metadata": {
+      "name": "Git Assistant",
+      "specialty": "version_control",
+      "allowedCommands": ["git status", "git log", "git diff", "git add", "git commit"]
+    }
+  },
+
+  {
+    "id": "search_agent",
+    "role": "sub",
+    "promptId": "search_expert",
+    "promptOverride": "You are a search specialist. You can search through codebases, find patterns, and help navigate large projects.",
+    "allowedTools": [
+      "grep",
+      "glob",
+      "file_read",
+      "bash"
+    ],
+    "metadata": {
+      "name": "Search Expert",
+      "specialty": "code_search",
+      "maxResults": 100
+    }
+  },
+
+  // ==================== Utility Agents ====================
+  {
+    "id": "npm_agent",
+    "role": "sub",
+    "promptId": "npm_expert",
+    "allowedTools": [
+      "bash",
+      "file_read",
+      "file_write"
+    ],
+    "metadata": {
+      "name": "NPM Assistant",
+      "specialty": "package_management",
+      "packageManager": "npm"
+    }
+  }
+]

@@ -130,7 +130,7 @@ describe("Command System Integration", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.data.sessionId).toBeUndefined();
+      expect((result.data as any).sessionId).toBeUndefined();
     });
 
     it("should handle different sessions", async () => {
@@ -277,10 +277,10 @@ describe("Command System Integration", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.data.nested.array).toEqual([1, 2, 3]);
-      expect(result.data.nested.object.key).toBe("value");
-      expect(result.data.nested.boolean).toBe(true);
-      expect(result.data.nested.number).toBe(42);
+      expect((result.data as any).nested.array).toEqual([1, 2, 3]);
+      expect((result.data as any).nested.object.key).toBe("value");
+      expect((result.data as any).nested.boolean).toBe(true);
+      expect((result.data as any).nested.number).toBe(42);
     });
   });
 

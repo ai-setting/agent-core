@@ -18,5 +18,10 @@
   },
   "devDependencies": {
     "typescript": "latest"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "remeda": "^2.33.6",
+    "xdg-basedir": "^5.1.0"
   }
 }

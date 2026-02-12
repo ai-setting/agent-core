@@ -54,7 +54,7 @@ describe("BaseEnvironment session event hooks", () => {
 
   it("should emit session.created when createSession is called", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     const session = env.createSession({ title: "My Session" });
@@ -62,13 +62,13 @@ describe("BaseEnvironment session event hooks", () => {
     expect(events.length).toBe(1);
     expect(events[0].type).toBe("session.created");
     expect(events[0].sessionId).toBe(session.id);
-    expect(events[0].title).toBe("My Session");
-    expect((events[0] as any).directory).toBeDefined();
+    expect((events[0] as Extract<SessionEvent, { type: "session.created" }>).title).toBe("My Session");
+    expect((events[0] as Extract<SessionEvent, { type: "session.created" }>).directory).toBeDefined();
   });
 
   it("should emit session.updated when updateSession succeeds", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     const session = env.createSession({ title: "Original" });
@@ -79,12 +79,12 @@ describe("BaseEnvironment session event hooks", () => {
     expect(events.length).toBe(1);
     expect(events[0].type).toBe("session.updated");
     expect(events[0].sessionId).toBe(session.id);
-    expect(events[0].updates?.title).toBe("Updated Title");
+    expect((events[0] as Extract<SessionEvent, { type: "session.updated" }>).updates.title).toBe("Updated Title");
   });
 
   it("should NOT emit session.updated when session not found", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     env.updateSession("non-existent-id", { title: "Ignored" });
@@ -94,7 +94,7 @@ describe("BaseEnvironment session event hooks", () => {
 
   it("should emit session.deleted when deleteSession succeeds", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     const session = env.createSession({ title: "To Delete" });
@@ -109,7 +109,7 @@ describe("BaseEnvironment session event hooks", () => {
 
   it("should NOT emit session.deleted when session not found", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     env.deleteSession("non-existent-session-id");
@@ -141,7 +141,7 @@ describe("BaseEnvironment session event hooks", () => {
 
   it("should support updateSession with metadata", () => {
     const env = new TestEnv({
-      onSessionEvent: (e) => events.push(e),
+      onSessionEvent: (e) => { events.push(e); },
     });
 
     const session = env.createSession({ title: "With Meta" });
@@ -151,6 +151,6 @@ describe("BaseEnvironment session event hooks", () => {
 
     expect(events.length).toBe(1);
     expect(events[0].type).toBe("session.updated");
-    expect(events[0].updates?.metadata).toEqual({ key: "value" });
+    expect((events[0] as Extract<SessionEvent, { type: "session.updated" }>).updates.metadata).toEqual({ key: "value" });
   });
 });

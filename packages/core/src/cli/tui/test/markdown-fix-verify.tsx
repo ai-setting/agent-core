@@ -179,7 +179,7 @@ for (let i = 0; i < chunks.length; i++) {
   
   if (rawSyntaxStyleRef) {
     try {
-      rawSyntaxStyleRef.getStyle("markup.strong");
+      (rawSyntaxStyleRef as any).getStyle("markup.strong");
       console.log("  - ✓ rawSyntaxStyleRef 可用");
     } catch (e) {
       console.error("  - ✗ rawSyntaxStyleRef 失败");

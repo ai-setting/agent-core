@@ -283,6 +283,7 @@ describe("MarkdownStyle 边界情况", () => {
       // 缺少其他属性
     };
 
+    // @ts-expect-error
     const rules = generateMarkdownSyntax(incompleteTheme);
     
     // 应该仍然生成规则，即使某些值是 undefined

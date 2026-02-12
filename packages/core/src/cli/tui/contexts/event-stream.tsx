@@ -27,6 +27,7 @@ export interface StreamEvent {
   success?: boolean;
   error?: string;
   code?: string;
+  model?: string;
 }
 
 export interface EventStreamContextValue {
