@@ -9,6 +9,8 @@ import { useStore, useEventStream, useTheme, useCommand, useDialog } from "../co
 import { tuiLogger } from "../logger.js";
 import { CommandPalette, type CommandPaletteRef } from "./CommandPalette.js";
 import { CommandDialog } from "./CommandDialog.js";
+import { ConnectDialog } from "./ConnectDialog.js";
+import { EchoDialog } from "./EchoDialog.js";
 
 const STREAMING_DOT_COUNT = 5;
 const STREAMING_DOT_TICK_MS = 120;
@@ -61,6 +63,28 @@ export function InputBox() {
     if (!result) return;
 
     tuiLogger.info("[InputBox] Showing command result dialog", { name: result.name });
+
+    // 特殊处理 connect 命令 - 打开 ConnectDialog
+    if (result.name === "connect") {
+      tuiLogger.info("[InputBox] Opening ConnectDialog for connect command");
+      dialog.push(
+        () => <ConnectDialog />,
+        { title: "Connect" }
+      );
+      setPendingResult(null);
+      return;
+    }
+
+    // 特殊处理 echo 命令 - 打开 EchoDialog
+    if (result.name === "echo") {
+      tuiLogger.info("[InputBox] Opening EchoDialog for echo command");
+      dialog.push(
+        () => <EchoDialog />,
+        { title: "Echo" }
+      );
+      setPendingResult(null);
+      return;
+    }
 
     const currentTheme = theme.theme();
 

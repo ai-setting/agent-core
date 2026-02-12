@@ -9,6 +9,7 @@ import { ServerEnvironment } from "./environment.js";
 import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
 import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
+import { connectCommand } from "./command/built-in/connect.js";
 
 async function main() {
   // 立即测试所有 logger
@@ -37,6 +38,7 @@ async function main() {
   console.log("📝 注册 Commands...");
   const commandRegistry = CommandRegistry.getInstance();
   commandRegistry.register(echoCommand);
+  commandRegistry.register(connectCommand);
   console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   console.log();
 

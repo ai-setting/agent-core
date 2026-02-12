@@ -100,33 +100,52 @@ export function CommandDialog(props: CommandDialogProps) {
   // 执行选中的命令
   const executeSelected = async () => {
     const cmds = flatCommands();
-    if (cmds.length === 0) return;
+    tuiLogger.info("[CommandDialog] executeSelected called", { 
+      flatCommandsLength: cmds.length,
+      selectedIndex: selectedIndex()
+    });
+    
+    if (cmds.length === 0) {
+      tuiLogger.warn("[CommandDialog] No commands available");
+      return;
+    }
 
     const selectedCmd = cmds[selectedIndex()];
-    if (!selectedCmd) return;
+    if (!selectedCmd) {
+      tuiLogger.warn("[CommandDialog] No command selected at index", { index: selectedIndex() });
+      return;
+    }
 
     tuiLogger.info("[CommandDialog] Executing command", { 
       name: selectedCmd.name, 
-      hasArgs: selectedCmd.hasArgs 
+      hasArgs: selectedCmd.hasArgs,
+      fullCommand: selectedCmd
     });
 
     if (selectedCmd.hasArgs) {
       // 需要参数：关闭 dialog 并在输入框插入命令
+      tuiLogger.info("[CommandDialog] Command has args, popping dialog and executing");
       dialog.pop();
       // 直接执行（带空参数），TUI 环境不支持 CustomEvent
       await command.executeCommand(selectedCmd.name, "");
     } else {
       // 不需要参数：直接执行并显示结果
+      tuiLogger.info("[CommandDialog] Command has no args, popping dialog");
       dialog.pop();
+      tuiLogger.info("[CommandDialog] Executing command via API");
       const result = await command.executeCommand(selectedCmd.name, "");
+      tuiLogger.info("[CommandDialog] Command executed", { success: result.success, name: selectedCmd.name });
       
       // 显示结果对话框
+      tuiLogger.info("[CommandDialog] Showing result dialog");
       showResultDialog(selectedCmd, result);
     }
   };
 
   // 显示结果对话框
   const showResultDialog = (cmd: CommandItem, result: { success: boolean; message?: string }) => {
+    tuiLogger.info("[CommandDialog] Opening result dialog for", { cmdName: cmd.name });
+    
     dialog.push(
       () => (
         <CommandResultDialogContent 
@@ -148,6 +167,7 @@ export function CommandDialog(props: CommandDialogProps) {
 
   // 键盘事件处理
   const handleKeyDown = (key: string): boolean => {
+    tuiLogger.info("[CommandDialog] handleKeyDown", { key });
     switch (key.toLowerCase()) {
       case "up":
       case "arrowup":
@@ -159,9 +179,11 @@ export function CommandDialog(props: CommandDialogProps) {
         return true;
       case "return":
       case "enter":
+        tuiLogger.info("[CommandDialog] Enter key pressed, executing selected");
         executeSelected();
         return true;
       case "escape":
+        tuiLogger.info("[CommandDialog] Escape key pressed, closing dialog");
         dialog.pop();
         return true;
       default:

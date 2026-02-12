@@ -6,10 +6,12 @@
 
 import { createEffect, Show, For, onMount } from "solid-js";
 import { createStore } from "solid-js/store";
-import { useTheme, useCommand, useStore } from "../contexts/index.js";
+import { useTheme, useCommand, useStore, useDialog } from "../contexts/index.js";
 import { tuiLogger } from "../logger.js";
 import type { CommandItem } from "../contexts/command.js";
 import type { TextareaRenderable } from "@opentui/core";
+import { ConnectDialog } from "./ConnectDialog.js";
+import { EchoDialog } from "./EchoDialog.js";
 
 export interface CommandPaletteRef {
   onInput: (value: string, textarea: TextareaRenderable) => void;
@@ -28,6 +30,7 @@ export function CommandPalette(props: CommandPaletteProps) {
   const theme = useTheme();
   const command = useCommand();
   const store = useStore();
+  const dialog = useDialog();
 
   // 使用 createStore 管理状态
   const [state, setState] = createStore({
@@ -119,7 +122,12 @@ export function CommandPalette(props: CommandPaletteProps) {
     // 无论是否需要参数，都先隐藏面板
     hide();
     
-    if (cmd.hasArgs) {
+    // 检查是否有特殊 dialog 的命令（即使 hasArgs 为 true，也应该直接打开 dialog）
+    const commandsWithDialog = ["connect", "echo"];
+    if (commandsWithDialog.includes(cmd.name)) {
+      tuiLogger.info("[CommandPalette] Command has special dialog, opening directly", { name: cmd.name });
+      executeCommand(cmd.name, "");
+    } else if (cmd.hasArgs) {
       // 需要参数：通知父组件插入命令名
       if (props.onSelectCommand) {
         props.onSelectCommand(cmd.name);
@@ -132,6 +140,28 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   // 执行命令
   const executeCommand = async (name: string, args: string) => {
+    tuiLogger.info("[CommandPalette] Executing command", { name, args });
+    
+    // 特殊处理 connect 命令 - 打开 ConnectDialog
+    if (name === "connect") {
+      tuiLogger.info("[CommandPalette] Opening ConnectDialog for connect command");
+      dialog.push(
+        () => <ConnectDialog />,
+        { title: "Connect" }
+      );
+      return;
+    }
+    
+    // 特殊处理 echo 命令 - 打开 EchoDialog
+    if (name === "echo") {
+      tuiLogger.info("[CommandPalette] Opening EchoDialog for echo command");
+      dialog.push(
+        () => <EchoDialog />,
+        { title: "Echo" }
+      );
+      return;
+    }
+    
     const result = await command.executeCommand(name, args);
     
     if (result.success) {
