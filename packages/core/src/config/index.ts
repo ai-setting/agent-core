@@ -39,3 +39,13 @@ export {
   resolveObject,
   resolveConfig,
 } from "./resolver.js";
+export {
+  Providers_load,
+  Providers_save,
+  Providers_get,
+  Providers_set,
+  Providers_remove,
+  Providers_list,
+  Providers_getAll,
+  type ProviderInfo,
+} from "./providers.js";

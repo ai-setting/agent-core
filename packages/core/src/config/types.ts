@@ -5,6 +5,8 @@ const ProviderConfig = z.object({
   baseURL: z.string().optional().describe("Provider base URL"),
   apiKey: z.string().optional().describe("API key"),
   defaultModel: z.string().optional().describe("Default model for this provider"),
+  models: z.array(z.string()).optional().describe("Available models for this provider"),
+  description: z.string().optional().describe("Provider description"),
 });
 
 // Agent 配置（基于 env_spec/types.ts AgentSpec）
