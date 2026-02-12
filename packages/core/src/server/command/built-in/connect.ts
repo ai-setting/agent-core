@@ -112,6 +112,13 @@ export const connectCommand: Command = {
       }
 
       case "add": {
+        console.log("[Connect] Add action received:", { 
+          providerId: action.providerId, 
+          providerName: action.providerName,
+          baseURL: action.baseURL,
+          fullAction: action 
+        });
+        
         if (!action.providerId || !action.providerName) {
           return {
             success: false,
@@ -120,12 +127,16 @@ export const connectCommand: Command = {
           };
         }
 
-        await Auth_setProvider(action.providerId, {
-          type: "api",
+        const config = {
+          type: "api" as const,
           key: action.apiKey || "",
           baseURL: action.baseURL,
           metadata: { displayName: action.providerName },
-        });
+        };
+        
+        console.log("[Connect] Saving provider config:", { providerId: action.providerId, config });
+        await Auth_setProvider(action.providerId, config);
+        console.log("[Connect] Provider saved successfully");
 
         return {
           success: true,
@@ -188,6 +199,7 @@ export const connectCommand: Command = {
 
 async function getProvidersList(): Promise<ProviderInfo[]> {
   const auth = await Auth_get();
+  console.log("[Connect] getProvidersList - auth content:", JSON.stringify(auth, null, 2));
   const configuredProviders = await Auth_listProviders();
 
   const providers = BUILTIN_PROVIDERS.map((p) => ({
