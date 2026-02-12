@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-12（完成配置系统 Phase 1 & 2 实现 + 新增 Connect Command）
+最后更新：2026-02-12（完成配置系统 Phase 1 & 2 实现 + ServerEnvironment 配置集成 + auth.json 自动加载 + 新增 Connect Command）
 
 ---
 
@@ -53,6 +53,8 @@
 |---|---|---|---|---|
 | 配置系统 | 用户级配置（Global）+ 环境变量扩展 | [DONE] | Phase 1 已完成：ConfigPaths、ConfigSource、Registry、Schema、Merge、Loader 全部实现 | `packages/core/src/config/**` |
 | 配置状态持久化 | 用户级模型选择（recent/favorite/variant） | [DONE] | Phase 2 已完成：ModelStore 实现，支持 recent/favorite/variant 的增删改查与文件持久化 | `packages/core/src/config/state/model-store.ts` |
+| 配置系统集成 | ServerEnvironment 自动加载配置并初始化 LLM | [DONE] | ServerEnvironment 构造函数自动加载配置，解析 apiKey/baseURL/model，初始化 LLM | `packages/core/src/server/environment.ts` |
+| 认证管理 | auth.json 自动加载到环境变量 | [DONE] | Auth_loadToEnv() 自动从 auth.json 加载 API key 到对应环境变量，支持 Provider 映射 | `packages/core/src/config/auth.ts` |
 | Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |

@@ -11,6 +11,7 @@ import path from "path";
 import { AgentServer } from "../../server/server.js";
 import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
+import { Config_get, resolveConfig } from "../../config/index.js";
 
 interface RunOptions {
   message?: string;
@@ -101,17 +102,39 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       }
     }
 
-    // 设置环境变量到 process.env（供 ServerEnvironment 读取）
-    const model = args.model || baseEnv.LLM_MODEL || "";
-    const apiKey = baseEnv.LLM_API_KEY || "";
-    const baseURL = baseEnv.LLM_BASE_URL || "";
+    console.log("🚀 启动 tong_work 服务器...");
+    console.log("🔄 加载配置...");
+    
+    // 加载配置文件
+    let configModel: string | undefined;
+    let configApiKey: string | undefined;
+    let configBaseURL: string | undefined;
+    let configLoaded = false;
+    
+    try {
+      const rawConfig = await Config_get();
+      const config = await resolveConfig(rawConfig);
+      
+      if (config.defaultModel && config.apiKey) {
+        configModel = config.defaultModel;
+        configApiKey = config.apiKey;
+        configBaseURL = config.baseURL;
+        configLoaded = true;
+        console.log(`✅ 配置加载成功: ${config.defaultModel}`);
+      }
+    } catch (error) {
+      console.log("⚠️  配置文件加载失败:", error instanceof Error ? error.message : String(error));
+    }
+
+    // 优先级：命令行参数 > .env 文件 > 配置文件
+    const model = args.model || baseEnv.LLM_MODEL || configModel || "";
+    const apiKey = baseEnv.LLM_API_KEY || configApiKey || "";
+    const baseURL = baseEnv.LLM_BASE_URL || configBaseURL || "";
     const port = args.port;
     
     // Set environment variables for createLLMConfigFromEnv
     if (apiKey) process.env.LLM_API_KEY = apiKey;
     if (baseURL) process.env.LLM_BASE_URL = baseURL;
-
-    console.log("🚀 启动 tong_work 服务器...");
 
     // 创建环境（不依赖外部 bun）
     let env: ServerEnvironment | undefined;
@@ -131,6 +154,9 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       }
     } else {
       console.log("⚠️  未配置 LLM，Server 将以简化模式运行");
+      if (!configLoaded) {
+        console.log("   请配置 auth.json 或设置 LLM_MODEL/LLM_API_KEY");
+      }
     }
 
     // 创建服务器实例

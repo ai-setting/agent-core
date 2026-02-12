@@ -27,14 +27,18 @@ import {
   SessionUpdatedEvent,
   SessionDeletedEvent,
 } from "./eventbus/events/session.js";
+import { Config_get, resolveConfig } from "../config/index.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
+  /** Whether to load configuration from config files. Defaults to true. */
+  loadConfig?: boolean;
 }
 
 export class ServerEnvironment extends BaseEnvironment {
   private sessionId: string;
   private toolsRegistered: Promise<void>;
+  private configLoaded: Promise<void>;
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -50,10 +54,49 @@ export class ServerEnvironment extends BaseEnvironment {
     super(envConfig);
     this.sessionId = config?.sessionId || "default";
 
+    // Load config and initialize LLM if loadConfig is not explicitly false
+    if (config?.loadConfig !== false) {
+      this.configLoaded = this.loadConfigAndInitLLM();
+    } else {
+      this.configLoaded = Promise.resolve();
+    }
+
     this.toolsRegistered = this.registerDefaultTools();
   }
 
+  /**
+   * Load configuration from config files and initialize LLM
+   */
+  private async loadConfigAndInitLLM(): Promise<void> {
+    try {
+      console.log("[ServerEnvironment] Loading configuration...");
+      const rawConfig = await Config_get();
+      const config = await resolveConfig(rawConfig);
+      
+      console.log("[ServerEnvironment] Config loaded:", {
+        defaultModel: config.defaultModel,
+        hasApiKey: !!config.apiKey,
+        hasBaseURL: !!config.baseURL,
+      });
+
+      // If we have model config, initialize LLM with it
+      if (config.defaultModel && config.apiKey) {
+        const baseURL = config.baseURL || "https://api.openai.com/v1";
+        console.log(`[ServerEnvironment] Initializing LLM with model: ${config.defaultModel}`);
+        await this.configureLLMWithModel(config.defaultModel, baseURL, config.apiKey);
+        console.log("[ServerEnvironment] LLM initialized successfully");
+      } else {
+        console.log("[ServerEnvironment] No LLM configuration found, skipping LLM initialization");
+      }
+    } catch (error) {
+      console.error("[ServerEnvironment] Failed to load configuration:", error);
+      // Don't throw - allow environment to work without LLM config
+    }
+  }
+
   async waitForReady(): Promise<void> {
+    // Wait for configuration loading
+    await this.configLoaded;
     // Wait for base class LLM initialization
     await (this as any).ensureLLMInitialized?.();
     // Wait for tools registration
