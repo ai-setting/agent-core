@@ -327,7 +327,67 @@ export function ConnectDialog() {
     </box>
   );
 
-  const renderAddCustomView = () => (
+  const renderAddCustomView = () => {
+    let nameRef: any = null;
+    let baseURLRef: any = null;
+
+    const handleAdd = () => {
+      const name = nameRef?.value || nameRef?.plainText || "";
+      const baseURL = baseURLRef?.value || baseURLRef?.plainText || "";
+      
+      tuiLogger.info("[ConnectDialog] handleAdd from refs", { 
+        name, 
+        baseURL,
+        nameLength: name.length,
+        baseURLLength: baseURL.length 
+      });
+      
+      // 更新信号状态（用于显示等）
+      setCustomName(name);
+      setCustomBaseURL(baseURL);
+      
+      // 直接调用 add 逻辑
+      const trimmedName = name.trim();
+      const trimmedBaseURL = baseURL.trim();
+      
+      if (!trimmedName) {
+        setError("Provider name is required");
+        return;
+      }
+
+      const providerId = trimmedName.toLowerCase().replace(/\s+/g, "-");
+      
+      tuiLogger.info("[ConnectDialog] Adding custom provider from refs", { providerId, name: trimmedName, baseURL: trimmedBaseURL });
+
+      setIsLoading(true);
+      command.executeCommand(
+        "connect",
+        JSON.stringify({
+          type: "add",
+          providerId,
+          providerName: trimmedName,
+          baseURL: trimmedBaseURL || undefined,
+        })
+      ).then((result) => {
+        if (result.success) {
+          tuiLogger.info("[ConnectDialog] Custom provider added", { providerId });
+          loadProviders();
+          setState({ type: "list" });
+          setCustomName("");
+          setCustomBaseURL("");
+          setError(null);
+        } else {
+          setError(result.message || "Failed to add provider");
+        }
+      }).catch((err) => {
+        tuiLogger.error("[ConnectDialog] Failed to add provider", { error: String(err) });
+        setError("Failed to add provider");
+      }).finally(() => {
+        setIsLoading(false);
+      });
+    };
+
+    return (
     <box flexDirection="column" width="100%" height="100%" padding={2}>
       <text fg={theme.theme().foreground} marginBottom={1}>
         Add Custom Provider
@@ -338,6 +398,7 @@ export function ConnectDialog() {
           Provider Name:
         </text>
         <input
+          ref={(ref: any) => { nameRef = ref; }}
           value={customName()}
           onChange={(value: string) => {
             tuiLogger.info("[ConnectDialog] Provider name input changed", { valueLength: value?.length || 0, value });
@@ -346,8 +407,13 @@ export function ConnectDialog() {
           placeholder="e.g., My Custom Provider"
           focused={true}
           onKeyDown={(e: any) => {
-            if (handleInputKeyDown(e.name || e.key)) {
-              e.preventDefault();
+            const key = e.name || e.key;
+            if (key === "escape" || key === "Escape") {
+              setState({ type: "list" });
+              setCustomName("");
+              setCustomBaseURL("");
+            } else if (key === "return" || key === "Enter") {
+              handleAdd();
             }
           }}
         />
@@ -358,6 +424,7 @@ export function ConnectDialog() {
           Base URL (optional):
         </text>
         <input
+          ref={(ref: any) => { baseURLRef = ref; }}
           value={customBaseURL()}
           onChange={(value: string) => {
             tuiLogger.info("[ConnectDialog] Base URL input changed", { valueLength: value?.length || 0, value });
@@ -365,8 +432,13 @@ export function ConnectDialog() {
           }}
           placeholder="e.g., https://api.example.com/v1"
           onKeyDown={(e: any) => {
-            if (handleInputKeyDown(e.name || e.key)) {
-              e.preventDefault();
+            const key = e.name || e.key;
+            if (key === "escape" || key === "Escape") {
+              setState({ type: "list" });
+              setCustomName("");
+              setCustomBaseURL("");
+            } else if (key === "return" || key === "Enter") {
+              handleAdd();
             }
           }}
         />
@@ -383,6 +455,7 @@ export function ConnectDialog() {
       </box>
     </box>
   );
+  };
 
   const renderSetApiKeyView = () => {
     const currentState = state();
