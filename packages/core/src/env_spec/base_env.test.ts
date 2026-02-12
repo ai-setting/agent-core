@@ -10,7 +10,6 @@ class TestEnv extends BaseEnvironment {
     this.registerTool({
       name: "tool_a",
       description: "A test tool",
-      // @ts-expect-error 简化测试实现
       parameters: {} as any,
       async execute() {
         return { success: true, output: "ok" } as ToolResult;
@@ -19,7 +18,6 @@ class TestEnv extends BaseEnvironment {
     this.registerTool({
       name: "tool_b",
       description: "Another test tool",
-      // @ts-expect-error 简化测试实现
       parameters: {} as any,
       async execute() {
         return { success: true, output: "ok" } as ToolResult;

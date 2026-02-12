@@ -240,7 +240,7 @@ This is **bold** and \`code\`.`;
       type: "stream.start",
       messageId,
       sessionId: "test-session",
-      model: "gpt-4",
+      // model field removed - not part of StreamEvent type
     });
 
     simulator.queueEvent({

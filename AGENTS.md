@@ -6,10 +6,11 @@
 
 ## 0. 最高优先级（必须遵守）
 
-- **以 Environment 为中心**：能力与约束的注入（tools / mcp / skills / sub-agents / 事件 / 治理策略 / 可观测接口）优先落在 `Environment`（或其子类）层，而不是侵入 `Agent` 核心。
+- **以 Environment 为中心**：能力与约束的注入（tools / mcp / skills / sub-agents / 事件 / 治理策略 / 可观测接口 / 配置）优先落在 `Environment`（或其子类）层，而不是侵入 `Agent` 核心。
 - **先读设计，再写实现**：任何新增/调整抽象前，必须先阅读并对齐：
   - `docs/environment-design-philosophy.md`
   - `docs/DEVELOPMENT_PROGRESS.md`（看当前进度、缺口、下一阶段重点）
+  - `docs/config-design.md`（配置系统设计，配置相关开发必读）
 - **让路线图前进**：每次实现重要能力后，必须同步更新 `docs/DEVELOPMENT_PROGRESS.md`（能力矩阵状态、近期待办、里程碑）。
 
 ---
@@ -19,6 +20,7 @@
 - **Docs 入口**：`docs/README.md`
 - **设计理念**：`docs/environment-design-philosophy.md`
 - **进度与路线图**：`docs/DEVELOPMENT_PROGRESS.md`
+- **配置系统设计**：`docs/config-design.md`
 
 ---
 
@@ -29,6 +31,7 @@
 - **新增能力**（例：MCP、Skills、Sub-agents、日志/回放/审计接口）：优先新增/扩展 `Environment` 相关接口与实现，并明确事件/日志闭环。
 - **新增工具**：必须通过 `Environment` 的注册/执行入口，确保可统一治理（超时/并发/重试/审计/事件）。
 - **新增事件**：必须考虑 server SSE、TUI 消费、schema 兼容与版本化（这是当前路线图 M1 的重点）。
+- **配置相关变更**（新增配置字段、配置来源、状态持久化）：必须遵循 `docs/config-design.md` 的设计规范，优先落在 `packages/core/src/config/` 目录，通过 `ConfigSource` 抽象注册。
 
 ### 2.2 分层边界（强约束）
 
@@ -175,6 +178,7 @@ myLogger.info("Message");
 
 当你实现或显著推进以下任意一类能力，必须更新 `docs/DEVELOPMENT_PROGRESS.md`：
 
+- 配置系统（用户级配置、ConfigSource 抽象、状态持久化）
 - 事件 schema/version、可观测闭环（日志/回放/审计）
 - MCP 装配为工具
 - Skills 加载/注册/隔离

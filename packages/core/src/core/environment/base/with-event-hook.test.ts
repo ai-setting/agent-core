@@ -26,7 +26,7 @@ describe("withEventHook", () => {
 
   it("should invoke after hook with result and args", () => {
     let receivedSelf: any;
-    let receivedResult: number;
+    let receivedResult: number | undefined;
     let receivedArgs: number[] = [];
 
     const ctx = { id: "ctx-1" };

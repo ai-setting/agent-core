@@ -100,8 +100,8 @@ describe("Commands Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toHaveLength(1);
-      expect(body[0].name).toBe("echo");
-      expect(body[0].execute).toBeUndefined();
+      expect((body as any)[0].name).toBe("echo");
+      expect((body as any)[0].execute).toBeUndefined();
     });
 
     it("should return command info with all fields", async () => {
@@ -111,11 +111,11 @@ describe("Commands Routes", () => {
       const res = await app.fetch(req);
       const body = await res.json();
 
-      expect(body[0]).toHaveProperty("name");
-      expect(body[0]).toHaveProperty("displayName");
-      expect(body[0]).toHaveProperty("description");
-      expect(body[0]).toHaveProperty("hasArgs");
-      expect(body[0]).toHaveProperty("argsDescription");
+      expect((body as any)[0]).toHaveProperty("name");
+      expect((body as any)[0]).toHaveProperty("displayName");
+      expect((body as any)[0]).toHaveProperty("description");
+      expect((body as any)[0]).toHaveProperty("hasArgs");
+      expect((body as any)[0]).toHaveProperty("argsDescription");
     });
   });
 
@@ -133,8 +133,8 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.message).toBe("Echoed: hello world");
+      expect((body as any).success).toBe(true);
+      expect((body as any).message).toBe("Echoed: hello world");
     });
 
     it("should execute command with sessionId", async () => {
@@ -153,8 +153,8 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(body.data.sessionId).toBe("test-session-123");
+      expect((body as any).success).toBe(true);
+      expect((body as any).data.sessionId).toBe("test-session-123");
     });
 
     it("should return 404 for non-existent command", async () => {
@@ -168,7 +168,7 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toContain("not found");
+      expect((body as any).error).toContain("not found");
     });
 
     it("should return 503 when environment not configured", async () => {
@@ -201,7 +201,7 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect((body as any).success).toBe(true);
     });
 
     it("should handle command execution error", async () => {
@@ -224,8 +224,8 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.success).toBe(false);
-      expect(body.message).toContain("Test error");
+      expect((body as any).success).toBe(false);
+      expect((body as any).message).toContain("Test error");
     });
 
     it("should handle URL encoded command names", async () => {
@@ -246,7 +246,7 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect((body as any).success).toBe(true);
     });
 
     it("should handle special characters in args", async () => {
@@ -264,7 +264,7 @@ describe("Commands Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.message).toContain("special");
+      expect((body as any).message).toContain("special");
     });
   });
 
@@ -298,7 +298,7 @@ describe("Commands Routes", () => {
       });
       const execRes1 = await app.fetch(execReq1);
       const execBody1 = await execRes1.json();
-      expect(execBody1.data.id).toBe(1);
+      expect((execBody1 as any).data.id).toBe(1);
 
       // 执行第二个命令
       const execReq2 = new Request("http://localhost/commands/cmd2", {
@@ -308,7 +308,7 @@ describe("Commands Routes", () => {
       });
       const execRes2 = await app.fetch(execReq2);
       const execBody2 = await execRes2.json();
-      expect(execBody2.data.id).toBe(2);
+      expect((execBody2 as any).data.id).toBe(2);
     });
 
     it("should maintain state across requests", async () => {
@@ -332,7 +332,7 @@ describe("Commands Routes", () => {
       });
       const res1 = await app.fetch(req1);
       const body1 = await res1.json();
-      expect(body1.data.count).toBe(1);
+      expect((body1 as any).data.count).toBe(1);
 
       // 第二次调用
       const req2 = new Request("http://localhost/commands/counter", {
@@ -342,7 +342,7 @@ describe("Commands Routes", () => {
       });
       const res2 = await app.fetch(req2);
       const body2 = await res2.json();
-      expect(body2.data.count).toBe(2);
+      expect((body2 as any).data.count).toBe(2);
     });
   });
 });

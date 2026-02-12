@@ -71,7 +71,7 @@ export class ServerEnvironment extends BaseEnvironment {
       const todoTools = toolsModule.createTodoTools();
 
       // All tools are external - LLM capabilities are native to Environment
-      const allTools = [...todoTools];
+      const allTools = [...osTools, ...todoTools];
 
       for (const tool of allTools) {
         this.registerTool(tool);

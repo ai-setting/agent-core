@@ -29,9 +29,9 @@ async function runTests() {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const commands = await response.json();
+    const commands = await response.json() as Array<{ name: string; description: string }>;
     console.log(`[✓] 服务器连接成功，发现 ${commands.length} 个命令`);
-    commands.forEach((cmd: any) => {
+    commands.forEach((cmd) => {
       console.log(`    - /${cmd.name}: ${cmd.description}`);
     });
   } catch (error) {
@@ -49,7 +49,7 @@ async function runTests() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ args: "test from tui script" }),
     });
-    const result = await response.json();
+    const result = await response.json() as { success: boolean; message: string };
     if (result.success) {
       console.log(`[✓] 命令执行成功: ${result.message}`);
     } else {

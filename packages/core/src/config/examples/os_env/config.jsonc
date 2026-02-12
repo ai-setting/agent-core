@@ -1,0 +1,111 @@
+{
+  // ==================== Environment 标识 ====================
+  "id": "os_env",
+  "displayName": "OS Environment",
+  "description": "Operating system environment with bash, file, and system tools for local development and system administration tasks.",
+
+  // ==================== 模型配置 ====================
+  // 当此 Environment 被激活时使用的默认模型
+  // apiKey 使用 ${auth:provider-name} 格式引用 auth.json 中的配置
+  "defaultModel": "anthropic/claude-sonnet-4-5",
+  "baseURL": "https://api.anthropic.com",
+  "apiKey": "${auth:anthropic-claude}",
+
+  // ==================== Provider 配置 ====================
+  // 使用 ${auth:provider-name} 引用 auth.json 中的认证配置
+  "provider": {
+    "anthropic": {
+      "baseURL": "https://api.anthropic.com/v1",
+      "apiKey": "${auth:anthropic-claude}",
+      "defaultModel": "claude-sonnet-4-5"
+    },
+    "openai": {
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "${auth:openai-gpt}",
+      "defaultModel": "gpt-4o"
+    },
+    // 国内 Provider 示例
+    "zhipuai": {
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKey": "${auth:zhipuai-coding-plan}",
+      "defaultModel": "glm-4"
+    },
+    "moonshot": {
+      "baseURL": "https://api.moonshot.cn/v1",
+      "apiKey": "${auth:kimi-for-coding}",
+      "defaultModel": "moonshot-v1-128k"
+    }
+  },
+
+  // ==================== Environment 运行时配置 ====================
+  "environment": {
+    "id": "os_env",
+    "displayName": "OS Environment",
+    "description": "Operating system environment",
+    
+    // Environment 能力声明
+    "capabilities": {
+      "logs": true,        // 支持日志查询
+      "events": true,      // 支持事件订阅
+      "metrics": true,     // 支持指标采集
+      "profiles": true,    // 支持多 Profile
+      "mcpTools": false    // 暂不支持 MCP
+    },
+
+    // Environment Profiles - 定义不同的 Agent 组合
+    "profiles": [
+      {
+        "id": "default",
+        "displayName": "Default Profile",
+        "primaryAgents": [
+          {
+            "id": "os_agent",
+            "role": "primary",
+            "promptId": "system",
+            "allowedTools": ["bash", "file_read", "file_write", "file_glob", "grep"],
+            "metadata": {
+              "maxConcurrency": 5,
+              "description": "General OS operations agent"
+            }
+          }
+        ],
+        "subAgents": [
+          {
+            "id": "file_agent",
+            "role": "sub",
+            "promptId": "file_expert",
+            "allowedTools": ["file_read", "file_write", "file_glob", "grep", "glob"],
+            "metadata": {
+              "specialty": "file_operations"
+            }
+          }
+        ]
+      },
+      {
+        "id": "dev_mode",
+        "displayName": "Development Mode",
+        "primaryAgents": [
+          {
+            "id": "dev_agent",
+            "role": "primary",
+            "promptId": "developer",
+            "promptOverride": "You are a helpful development assistant. You can run tests, manage git, and help with code review.",
+            "allowedTools": ["bash", "file_read", "file_write", "git"],
+            "deniedTools": ["file_delete"],
+            "metadata": {
+              "safeMode": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+
+  // ==================== 元数据 ====================
+  "metadata": {
+    "version": "1.0.0",
+    "author": "tong_work",
+    "createdAt": "2026-02-12",
+    "tags": ["os", "system", "development"]
+  }
+}
