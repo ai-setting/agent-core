@@ -210,13 +210,19 @@ export function ConnectDialog() {
 
     setIsLoading(true);
     try {
+      const providerBaseURL = currentState.provider.baseURL;
+      tuiLogger.info("[ConnectDialog] Saving API key with baseURL", {
+        providerId: currentState.provider.id,
+        baseURL: providerBaseURL,
+      });
+
       const result = await command.executeCommand(
         "connect",
         JSON.stringify({
           type: "set_key",
           providerId: currentState.provider.id,
           apiKey: key,
-          baseURL: currentState.provider.baseURL,
+          baseURL: providerBaseURL,
         })
       );
 
@@ -365,9 +371,19 @@ export function ConnectDialog() {
     const provider = currentState.type === "set_api_key" ? currentState.provider : null;
     let inputRef: any = null;
 
+    tuiLogger.info("[ConnectDialog] Rendering set_api_key view", {
+      providerId: provider?.id,
+      providerName: provider?.name,
+      providerBaseURL: provider?.baseURL,
+      fullProvider: provider,
+    });
+
     const handleSave = () => {
       const value = inputRef?.value || inputRef?.plainText || "";
-      tuiLogger.info("[ConnectDialog] Getting API key from ref", { valueLength: value.length });
+      tuiLogger.info("[ConnectDialog] Getting API key from ref", {
+        valueLength: value.length,
+        providerBaseURL: provider?.baseURL,
+      });
       setApiKey(value);
       saveApiKey(value);
     };
