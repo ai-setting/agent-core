@@ -33,6 +33,8 @@ export {
   Auth_save,
   Auth_setProvider,
   Auth_removeProvider,
+  Auth_loadToEnv,
+  Auth_getEnvVarName,
 } from "./auth.js";
 export {
   resolveValue,

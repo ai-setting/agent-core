@@ -365,6 +365,26 @@ export function createLLMConfigFromEnv(model: string): InvokeLLMConfig | undefin
   };
 }
 
+/**
+ * Create LLM config from explicit parameters
+ * Used when configuration is loaded from config files
+ */
+export function createLLMConfig(
+  model: string,
+  baseURL: string,
+  apiKey: string
+): InvokeLLMConfig {
+  const parts = model.split("/");
+  const provider = parts[0] || "openai";
+  const modelId = parts.slice(1).join("/") || getProviderConfig(provider).defaultModel;
+
+  return {
+    model: modelId,
+    baseURL: baseURL || getProviderConfig(provider).baseURL || "",
+    apiKey,
+  };
+}
+
 // Legacy tool creators - kept for backward compatibility but not used internally
 export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
   return {

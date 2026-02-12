@@ -147,7 +147,16 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   protected async configureLLMWithModel(model: string, baseURL?: string, apiKey?: string): Promise<void> {
-    const { createLLMConfigFromEnv } = await import("./invoke-llm.js");
+    const { createLLMConfigFromEnv, createLLMConfig } = await import("./invoke-llm.js");
+    
+    // If baseURL and apiKey are provided, use them directly
+    if (baseURL && apiKey) {
+      const config = createLLMConfig(model, baseURL, apiKey);
+      this.configureLLM(config);
+      return;
+    }
+    
+    // Otherwise, try to load from environment variables
     const config = createLLMConfigFromEnv(model);
     if (config) {
       this.configureLLM(config);

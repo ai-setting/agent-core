@@ -3,6 +3,7 @@ import { globalSource } from "./sources/global.js";
 import { createFileSource } from "./sources/file.js";
 import { createInlineSource } from "./sources/inline.js";
 import { createEnvironmentSource } from "./sources/environment.js";
+import { Auth_loadToEnv } from "./auth.js";
 
 export function initDefaultSources(): void {
   configRegistry.clear();
@@ -10,6 +11,10 @@ export function initDefaultSources(): void {
 }
 
 export async function initWithEnvOverrides(): Promise<void> {
+  // 首先从 auth.json 加载 API key 到环境变量
+  // 这确保在加载配置时，${MOONSHOT_API_KEY} 等变量可以被正确解析
+  await Auth_loadToEnv();
+
   initDefaultSources();
 
   // 先加载 Global 配置以获取 activeEnvironment
