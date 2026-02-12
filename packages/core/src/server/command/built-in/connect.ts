@@ -217,5 +217,13 @@ async function getProvidersList(): Promise<ProviderInfo[]> {
       hasKey: true,
     } as ProviderInfo));
 
-  return [...providers, ...customProviders];
+  const allProviders = [...providers, ...customProviders];
+  console.log("[Connect] getProvidersList - returning:", {
+    builtinCount: providers.length,
+    customCount: customProviders.length,
+    totalCount: allProviders.length,
+    customProviderIds: customProviders.map(p => p.id)
+  });
+
+  return allProviders;
 }
