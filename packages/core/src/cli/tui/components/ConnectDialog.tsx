@@ -119,10 +119,8 @@ export function ConnectDialog() {
         return true;
       case "return":
       case "enter":
-        tuiLogger.info("[ConnectDialog] Enter pressed", { stateType: state().type });
-        if (state().type === "add_custom") {
-          addCustomProvider();
-        } else if (state().type === "set_api_key") {
+        tuiLogger.info("[ConnectDialog] Enter pressed in global handler", { stateType: state().type });
+        if (state().type === "set_api_key") {
           tuiLogger.info("[ConnectDialog] Calling saveApiKey");
           saveApiKey();
         }
