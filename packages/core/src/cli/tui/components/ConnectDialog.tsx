@@ -152,6 +152,13 @@ export function ConnectDialog() {
     const name = customName().trim();
     const baseURL = customBaseURL().trim();
 
+    tuiLogger.info("[ConnectDialog] addCustomProvider called", { 
+      name, 
+      baseURL,
+      nameLength: name.length,
+      baseURLLength: baseURL.length 
+    });
+
     if (!name) {
       setError("Provider name is required");
       return;
@@ -159,16 +166,21 @@ export function ConnectDialog() {
 
     const providerId = name.toLowerCase().replace(/\s+/g, "-");
 
+    tuiLogger.info("[ConnectDialog] Adding custom provider", { providerId, name, baseURL });
+
     setIsLoading(true);
     try {
+      const payload = {
+        type: "add",
+        providerId,
+        providerName: name,
+        baseURL: baseURL || undefined,
+      };
+      tuiLogger.info("[ConnectDialog] Sending add command", { payload });
+
       const result = await command.executeCommand(
         "connect",
-        JSON.stringify({
-          type: "add",
-          providerId,
-          providerName: name,
-          baseURL: baseURL || undefined,
-        })
+        JSON.stringify(payload)
       );
 
       if (result.success) {
@@ -327,7 +339,10 @@ export function ConnectDialog() {
         </text>
         <input
           value={customName()}
-          onChange={setCustomName}
+          onChange={(value: string) => {
+            tuiLogger.info("[ConnectDialog] Provider name input changed", { valueLength: value?.length || 0, value });
+            setCustomName(value || "");
+          }}
           placeholder="e.g., My Custom Provider"
           focused={true}
           onKeyDown={(e: any) => {
@@ -344,7 +359,10 @@ export function ConnectDialog() {
         </text>
         <input
           value={customBaseURL()}
-          onChange={setCustomBaseURL}
+          onChange={(value: string) => {
+            tuiLogger.info("[ConnectDialog] Base URL input changed", { valueLength: value?.length || 0, value });
+            setCustomBaseURL(value || "");
+          }}
           placeholder="e.g., https://api.example.com/v1"
           onKeyDown={(e: any) => {
             if (handleInputKeyDown(e.name || e.key)) {
