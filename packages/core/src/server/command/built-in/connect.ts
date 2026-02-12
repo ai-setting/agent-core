@@ -217,7 +217,11 @@ async function getProvidersList(): Promise<ProviderInfo[]> {
       hasKey: true,
     } as ProviderInfo));
 
-  const allProviders = [...providers, ...customProviders];
+  // Custom providers first, then built-in providers (except the "custom" option which stays at end)
+  const builtinWithoutCustom = providers.filter(p => p.id !== "custom");
+  const customOption = providers.find(p => p.id === "custom");
+  const allProviders = [...customProviders, ...builtinWithoutCustom, ...(customOption ? [customOption] : [])];
+  
   console.log("[Connect] getProvidersList - returning:", {
     builtinCount: providers.length,
     customCount: customProviders.length,
