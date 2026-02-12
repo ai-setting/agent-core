@@ -35,6 +35,7 @@ export function ConnectDialog() {
   const [filter, setFilter] = createSignal("");
   const [customName, setCustomName] = createSignal("");
   const [customBaseURL, setCustomBaseURL] = createSignal("");
+  const [customModels, setCustomModels] = createSignal("");
   const [apiKey, setApiKey] = createSignal("");
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -42,20 +43,31 @@ export function ConnectDialog() {
   // Refs for custom provider form - need to be at component level to be accessible by global handler
   let customNameRef: any = null;
   let customBaseURLRef: any = null;
+  let customModelsRef: any = null;
 
   const handleAddCustomProvider = () => {
     const name = customNameRef?.value || customNameRef?.plainText || "";
     const baseURL = customBaseURLRef?.value || customBaseURLRef?.plainText || "";
+    const modelsText = customModelsRef?.value || customModelsRef?.plainText || "";
+    
+    // Parse models (comma or newline separated)
+    const models = modelsText
+      .split(/[\n,]/)
+      .map((m: string) => m.trim())
+      .filter((m: string) => m.length > 0);
     
     tuiLogger.info("[ConnectDialog] handleAddCustomProvider from refs", { 
       name, 
       baseURL,
+      modelsCount: models.length,
+      models,
       nameLength: name.length,
       baseURLLength: baseURL.length 
     });
     
     setCustomName(name);
     setCustomBaseURL(baseURL);
+    setCustomModels(modelsText);
     
     const trimmedName = name.trim();
     const trimmedBaseURL = baseURL.trim();
@@ -67,7 +79,12 @@ export function ConnectDialog() {
 
     const providerId = trimmedName.toLowerCase().replace(/\s+/g, "-");
     
-    tuiLogger.info("[ConnectDialog] Adding custom provider from refs", { providerId, name: trimmedName, baseURL: trimmedBaseURL });
+    tuiLogger.info("[ConnectDialog] Adding custom provider from refs", { 
+      providerId, 
+      name: trimmedName, 
+      baseURL: trimmedBaseURL,
+      models 
+    });
 
     setIsLoading(true);
     command.executeCommand(
@@ -77,6 +94,8 @@ export function ConnectDialog() {
         providerId,
         providerName: trimmedName,
         baseURL: trimmedBaseURL || undefined,
+        models: models.length > 0 ? models : undefined,
+        description: `Custom provider ${trimmedName}`,
       })
     ).then((result) => {
       if (result.success) {
@@ -85,6 +104,7 @@ export function ConnectDialog() {
         setState({ type: "list" });
         setCustomName("");
         setCustomBaseURL("");
+        setCustomModels("");
         setError(null);
       } else {
         setError(result.message || "Failed to add provider");
@@ -441,6 +461,33 @@ export function ConnectDialog() {
               setState({ type: "list" });
               setCustomName("");
               setCustomBaseURL("");
+              setCustomModels("");
+            } else if (key === "return" || key === "Enter") {
+              handleAddCustomProvider();
+            }
+          }}
+        />
+      </box>
+
+      <box flexDirection="column" marginBottom={1}>
+        <text fg={theme.theme().muted} marginBottom={1}>
+          Models (optional, comma separated):
+        </text>
+        <input
+          ref={(ref: any) => { customModelsRef = ref; }}
+          value={customModels()}
+          onChange={(value: string) => {
+            tuiLogger.info("[ConnectDialog] Models input changed", { valueLength: value?.length || 0 });
+            setCustomModels(value || "");
+          }}
+          placeholder="e.g., gpt-4, gpt-3.5-turbo, claude-3"
+          onKeyDown={(e: any) => {
+            const key = e.name || e.key;
+            if (key === "escape" || key === "Escape") {
+              setState({ type: "list" });
+              setCustomName("");
+              setCustomBaseURL("");
+              setCustomModels("");
             } else if (key === "return" || key === "Enter") {
               handleAddCustomProvider();
             }

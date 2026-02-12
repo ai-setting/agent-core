@@ -2,6 +2,7 @@
  * @fileoverview Connect Command - Provider Connection Management
  *
  * Manages provider connections and API key configuration
+ * Stores provider metadata in providers.jsonc and API keys in auth.json
  */
 
 import type { Command, CommandContext, CommandResult } from "../types.js";
@@ -10,69 +11,15 @@ import {
   Auth_listProviders,
   Auth_setProvider,
   Auth_removeProvider,
-  Auth_getApiKey,
   Auth_getProvider,
 } from "../../../config/auth.js";
+import {
+  Providers_load,
+  Providers_save,
+  Providers_getAll,
+  type ProviderInfo,
+} from "../../../config/providers.js";
 import type { Config } from "../../../config/types.js";
-
-interface ProviderInfo {
-  id: string;
-  name: string;
-  description: string;
-  baseURL?: string;
-  hasKey: boolean;
-}
-
-const BUILTIN_PROVIDERS: ProviderInfo[] = [
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    description: "Claude models by Anthropic",
-    baseURL: "https://api.anthropic.com/v1",
-    hasKey: false,
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    description: "GPT models by OpenAI",
-    baseURL: "https://api.openai.com/v1",
-    hasKey: false,
-  },
-  {
-    id: "google",
-    name: "Google",
-    description: "Gemini models by Google",
-    baseURL: "https://generativelanguage.googleapis.com/v1",
-    hasKey: false,
-  },
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    description: "DeepSeek models",
-    baseURL: "https://api.deepseek.com/v1",
-    hasKey: false,
-  },
-  {
-    id: "zhipuai",
-    name: "ZhipuAI",
-    description: "GLM models by ZhipuAI",
-    baseURL: "https://open.bigmodel.cn/api/paas/v4",
-    hasKey: false,
-  },
-  {
-    id: "kimi",
-    name: "Kimi",
-    description: "Moonshot AI Kimi models",
-    baseURL: "https://api.moonshot.cn/v1",
-    hasKey: false,
-  },
-  {
-    id: "custom",
-    name: "Custom Provider",
-    description: "Add a custom LLM provider",
-    hasKey: false,
-  },
-];
 
 interface ConnectAction {
   type: "list" | "add" | "remove" | "set_key";
@@ -80,6 +27,8 @@ interface ConnectAction {
   providerName?: string;
   baseURL?: string;
   apiKey?: string;
+  models?: string[];
+  description?: string;
 }
 
 export const connectCommand: Command = {
@@ -103,22 +52,22 @@ export const connectCommand: Command = {
 
     switch (action.type) {
       case "list": {
-        const providers = await getProvidersList();
+        const providers = await Providers_getAll();
+        // Check which providers have API keys
+        const auth = await Auth_get();
+        const providersWithKeyStatus = providers.map((p) => ({
+          ...p,
+          hasKey: !!auth[p.id]?.key,
+        }));
+        
         return {
           success: true,
           message: "Retrieved providers list",
-          data: { providers },
+          data: { providers: providersWithKeyStatus },
         };
       }
 
       case "add": {
-        console.log("[Connect] Add action received:", { 
-          providerId: action.providerId, 
-          providerName: action.providerName,
-          baseURL: action.baseURL,
-          fullAction: action 
-        });
-        
         if (!action.providerId || !action.providerName) {
           return {
             success: false,
@@ -127,16 +76,26 @@ export const connectCommand: Command = {
           };
         }
 
-        const config = {
-          type: "api" as const,
-          key: action.apiKey || "",
+        // Save provider metadata to providers.jsonc
+        const providers = await Providers_load();
+        providers[action.providerId] = {
+          id: action.providerId,
+          name: action.providerName,
+          description: action.description || "Custom provider",
           baseURL: action.baseURL,
-          metadata: { displayName: action.providerName },
+          models: action.models,
         };
-        
-        console.log("[Connect] Saving provider config:", { providerId: action.providerId, config });
-        await Auth_setProvider(action.providerId, config);
-        console.log("[Connect] Provider saved successfully");
+        await Providers_save(providers);
+
+        // Save API key to auth.json if provided
+        if (action.apiKey) {
+          await Auth_setProvider(action.providerId, {
+            type: "api",
+            key: action.apiKey,
+            baseURL: action.baseURL,
+            metadata: { displayName: action.providerName },
+          });
+        }
 
         return {
           success: true,
@@ -154,6 +113,12 @@ export const connectCommand: Command = {
           };
         }
 
+        // Remove from providers.jsonc
+        const providers = await Providers_load();
+        delete providers[action.providerId];
+        await Providers_save(providers);
+
+        // Remove from auth.json
         await Auth_removeProvider(action.providerId);
 
         return {
@@ -172,12 +137,16 @@ export const connectCommand: Command = {
           };
         }
 
+        // Get existing provider info
+        const providers = await Providers_load();
+        const providerInfo = providers[action.providerId];
         const existing = await Auth_getProvider(action.providerId);
+        
         await Auth_setProvider(action.providerId, {
           type: "api",
           key: action.apiKey,
-          baseURL: action.baseURL || existing?.baseURL,
-          metadata: existing?.metadata,
+          baseURL: action.baseURL || providerInfo?.baseURL || existing?.baseURL,
+          metadata: existing?.metadata || { displayName: providerInfo?.name || action.providerId },
         });
 
         return {
@@ -196,38 +165,3 @@ export const connectCommand: Command = {
     }
   },
 };
-
-async function getProvidersList(): Promise<ProviderInfo[]> {
-  const auth = await Auth_get();
-  console.log("[Connect] getProvidersList - auth content:", JSON.stringify(auth, null, 2));
-  const configuredProviders = await Auth_listProviders();
-
-  const providers = BUILTIN_PROVIDERS.map((p) => ({
-    ...p,
-    hasKey: configuredProviders.includes(p.id) || auth[p.id] !== undefined,
-  }));
-
-  const customProviders = Object.entries(auth)
-    .filter(([id]) => !BUILTIN_PROVIDERS.find((p) => p.id === id))
-    .map(([id, config]) => ({
-      id,
-      name: (config as Config.Auth[string]).metadata?.displayName || id,
-      description: "Custom provider",
-      baseURL: (config as Config.Auth[string]).baseURL,
-      hasKey: true,
-    } as ProviderInfo));
-
-  // Custom providers first, then built-in providers (except the "custom" option which stays at end)
-  const builtinWithoutCustom = providers.filter(p => p.id !== "custom");
-  const customOption = providers.find(p => p.id === "custom");
-  const allProviders = [...customProviders, ...builtinWithoutCustom, ...(customOption ? [customOption] : [])];
-  
-  console.log("[Connect] getProvidersList - returning:", {
-    builtinCount: providers.length,
-    customCount: customProviders.length,
-    totalCount: allProviders.length,
-    customProviderIds: customProviders.map(p => p.id)
-  });
-
-  return allProviders;
-}
