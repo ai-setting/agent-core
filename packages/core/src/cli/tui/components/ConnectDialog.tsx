@@ -1,0 +1,459 @@
+/**
+ * @fileoverview ConnectDialog Component - Provider Connection Dialog
+ *
+ * Allows users to manage LLM provider connections and API keys
+ * - View configured providers
+ * - Add new providers
+ * - Set API keys
+ */
+
+import { createSignal, createMemo, For, Show, onMount } from "solid-js";
+import { useCommand, useDialog, useTheme } from "../contexts/index.js";
+import { tuiLogger } from "../logger.js";
+
+interface ProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  baseURL?: string;
+  hasKey: boolean;
+}
+
+type DialogState =
+  | { type: "list" }
+  | { type: "add_custom"; baseURL?: string }
+  | { type: "set_api_key"; provider: ProviderInfo };
+
+export function ConnectDialog() {
+  const command = useCommand();
+  const dialog = useDialog();
+  const theme = useTheme();
+
+  const [state, setState] = createSignal<DialogState>({ type: "list" });
+  const [providers, setProviders] = createSignal<ProviderInfo[]>([]);
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
+  const [filter, setFilter] = createSignal("");
+  const [customName, setCustomName] = createSignal("");
+  const [customBaseURL, setCustomBaseURL] = createSignal("");
+  const [apiKey, setApiKey] = createSignal("");
+  const [isLoading, setIsLoading] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const loadProviders = async () => {
+    setIsLoading(true);
+    try {
+      const result = await command.executeCommand("connect", JSON.stringify({ type: "list" }));
+      if (result.success && result.data && typeof result.data === "object" && "providers" in result.data) {
+        setProviders((result.data as { providers: ProviderInfo[] }).providers);
+        tuiLogger.info("[ConnectDialog] Loaded providers", { count: providers().length });
+      }
+    } catch (err) {
+      tuiLogger.error("[ConnectDialog] Failed to load providers", { error: String(err) });
+      setError("Failed to load providers");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  onMount(() => {
+    tuiLogger.info("[ConnectDialog] Mounting, loading providers");
+    loadProviders();
+  });
+
+  const filteredProviders = createMemo(() => {
+    const f = filter().toLowerCase().trim();
+    const list = providers();
+    if (!f) return list;
+    return list.filter(
+      (p) =>
+        p.name.toLowerCase().includes(f) ||
+        p.description.toLowerCase().includes(f) ||
+        p.id.toLowerCase().includes(f)
+    );
+  });
+
+  const moveSelection = (direction: -1 | 1) => {
+    const list = filteredProviders();
+    if (list.length === 0) return;
+
+    let next = selectedIndex() + direction;
+    if (next < 0) next = list.length - 1;
+    if (next >= list.length) next = 0;
+
+    setSelectedIndex(next);
+  };
+
+  const handleListKeyDown = (key: string): boolean => {
+    switch (key.toLowerCase()) {
+      case "up":
+      case "arrowup":
+        moveSelection(-1);
+        return true;
+      case "down":
+      case "arrowdown":
+        moveSelection(1);
+        return true;
+      case "return":
+      case "enter":
+        selectProvider();
+        return true;
+      case "escape":
+        dialog.pop();
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const handleInputKeyDown = (key: string): boolean => {
+    switch (key.toLowerCase()) {
+      case "escape":
+        if (state().type === "add_custom") {
+          setState({ type: "list" });
+          setCustomName("");
+          setCustomBaseURL("");
+        } else if (state().type === "set_api_key") {
+          setState({ type: "list" });
+          setApiKey("");
+        }
+        return true;
+      case "return":
+      case "enter":
+        tuiLogger.info("[ConnectDialog] Enter pressed", { stateType: state().type });
+        if (state().type === "add_custom") {
+          addCustomProvider();
+        } else if (state().type === "set_api_key") {
+          tuiLogger.info("[ConnectDialog] Calling saveApiKey");
+          saveApiKey();
+        }
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const selectProvider = async () => {
+    const list = filteredProviders();
+    if (list.length === 0) return;
+
+    const selected = list[selectedIndex()];
+    if (!selected) return;
+
+    if (selected.id === "custom") {
+      setState({ type: "add_custom" });
+      setSelectedIndex(0);
+    } else {
+      setState({ type: "set_api_key", provider: selected });
+      setSelectedIndex(0);
+    }
+  };
+
+  const addCustomProvider = async () => {
+    const name = customName().trim();
+    const baseURL = customBaseURL().trim();
+
+    if (!name) {
+      setError("Provider name is required");
+      return;
+    }
+
+    const providerId = name.toLowerCase().replace(/\s+/g, "-");
+
+    setIsLoading(true);
+    try {
+      const result = await command.executeCommand(
+        "connect",
+        JSON.stringify({
+          type: "add",
+          providerId,
+          providerName: name,
+          baseURL: baseURL || undefined,
+        })
+      );
+
+      if (result.success) {
+        tuiLogger.info("[ConnectDialog] Custom provider added", { providerId });
+        await loadProviders();
+        setState({ type: "list" });
+        setCustomName("");
+        setCustomBaseURL("");
+        setError(null);
+      } else {
+        setError(result.message || "Failed to add provider");
+      }
+    } catch (err) {
+      tuiLogger.error("[ConnectDialog] Failed to add provider", { error: String(err) });
+      setError("Failed to add provider");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveApiKey = async (keyValue?: string) => {
+    const key = (keyValue || apiKey()).trim();
+    const currentState = state();
+
+    tuiLogger.info("[ConnectDialog] saveApiKey called", { 
+      keyLength: key.length,
+      hasKey: !!key,
+      stateType: currentState.type,
+      fromParam: !!keyValue
+    });
+
+    if (currentState.type !== "set_api_key") return;
+
+    if (!key) {
+      tuiLogger.warn("[ConnectDialog] API key is empty");
+      setError("API key is required");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await command.executeCommand(
+        "connect",
+        JSON.stringify({
+          type: "set_key",
+          providerId: currentState.provider.id,
+          apiKey: key,
+          baseURL: currentState.provider.baseURL,
+        })
+      );
+
+      if (result.success) {
+        tuiLogger.info("[ConnectDialog] API key saved", { providerId: currentState.provider.id });
+        await loadProviders();
+        setState({ type: "list" });
+        setApiKey("");
+        setError(null);
+      } else {
+        setError(result.message || "Failed to save API key");
+      }
+    } catch (err) {
+      tuiLogger.error("[ConnectDialog] Failed to save API key", { error: String(err) });
+      setError("Failed to save API key");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const renderListView = () => (
+    <box flexDirection="column" width="100%" height="100%" padding={1}>
+      <box flexDirection="row" height={1} marginBottom={1}>
+        <text fg={theme.theme().primary}>&gt; </text>
+        <input
+          flexGrow={1}
+          value={filter()}
+          onChange={setFilter}
+          placeholder="Search providers..."
+          focused={true}
+          onKeyDown={(e: any) => {
+            if (handleListKeyDown(e.name || e.key)) {
+              e.preventDefault();
+            }
+          }}
+        />
+      </box>
+
+      <box height={1} borderStyle="single" borderColor={theme.theme().border} />
+
+      <box flexGrow={1} flexDirection="column" overflow="scroll" marginTop={1}>
+        <Show when={!isLoading()} fallback={<text fg={theme.theme().muted}>Loading...</text>}>
+          <Show when={filteredProviders().length > 0} fallback={<text fg={theme.theme().muted}>No providers found</text>}>
+            <For each={filteredProviders()}>
+              {(provider, index) => {
+                const isSelected = () => index() === selectedIndex();
+                const displayIndex = filteredProviders().indexOf(provider);
+
+                return (
+                  <box
+                    flexDirection="row"
+                    alignItems="center"
+                    paddingLeft={2}
+                    paddingRight={1}
+                    height={1}
+                    backgroundColor={isSelected() ? theme.theme().primary : undefined}
+                  >
+                    <text
+                      fg={isSelected() ? theme.theme().background : theme.theme().primary}
+                    >
+                      {provider.name}
+                    </text>
+                    <Show when={provider.hasKey}>
+                      <text
+                        fg={isSelected() ? theme.theme().background : theme.theme().success}
+                        marginLeft={1}
+                      >
+                        [Configured]
+                      </text>
+                    </Show>
+                    <box flexGrow={1} />
+                    <text
+                      fg={isSelected() ? theme.theme().background : theme.theme().muted}
+                    >
+                      {provider.description}
+                    </text>
+                  </box>
+                );
+              }}
+            </For>
+          </Show>
+        </Show>
+      </box>
+
+      <box flexDirection="row" height={1} marginTop={1}>
+        <text fg={theme.theme().muted}>
+          ↑↓ navigate • Enter select • Esc close • {filteredProviders().length} providers
+        </text>
+      </box>
+    </box>
+  );
+
+  const renderAddCustomView = () => (
+    <box flexDirection="column" width="100%" height="100%" padding={2}>
+      <text fg={theme.theme().foreground} marginBottom={1}>
+        Add Custom Provider
+      </text>
+
+      <box flexDirection="column" marginBottom={1}>
+        <text fg={theme.theme().muted} marginBottom={1}>
+          Provider Name:
+        </text>
+        <input
+          value={customName()}
+          onChange={setCustomName}
+          placeholder="e.g., My Custom Provider"
+          focused={true}
+          onKeyDown={(e: any) => {
+            if (handleInputKeyDown(e.name || e.key)) {
+              e.preventDefault();
+            }
+          }}
+        />
+      </box>
+
+      <box flexDirection="column" marginBottom={1}>
+        <text fg={theme.theme().muted} marginBottom={1}>
+          Base URL (optional):
+        </text>
+        <input
+          value={customBaseURL()}
+          onChange={setCustomBaseURL}
+          placeholder="e.g., https://api.example.com/v1"
+          onKeyDown={(e: any) => {
+            if (handleInputKeyDown(e.name || e.key)) {
+              e.preventDefault();
+            }
+          }}
+        />
+      </box>
+
+      <Show when={error()}>
+        <text fg={theme.theme().error} marginTop={1}>
+          {error()}
+        </text>
+      </Show>
+
+      <box flexDirection="row" height={1} marginTop={2}>
+        <text fg={theme.theme().muted}>Enter save • Esc cancel</text>
+      </box>
+    </box>
+  );
+
+  const renderSetApiKeyView = () => {
+    const currentState = state();
+    const provider = currentState.type === "set_api_key" ? currentState.provider : null;
+    let inputRef: any = null;
+
+    const handleSave = () => {
+      const value = inputRef?.value || inputRef?.plainText || "";
+      tuiLogger.info("[ConnectDialog] Getting API key from ref", { valueLength: value.length });
+      setApiKey(value);
+      saveApiKey(value);
+    };
+
+    return (
+      <box flexDirection="column" width="100%" height="100%" padding={2}>
+        <text fg={theme.theme().foreground} marginBottom={1}>
+          Set API Key for {provider?.name}
+        </text>
+
+        <Show when={provider?.baseURL}>
+          <text fg={theme.theme().muted} marginBottom={1}>
+            Base URL: {provider?.baseURL}
+          </text>
+        </Show>
+
+        <box flexDirection="column" marginBottom={1}>
+          <text fg={theme.theme().muted} marginBottom={1}>
+            API Key:
+          </text>
+          <input
+            ref={(ref: any) => {
+              inputRef = ref;
+              tuiLogger.info("[ConnectDialog] Input ref set", { hasRef: !!ref });
+            }}
+            value={apiKey()}
+            onChange={(value: string) => {
+              tuiLogger.info("[ConnectDialog] API Key input changed", { valueLength: value?.length || 0 });
+              setApiKey(value || "");
+            }}
+            placeholder="Enter your API key"
+            focused={true}
+            onKeyDown={(e: any) => {
+              const key = e.name || e.key;
+              tuiLogger.info("[ConnectDialog] Input onKeyDown", { key });
+              if (key === "escape" || key === "Escape") {
+                setState({ type: "list" });
+                setApiKey("");
+              } else if (key === "return" || key === "Enter") {
+                handleSave();
+              }
+            }}
+          />
+        </box>
+
+        <Show when={error()}>
+          <text fg={theme.theme().error} marginTop={1}>
+            {error()}
+          </text>
+        </Show>
+
+        <box flexDirection="row" height={1} marginTop={2}>
+          <text fg={theme.theme().muted}>Enter save • Esc cancel</text>
+        </box>
+      </box>
+    );
+  };
+
+  const currentView = () => {
+    const s = state();
+    switch (s.type) {
+      case "list":
+        return renderListView();
+      case "add_custom":
+        return renderAddCustomView();
+      case "set_api_key":
+        return renderSetApiKeyView();
+    }
+  };
+
+  return (
+    <box flexDirection="column" width="100%" height="100%">
+      <box
+        flexDirection="row"
+        alignItems="center"
+        height={1}
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={theme.theme().border}
+      >
+        <text fg={theme.theme().foreground}>Connect</text>
+        <box flexGrow={1} />
+        <text fg={theme.theme().muted}>Esc to close</text>
+      </box>
+
+      {currentView()}
+    </box>
+  );
+}
