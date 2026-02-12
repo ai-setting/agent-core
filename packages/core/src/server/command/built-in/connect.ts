@@ -165,7 +165,7 @@ export const connectCommand: Command = {
         await Auth_setProvider(action.providerId, {
           type: "api",
           key: action.apiKey,
-          baseURL: action.baseURL,
+          baseURL: action.baseURL || existing?.baseURL,
           metadata: existing?.metadata,
         });
 
