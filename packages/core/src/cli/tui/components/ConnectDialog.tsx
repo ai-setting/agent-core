@@ -102,8 +102,13 @@ export function ConnectDialog() {
     try {
       const result = await command.executeCommand("connect", JSON.stringify({ type: "list" }));
       if (result.success && result.data && typeof result.data === "object" && "providers" in result.data) {
-        setProviders((result.data as { providers: ProviderInfo[] }).providers);
-        tuiLogger.info("[ConnectDialog] Loaded providers", { count: providers().length });
+        const loadedProviders = (result.data as { providers: ProviderInfo[] }).providers;
+        setProviders(loadedProviders);
+        tuiLogger.info("[ConnectDialog] Loaded providers", { 
+          count: loadedProviders.length,
+          providerIds: loadedProviders.map(p => p.id),
+          customProviders: loadedProviders.filter(p => !p.description?.includes("built-in")).map(p => ({ id: p.id, name: p.name }))
+        });
       }
     } catch (err) {
       tuiLogger.error("[ConnectDialog] Failed to load providers", { error: String(err) });
