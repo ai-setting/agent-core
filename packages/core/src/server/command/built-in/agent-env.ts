@@ -220,8 +220,31 @@ async function handleSelectAction(
       "utf-8"
     );
 
+    // If ServerEnvironment supports switchEnvironment, use it for hot reload
+    // This is the preferred way as it updates both config registry and LLM config
+    if (context.env && "switchEnvironment" in context.env) {
+      try {
+        const switched = await (context.env as any).switchEnvironment(action.envName);
+        if (switched) {
+          return {
+            success: true,
+            message: `Switched to environment: ${action.envName}`,
+            data: {
+              environment: action.envName,
+              reloaded: true,
+            },
+          };
+        }
+      } catch (error) {
+        console.warn("[AgentEnvCommand] switchEnvironment failed:", error);
+      }
+    }
+    
+    // Fallback: manually update config registry and reload
+    // This happens when ServerEnvironment is not available (e.g., in tests)
+    console.log("[AgentEnvCommand] Using fallback: manually updating config registry");
+    
     // Update config registry: remove old environment sources and add new one
-    // First, find and unregister any existing environment sources
     const sources = configRegistry.getSources();
     for (const source of sources) {
       if (source.name.startsWith("environment:")) {
@@ -237,15 +260,6 @@ async function handleSelectAction(
 
     // Reload configuration
     await Config_reload();
-
-    // If environment supports switchEnvironment, call it
-    if (context.env && "switchEnvironment" in context.env) {
-      try {
-        await (context.env as any).switchEnvironment(action.envName);
-      } catch (error) {
-        console.warn("[AgentEnvCommand] switchEnvironment failed:", error);
-      }
-    }
 
     return {
       success: true,
