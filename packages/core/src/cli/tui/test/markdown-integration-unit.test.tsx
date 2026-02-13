@@ -188,7 +188,7 @@ describe("Markdown 渲染集成测试", () => {
 
         if (style && rawSyntaxStyleRef) {
           try {
-            rawSyntaxStyleRef.getStyle("markup.strong");
+            (rawSyntaxStyleRef as any).getStyle("markup.strong");
           } catch (e) {
             allUpdatesValid = false;
           }

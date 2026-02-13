@@ -96,16 +96,9 @@ export class Agent {
   ) {
     this.config = { ...DEFAULT_CONFIG, ...configOverrides };
     this._history = history ?? [];
-    // Filter out internal tools to prevent recursion
-    console.log(`[Agent] Initial tools: ${tools.map(t => t.name).join(", ")}`);
-    this.tools = tools.filter((t: import("../types").Tool) => {
-      const isInternal = t.name === "invoke_llm" || t.name === "system1_intuitive_reasoning";
-      if (isInternal) {
-        console.log(`[Agent] Filtering out internal tool: ${t.name}`);
-      }
-      return !isInternal;
-    });
-    console.log(`[Agent] Filtered tools: ${this.tools.map(t => t.name).join(", ")}`);
+    // All tools are now external - LLM capabilities are native to Environment
+    this.tools = tools;
+    console.log(`[Agent] Registered tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
   }
 
   async run(): Promise<string> {
@@ -168,14 +161,10 @@ export class Agent {
   private async executeIteration(messages: Message[]): Promise<string | null> {
     console.log(`[Agent] executeIteration - Available tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
     
-    const llmResult = await this.env.handle_action(
-      {
-        tool_name: "invoke_llm",
-        args: { 
-          messages,
-          tools: this.tools.length > 0 ? this.tools : undefined,
-        },
-      },
+    // Use native LLM capability instead of tool invocation
+    const llmResult = await this.env.invokeLLM(
+      messages,
+      this.tools.length > 0 ? this.tools : undefined,
       this.context
     );
 

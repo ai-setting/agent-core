@@ -271,8 +271,8 @@ describe("Bash Tool - Tool Integration", () => {
 
   test("should have proper parameter schema", () => {
     const tool = createBashTool();
-    expect(tool.parameters.shape).toBeDefined();
-    expect(tool.parameters.shape.command).toBeDefined();
+    expect((tool.parameters as any).shape).toBeDefined();
+    expect((tool.parameters as any).shape.command).toBeDefined();
   });
 
   test("should execute via tool interface", async () => {

@@ -131,7 +131,7 @@ describe("Markdown 语法高亮失效问题复现", () => {
       console.log("\n方案 2 - 使用 rawSyntaxStyleRef:");
       console.log("  - rawStyle === memoValue:", rawStyle === memoValue);
       console.log("  - 类型:", typeof rawStyle);
-      console.log("  - has getStyle:", typeof rawStyle.getStyle === "function");
+      console.log("  - has getStyle:", typeof (rawStyle as any).getStyle === "function");
 
       // 关键测试：在 SolidJS 的响应式上下文中传递
       console.log("\n关键测试: 模拟传递给 <markdown> 组件");

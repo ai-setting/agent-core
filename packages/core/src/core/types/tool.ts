@@ -4,6 +4,7 @@ export interface ToolContext {
   workdir?: string;
   user_id?: string;
   session_id?: string;
+  message_id?: string;
   abort?: AbortSignal;
   metadata?: Record<string, unknown>;
 }

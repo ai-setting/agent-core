@@ -1,0 +1,87 @@
+{
+  // ==================== Anthropic Models ====================
+  "claude-sonnet": {
+    "provider": "anthropic",
+    "modelId": "claude-sonnet-4-5",
+    "displayName": "Claude Sonnet 4.5",
+    "capabilities": [
+      "code",
+      "analysis",
+      "writing",
+      "math",
+      "reasoning"
+    ]
+  },
+  "claude-opus": {
+    "provider": "anthropic",
+    "modelId": "claude-opus-4",
+    "displayName": "Claude Opus 4",
+    "capabilities": [
+      "code",
+      "analysis",
+      "writing",
+      "math",
+      "reasoning",
+      "complex_tasks"
+    ]
+  },
+  "claude-haiku": {
+    "provider": "anthropic",
+    "modelId": "claude-haiku-3",
+    "displayName": "Claude Haiku 3",
+    "capabilities": [
+      "quick_response",
+      "simple_tasks",
+      "chat"
+    ]
+  },
+
+  // ==================== OpenAI Models ====================
+  "gpt-4o": {
+    "provider": "openai",
+    "modelId": "gpt-4o",
+    "displayName": "GPT-4o",
+    "capabilities": [
+      "vision",
+      "code",
+      "analysis",
+      "writing",
+      "math",
+      "reasoning"
+    ]
+  },
+  "gpt-4o-mini": {
+    "provider": "openai",
+    "modelId": "gpt-4o-mini",
+    "displayName": "GPT-4o Mini",
+    "capabilities": [
+      "vision",
+      "code",
+      "analysis",
+      "quick_tasks"
+    ]
+  },
+  "o1-preview": {
+    "provider": "openai",
+    "modelId": "o1-preview",
+    "displayName": "o1 Preview",
+    "capabilities": [
+      "reasoning",
+      "math",
+      "science",
+      "complex_problem_solving"
+    ]
+  },
+
+  // ==================== Local Models ====================
+  "local-llama": {
+    "provider": "ollama",
+    "modelId": "llama3.2",
+    "displayName": "Llama 3.2 (Local)",
+    "capabilities": [
+      "code",
+      "chat",
+      "local_inference"
+    ]
+  }
+}

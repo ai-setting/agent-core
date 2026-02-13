@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import eventsRoute from "./routes/events.js";
 import sessionsRoute from "./routes/sessions.js";
+import commandsRoute from "./routes/commands.js";
 import type { ServerEnvironment } from "./environment.js";
 
 type Variables = {
@@ -52,8 +53,15 @@ export class AgentServer {
     // Logger
     this.app.use(logger());
 
-    // Set environment in context
+    // Set environment in context for routes that need it
     this.app.use("/sessions/*", async (c, next) => {
+      if (this.env) {
+        c.set("env", this.env);
+      }
+      await next();
+    });
+
+    this.app.use("/commands/*", async (c, next) => {
       if (this.env) {
         c.set("env", this.env);
       }
@@ -76,6 +84,9 @@ export class AgentServer {
 
     // Sessions API
     this.app.route("/sessions", sessionsRoute);
+
+    // Commands API
+    this.app.route("/commands", commandsRoute);
 
     // 404 handler
     this.app.notFound((c) => {

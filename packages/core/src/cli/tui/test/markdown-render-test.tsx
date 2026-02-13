@@ -2,11 +2,11 @@
  * @fileoverview 直接在 TUI 中测试 Markdown 渲染
  * 
  * 运行方式：
- * bun run --conditions=browser --preload ./node_modules/@opentui/solid/scripts/preload.ts ./src/cli/tui/test/markdown-render-test.tsx
+ * bun run --conditions=browser --preload ./node_modules/@opentui/solid/scripts/preload.ts ./src/cli/tui/test/markdown-render-test.ts
  */
 
 import { SyntaxStyle, resolveRenderLib } from "@opentui/core";
-import { createSignal, createMemo } from "solid-js";
+import { createSignal, createMemo, Show } from "solid-js";
 
 console.log("\n========== Markdown 渲染测试 ==========\n");
 
@@ -69,17 +69,42 @@ console.log("  - memoValue:", memoValue !== null ? "有效" : "null");
 console.log("  - rawSyntaxStyleRef:", rawSyntaxStyleRef !== null ? "有效" : "null");
 console.log("  - memoValue === rawSyntaxStyleRef:", memoValue === rawSyntaxStyleRef);
 
-// 测试直接访问
+// 关键测试：模拟 Show 回调
 if (memoValue) {
-  console.log("\n直接访问测试:");
-  console.log("  - memoValue.getStyle:", typeof memoValue.getStyle);
+  console.log("\n模拟 Show 组件回调:");
   
-  try {
-    const result = memoValue.getStyle("default");
-    console.log("  - ✓ 直接调用成功");
-  } catch (e) {
-    console.error("  - ✗ 直接调用失败:", (e as Error).message);
-  }
+  // 创建测试组件
+  const TestComponent = () => {
+    return (
+      <Show when={validSyntaxStyle()}>
+        {(style: SyntaxStyle) => {
+          // 这就是 MessageList.tsx 第 113-144 行的逻辑
+          const rawStyle = rawSyntaxStyleRef || style;
+
+          console.log("Show 回调接收:");
+          console.log("  - style 类型:", typeof style);
+          console.log("  - style 构造函数:", style?.constructor?.name);
+          console.log("  - style has getStyle:", typeof style?.getStyle === "function");
+          console.log("  - rawStyle === style:", rawStyle === style);
+          console.log("  - rawStyle has getStyle:", typeof rawStyle?.getStyle === "function");
+
+          // 尝试调用 getStyle - 这里可能会失败！
+          try {
+            const result = style.getStyle("markup.strong");
+            console.log("  - ✓ style.getStyle 调用成功");
+            return { success: true, result };
+          } catch (e) {
+            console.error("  - ✗ style.getStyle 调用失败:", (e as Error).message);
+            return { success: false, error: (e as Error).message };
+          }
+        }}
+      </Show>
+    );
+  };
+
+  console.log("\n测试组件已创建");
+  console.log("注意：在真实 TUI 中，这个组件会被渲染");
+  console.log("如果渲染时出现 'getStyle is not a function'，则说明问题存在");
 }
 
 // 测试流式更新场景
@@ -121,7 +146,7 @@ if (hasError) {
   console.log("\n说明：");
   console.log("  - 当前环境可能无法完全复现 TUI 运行时的问题");
   console.log("  - 问题可能只在实际渲染 <markdown> 组件时出现");
-  console.log("  - 需要在实际 TUI 消息渲染时观察问题");
+  console.log("  - 建议查看实际 TUI 运行时的错误日志");
 }
 
 console.log("\n==============================\n");
