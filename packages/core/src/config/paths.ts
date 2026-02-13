@@ -24,9 +24,9 @@ function getHome(): string {
 }
 
 function getXdgPaths(home: string) {
-  // When test home is overridden, use simple fallback paths
+  // When test home is overridden (via either method), use simple fallback paths
   // Otherwise use xdg-basedir if available
-  if (_testHomeOverride) {
+  if (_testHomeOverride || process.env.AGENT_CORE_TEST_HOME) {
     return {
       config: path.join(home, ".config"),
       state: path.join(home, ".local", "state"),
