@@ -21,6 +21,16 @@
 - **设计理念**：`docs/environment-design-philosophy.md`
 - **进度与路线图**：`docs/DEVELOPMENT_PROGRESS.md`
 - **配置系统设计**：`docs/config-design.md`
+- **Command 开发规范**：`.opencode/skills/command-development/SKILL.md`
+
+### 1.1 Command 设计文档参考
+
+开发新 Command 时，参考以下设计文档：
+
+| Command | 设计文档 | 实现文档 |
+|---------|----------|----------|
+| models | `docs/models-command-design.md` | `docs/opencode-model-command-implement.md` |
+| agent-env | `docs/agent-env-command-design.md` | `docs/opencode-agent-env-command-implement.md` |
 
 ---
 
