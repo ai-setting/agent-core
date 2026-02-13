@@ -7,6 +7,15 @@ class ConfigSourceRegistryImpl implements ConfigSourceRegistry {
     this.sources.push(source);
   }
 
+  unregister(name: string): boolean {
+    const index = this.sources.findIndex(s => s.name === name);
+    if (index !== -1) {
+      this.sources.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
   clear(): void {
     this.sources.length = 0;
   }
