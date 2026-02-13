@@ -31,6 +31,7 @@ import { Config_get, resolveConfig } from "../config/index.js";
 import { ModelStore } from "../config/state/model-store.js";
 import { Providers_getAll, type ProviderInfo } from "../config/providers.js";
 import { Auth_getProvider } from "../config/auth.js";
+import { ModelsConfig_getAll, type ModelEntry } from "../config/models-config.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -160,7 +161,10 @@ export class ServerEnvironment extends BaseEnvironment {
 
   /**
    * Select model with fallback chain
-   * Priority: current > config > recent > provider default
+   * Priority: recent > config > provider default
+   * 
+   * Note: Recent models (user's last selection) take highest priority,
+   * followed by config defaults, then provider defaults.
    */
   private async selectModelWithFallback(
     currentSelection: { providerID: string; modelID: string } | null,
@@ -168,28 +172,26 @@ export class ServerEnvironment extends BaseEnvironment {
     recent: Array<{ providerID: string; modelID: string }>,
     providers: ProviderInfo[]
   ): Promise<{ providerID: string; modelID: string } | null> {
-    // 1. Check current session selection (highest priority)
-    if (currentSelection && (await this.isModelValid(currentSelection, providers))) {
-      return currentSelection;
-    }
-
-    // 2. Check config default model
-    if (configModel && (await this.isModelValid(configModel, providers))) {
-      return configModel;
-    }
-
-    // 3. Check ModelStore recent list
+    // 1. Check ModelStore recent list (highest priority - user's last selection)
     for (const entry of recent) {
       if (await this.isModelValid(entry, providers)) {
+        console.log(`[ServerEnvironment] Using recent model: ${entry.providerID}/${entry.modelID}`);
         return entry;
       }
     }
 
-    // 4. Use first available provider's default model
+    // 2. Check config default model
+    if (configModel && (await this.isModelValid(configModel, providers))) {
+      console.log(`[ServerEnvironment] Using config default model: ${configModel.providerID}/${configModel.modelID}`);
+      return configModel;
+    }
+
+    // 3. Use first available provider's default model
     for (const provider of providers) {
       if (provider.models && provider.models.length > 0) {
         // Use defaultModel or first model
         const defaultModel = provider.defaultModel || provider.models[0];
+        console.log(`[ServerEnvironment] Using provider default model: ${provider.id}/${defaultModel}`);
         return {
           providerID: provider.id,
           modelID: defaultModel,
@@ -202,22 +204,34 @@ export class ServerEnvironment extends BaseEnvironment {
 
   /**
    * Validate if model is valid
+   * Checks: 1) Config models, 2) Provider models, 3) Provider defaultModel
    */
   private async isModelValid(
     model: { providerID: string; modelID: string },
     providers: ProviderInfo[]
   ): Promise<boolean> {
-    const provider = providers.find((p) => p.id === model.providerID);
-    if (!provider) return false;
-
-    // Check if model is in provider's model list
-    if (provider.models && provider.models.includes(model.modelID)) {
-      return true;
+    // 1. Check config models first (from models.jsonc)
+    const configModels = await ModelsConfig_getAll();
+    for (const providerModels of configModels) {
+      if (providerModels.providerID === model.providerID) {
+        const found = providerModels.models.find(
+          (m: ModelEntry) => m.modelId === model.modelID
+        );
+        if (found) return true;
+      }
     }
 
-    // Or check if it's the defaultModel
-    if (provider.defaultModel === model.modelID) {
-      return true;
+    // 2. Check provider's model list
+    const provider = providers.find((p) => p.id === model.providerID);
+    if (provider) {
+      if (provider.models && provider.models.includes(model.modelID)) {
+        return true;
+      }
+
+      // 3. Check if it's the defaultModel
+      if (provider.defaultModel === model.modelID) {
+        return true;
+      }
     }
 
     return false;
