@@ -51,3 +51,15 @@ export {
   Providers_getAll,
   type ProviderInfo,
 } from "./providers.js";
+
+// Models configuration loader
+export {
+  ModelsConfig_getActiveEnvironment,
+  ModelsConfig_getFromEnvironment,
+  ModelsConfig_getFromProviders,
+  ModelsConfig_getAll,
+  ModelsConfig_getAllSync,
+  ModelsConfig_getActiveEnvironmentPath,
+  type ModelEntry,
+  type ProviderModels,
+} from "./models-config.js";

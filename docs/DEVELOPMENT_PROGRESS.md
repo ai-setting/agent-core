@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-13（完成 Models Command 实现 + Command 开发指南文档）
+最后更新：2026-02-13（完成 Models 配置加载功能 - 从 models.jsonc 配置文件加载模型列表）
 
 ---
 
@@ -57,7 +57,7 @@
 | 认证管理 | auth.json 自动加载到环境变量 | [DONE] | Auth_loadToEnv() 自动从 auth.json 加载 API key 到对应环境变量，支持 Provider 映射 | `packages/core/src/config/auth.ts` |
 | Command 系统 | 命令注册、执行、Dialog 集成 | [DONE] | Command Registry + 内置命令（echo/connect/models）+ TUI Dialog 集成 | `packages/core/src/server/command/**`、`packages/core/src/cli/tui/components/*Dialog.tsx` |
 | Models Command | 模型选择与管理 | [DONE] | 支持 list/select/toggle_favorite，集成 ModelStore 和 ServerEnvironment | `packages/core/src/server/command/built-in/models.ts`、`packages/core/src/cli/tui/components/ModelsDialog.tsx` |
-| Provider 配置 | 内置 Provider 模型列表 | [DONE] | 为 Anthropic/OpenAI/Google/DeepSeek/ZhipuAI/Kimi 添加默认模型列表 | `packages/core/src/config/providers.ts` |
+| Models 配置加载 | 从配置文件加载模型列表 | [DONE] | 支持从 environments/{env}/models.jsonc 或 provider.*.models 加载模型配置，优先级：Environment > Provider > Built-in | `packages/core/src/config/models-config.ts` |
 | Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |
@@ -160,3 +160,4 @@
 - 2026-02-12：新增 **Connect Command**：实现 `/connect` 命令，允许用户通过 TUI dialog 配置 LLM Provider 的 API Key，支持查看内置 providers（Anthropic/OpenAI/Google/DeepSeek/ZhipuAI/Kimi）、添加自定义 provider、设置 API Key，存储到 `auth.json`。包含 server 端 command 实现和 TUI dialog 组件。
 - 2026-02-13：新增 **Models Command**：实现 `/models` 命令，允许用户通过 TUI dialog 选择和管理 LLM 模型。支持：模型浏览（按 Provider 分组）、搜索过滤、键盘导航（↑↓/Enter/Esc/F）、收藏功能、最近使用记录。集成 ModelStore 和 ServerEnvironment，支持模型切换时实时重新初始化 LLM。
 - 2026-02-13：新增 **Command 开发指南**（`docs/command-development-guide.md`）：详细记录 Command 的完整开发流程，包括后端实现、前端 Dialog 实现、常见问题及解决方案。以前端 Dialog 开发的关键指导原则为核心，如：使用 ref 获取 input 值、键盘处理函数返回 boolean、createMemo 处理过滤列表等。
+- 2026-02-13：新增 **Models 配置加载功能**：支持从 `environments/{env}/models.jsonc` 配置文件加载模型列表，优先级：Environment models > Provider config > Built-in defaults。创建 `models-config.ts` 模块提供 `ModelsConfig_getAll()`、`ModelsConfig_getFromEnvironment()` 等 API，models command 现在优先使用配置中的模型列表。
