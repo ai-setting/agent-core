@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@latest",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --cwd packages/core dev",
     "build": "bun run --cwd packages/core build",
