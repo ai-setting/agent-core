@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-12（完成配置系统 Phase 1 & 2 实现 + ServerEnvironment 配置集成 + auth.json 自动加载 + 新增 Connect Command）
+最后更新：2026-02-13（完成 Models Command 实现 + Command 开发指南文档）
 
 ---
 
@@ -55,6 +55,9 @@
 | 配置状态持久化 | 用户级模型选择（recent/favorite/variant） | [DONE] | Phase 2 已完成：ModelStore 实现，支持 recent/favorite/variant 的增删改查与文件持久化 | `packages/core/src/config/state/model-store.ts` |
 | 配置系统集成 | ServerEnvironment 自动加载配置并初始化 LLM | [DONE] | ServerEnvironment 构造函数自动加载配置，解析 apiKey/baseURL/model，初始化 LLM | `packages/core/src/server/environment.ts` |
 | 认证管理 | auth.json 自动加载到环境变量 | [DONE] | Auth_loadToEnv() 自动从 auth.json 加载 API key 到对应环境变量，支持 Provider 映射 | `packages/core/src/config/auth.ts` |
+| Command 系统 | 命令注册、执行、Dialog 集成 | [DONE] | Command Registry + 内置命令（echo/connect/models）+ TUI Dialog 集成 | `packages/core/src/server/command/**`、`packages/core/src/cli/tui/components/*Dialog.tsx` |
+| Models Command | 模型选择与管理 | [DONE] | 支持 list/select/toggle_favorite，集成 ModelStore 和 ServerEnvironment | `packages/core/src/server/command/built-in/models.ts`、`packages/core/src/cli/tui/components/ModelsDialog.tsx` |
+| Provider 配置 | 内置 Provider 模型列表 | [DONE] | 为 Anthropic/OpenAI/Google/DeepSeek/ZhipuAI/Kimi 添加默认模型列表 | `packages/core/src/config/providers.ts` |
 | Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |
@@ -155,3 +158,5 @@
 - 2026-02-12：新增 **Auth 认证配置系统**：支持 `~/.local/share/tong_work/agent-core/auth.json` 存储 Provider API Keys，包含 `Auth_get()`, `Auth_getApiKey()`, `Auth_setProvider()` 等 API，与主配置分离以提高安全性。
 - 2026-02-12：新增 **变量引用解析系统**：支持在配置文件中使用 `${auth:provider-name}` 引用 auth.json 中的认证信息，或使用 `${ENV_VAR}` 引用环境变量，在配置加载时自动解析。
 - 2026-02-12：新增 **Connect Command**：实现 `/connect` 命令，允许用户通过 TUI dialog 配置 LLM Provider 的 API Key，支持查看内置 providers（Anthropic/OpenAI/Google/DeepSeek/ZhipuAI/Kimi）、添加自定义 provider、设置 API Key，存储到 `auth.json`。包含 server 端 command 实现和 TUI dialog 组件。
+- 2026-02-13：新增 **Models Command**：实现 `/models` 命令，允许用户通过 TUI dialog 选择和管理 LLM 模型。支持：模型浏览（按 Provider 分组）、搜索过滤、键盘导航（↑↓/Enter/Esc/F）、收藏功能、最近使用记录。集成 ModelStore 和 ServerEnvironment，支持模型切换时实时重新初始化 LLM。
+- 2026-02-13：新增 **Command 开发指南**（`docs/command-development-guide.md`）：详细记录 Command 的完整开发流程，包括后端实现、前端 Dialog 实现、常见问题及解决方案。以前端 Dialog 开发的关键指导原则为核心，如：使用 ref 获取 input 值、键盘处理函数返回 boolean、createMemo 处理过滤列表等。

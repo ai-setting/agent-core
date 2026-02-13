@@ -158,14 +158,50 @@ export async function Providers_getAll(): Promise<ProviderInfo[]> {
     Config_get(),
   ]);
   
-  // Built-in providers
+  // Built-in providers with default models
   const builtinProviders: ProviderInfo[] = [
-    { id: "anthropic", name: "Anthropic", description: "Claude models by Anthropic", baseURL: "https://api.anthropic.com/v1" },
-    { id: "openai", name: "OpenAI", description: "GPT models by OpenAI", baseURL: "https://api.openai.com/v1" },
-    { id: "google", name: "Google", description: "Gemini models by Google", baseURL: "https://generativelanguage.googleapis.com/v1" },
-    { id: "deepseek", name: "DeepSeek", description: "DeepSeek models", baseURL: "https://api.deepseek.com/v1" },
-    { id: "zhipuai", name: "ZhipuAI", description: "GLM models by ZhipuAI", baseURL: "https://open.bigmodel.cn/api/paas/v4" },
-    { id: "kimi", name: "Kimi", description: "Moonshot AI Kimi models", baseURL: "https://api.moonshot.cn/v1" },
+    { 
+      id: "anthropic", 
+      name: "Anthropic", 
+      description: "Claude models by Anthropic", 
+      baseURL: "https://api.anthropic.com/v1",
+      models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3-5-sonnet"]
+    },
+    { 
+      id: "openai", 
+      name: "OpenAI", 
+      description: "GPT models by OpenAI", 
+      baseURL: "https://api.openai.com/v1",
+      models: ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+    },
+    { 
+      id: "google", 
+      name: "Google", 
+      description: "Gemini models by Google", 
+      baseURL: "https://generativelanguage.googleapis.com/v1",
+      models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
+    },
+    { 
+      id: "deepseek", 
+      name: "DeepSeek", 
+      description: "DeepSeek models", 
+      baseURL: "https://api.deepseek.com/v1",
+      models: ["deepseek-chat", "deepseek-coder"]
+    },
+    { 
+      id: "zhipuai", 
+      name: "ZhipuAI", 
+      description: "GLM models by ZhipuAI", 
+      baseURL: "https://open.bigmodel.cn/api/paas/v4",
+      models: ["glm-4", "glm-4-plus", "glm-3-turbo"]
+    },
+    { 
+      id: "kimi", 
+      name: "Kimi", 
+      description: "Moonshot AI Kimi models", 
+      baseURL: "https://api.moonshot.cn/v1",
+      models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+    },
   ];
   
   // Merge custom providers from providers.jsonc
