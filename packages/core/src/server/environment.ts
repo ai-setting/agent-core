@@ -27,11 +27,13 @@ import {
   SessionUpdatedEvent,
   SessionDeletedEvent,
 } from "./eventbus/events/session.js";
-import { Config_get, resolveConfig } from "../config/index.js";
+import { Config_get, Config_reload, resolveConfig } from "../config/index.js";
 import { ModelStore } from "../config/state/model-store.js";
 import { Providers_getAll, type ProviderInfo } from "../config/providers.js";
 import { Auth_getProvider } from "../config/auth.js";
 import { ModelsConfig_getAll, type ModelEntry } from "../config/models-config.js";
+import { configRegistry } from "../config/registry.js";
+import { createEnvironmentSource } from "../config/sources/environment.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -47,9 +49,9 @@ export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
 export class ServerEnvironment extends BaseEnvironment {
   private sessionId: string;
   private toolsRegistered: Promise<void>;
-  private configLoaded: Promise<void>;
   private modelStore: ModelStore;
   private currentModelSelection: { providerID: string; modelID: string } | null = null;
+  private configLoaded: Promise<void> = Promise.resolve();
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -71,21 +73,22 @@ export class ServerEnvironment extends BaseEnvironment {
       this.currentModelSelection = config.currentModel;
     }
 
-    // Load config and initialize LLM if loadConfig is not explicitly false
-    if (config?.loadConfig !== false) {
-      this.configLoaded = this.loadConfigAndInitLLM();
-    } else {
-      this.configLoaded = Promise.resolve();
-    }
-
+    // Register default tools
     this.toolsRegistered = this.registerDefaultTools();
+
+    // Load config and initialize LLM if loadConfig is not explicitly false
+    // Note: Now loadFromConfig() can be called independently to reload configuration
+    if (config?.loadConfig !== false) {
+      this.configLoaded = this.loadFromConfig();
+    }
   }
 
   /**
    * Load configuration from config files and initialize LLM
    * Supports fallback chain: current > config > recent > provider default
+   * Can be called multiple times to reload configuration (e.g., after environment switch)
    */
-  private async loadConfigAndInitLLM(): Promise<void> {
+  async loadFromConfig(): Promise<void> {
     try {
       console.log("[ServerEnvironment] Loading configuration...");
 
@@ -296,6 +299,44 @@ export class ServerEnvironment extends BaseEnvironment {
    */
   getCurrentModel(): { providerID: string; modelID: string } | null {
     return this.currentModelSelection;
+  }
+
+  /**
+   * Switch to a different environment
+   * Updates config registry and reloads configuration without recreating the environment instance
+   * @param envName Name of the environment to switch to
+   * @returns true if switch successful, false otherwise
+   */
+  async switchEnvironment(envName: string): Promise<boolean> {
+    try {
+      console.log(`[ServerEnvironment] Switching to environment: ${envName}`);
+      
+      // 1. Update config registry: remove old environment sources and add new one
+      const sources = configRegistry.getSources();
+      for (const source of sources) {
+        if (source.name.startsWith("environment:")) {
+          configRegistry.unregister(source.name);
+          console.log(`[ServerEnvironment] Unregistered old environment source: ${source.name}`);
+        }
+      }
+      
+      // 2. Register new environment source
+      const newEnvSource = createEnvironmentSource(envName, 10);
+      configRegistry.register(newEnvSource);
+      console.log(`[ServerEnvironment] Registered new environment source: ${newEnvSource.name}`);
+      
+      // 3. Reload configuration from new environment
+      await Config_reload();
+      
+      // 4. Re-initialize LLM with new config
+      await this.loadFromConfig();
+      
+      console.log(`[ServerEnvironment] Successfully switched to environment: ${envName}`);
+      return true;
+    } catch (error) {
+      console.error(`[ServerEnvironment] Failed to switch environment: ${error}`);
+      return false;
+    }
   }
 
   async waitForReady(): Promise<void> {
