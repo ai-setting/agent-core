@@ -115,29 +115,33 @@
    - 日志文件记录完整的操作链路
    - 无异常错误或崩溃
 
-**TUI 日志位置**：`~/.config/tong_work/logs/tui.log`
+**TUI 日志位置**：`~/.local/share/tong_work/logs/tui.log`（或 `$XDG_DATA_HOME/tong_work/logs/tui.log`）
 
 ---
 
 ## 4. 日志规范（必须先看日志再猜）
 
-### 4.1 日志目录与文件（当前实现为固定目录）
+### 4.1 日志目录与文件（遵循 XDG Base Directory Specification）
 
-当前 logger 目录固定为用户 HOME 下：
+日志目录遵循 XDG 标准，使用 `$XDG_DATA_HOME` 环境变量（默认 `~/.local/share/`）：
 
-- **日志目录**：`~/.config/tong_work/logs/`
-  - Windows 示例：`%USERPROFILE%\.config\tong_work\logs\`
+- **日志目录**：`$XDG_DATA_HOME/tong_work/logs/`（默认 `~/.local/share/tong_work/logs/`）
+  - Linux/macOS 示例：`~/.local/share/tong_work/logs/`
+  - Windows 示例：`%LOCALAPPDATA%\tong_work\logs\`
 
 常用文件：
 - **Server 日志**：`server.log`
 - **TUI 日志**：`tui.log`
 
 关键实现位置（以代码为准）：
-- `packages/core/src/utils/logger.ts`（固定 `LOG_DIR`）
+- `packages/core/src/utils/logger.ts`（使用 `xdg-basedir` 包获取 XDG_DATA_HOME）
 - `packages/core/src/server/logger.ts`
 - `packages/core/src/cli/tui/logger.ts`
 
-> 说明：当前 logger 读取 `LOG_LEVEL` 控制级别；**不会**以 `LOG_FILE` 环境变量决定落盘路径。
+> 说明：
+> - 使用 `xdg-basedir` 包自动检测 XDG_DATA_HOME 环境变量
+> - 如果未设置 XDG_DATA_HOME，默认为 `~/.local/share/`
+> - logger 读取 `LOG_LEVEL` 控制级别；**不会**以 `LOG_FILE` 环境变量决定落盘路径
 
 ### 4.2 日志输出规范（必须遵守）
 

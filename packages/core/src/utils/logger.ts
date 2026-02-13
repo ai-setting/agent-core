@@ -1,18 +1,19 @@
 /**
  * @fileoverview Logger - 统一日志系统
  * 
- * 日志固定写入用户 HOME 目录: ~/.config/tong_work/logs/
+ * 遵循 XDG Base Directory Specification:
+ * - 日志存储在 XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
  * 无需配置，自动创建目录
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
-import { homedir } from "os";
+import { xdgData } from "xdg-basedir";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-// 固定的日志目录: ~/.config/tong_work/logs/
-const LOG_DIR = join(homedir(), ".config", "tong_work", "logs");
+// XDG 标准数据目录: XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
+const LOG_DIR = join(xdgData || "", "tong_work", "logs");
 
 interface LoggerConfig {
   level?: LogLevel;
