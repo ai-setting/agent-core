@@ -1,7 +1,7 @@
 /**
  * @fileoverview TUI Logger - 客户端专用日志
  * 
- * 日志自动写入: ~/.config/tong_work/logs/tui.log
+ * 日志自动写入: $XDG_DATA_HOME/tong_work/logs/tui.log (默认 ~/.local/share/tong_work/logs/tui.log)
  */
 
 import { createLogger, LOG_DIR } from "../../utils/logger.js";
