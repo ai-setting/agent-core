@@ -7,7 +7,11 @@
 
 import type { Command, CommandContext, CommandResult } from "../types.js";
 import { ModelStore } from "../../../config/state/model-store.js";
-import { Providers_getAll } from "../../../config/providers.js";
+import { 
+  ModelsConfig_getAll, 
+  type ModelEntry,
+  type ProviderModels as ConfigProviderModels,
+} from "../../../config/models-config.js";
 
 interface ModelsAction {
   type: "list" | "select" | "toggle_favorite" | "set_variant";
@@ -82,45 +86,46 @@ export const modelsCommand: Command = {
 };
 
 /**
- * Handle list action - return all providers and models
+ * Handle list action - return all providers and models from config
  */
 async function handleListAction(modelStore: ModelStore): Promise<CommandResult> {
-  // Load all providers
-  const providers = await Providers_getAll();
+  // Load models from config (environment models.jsonc or provider configs)
+  const providerModels = await ModelsConfig_getAll();
   const recent = await modelStore.getRecent();
   const favorites = await modelStore.getFavorite();
 
-  console.log("[ModelsCommand] Loaded providers:", providers.length);
-  console.log("[ModelsCommand] Providers with models:", providers.map(p => ({ id: p.id, modelsCount: p.models?.length || 0 })));
+  console.log("[ModelsCommand] Loaded provider models:", providerModels.length);
+  console.log("[ModelsCommand] Provider models:", providerModels.map(p => ({ 
+    providerID: p.providerID, 
+    modelsCount: p.models.length 
+  })));
 
   // Build response data
   const data = {
     mode: "dialog" as const,
     recent,
     favorites,
-    providers: providers
-      .filter(p => p.id !== "custom") // Exclude the "Custom Provider" option
+    providers: providerModels
+      .filter(p => p.providerID !== "custom") // Exclude the "Custom Provider" option
       .map((p) => ({
-        providerID: p.id,
-        providerName: p.name,
-        models: (p.models || []).map((m) => {
-          return {
-            providerID: p.id,
-            providerName: p.name,
-            modelID: m,
-            modelName: m,
-            isFavorite: favorites.some(
-              (f) => f.providerID === p.id && f.modelID === m
-            ),
-          };
-        }),
+        providerID: p.providerID,
+        providerName: p.providerName,
+        models: p.models.map((m: ModelEntry) => ({
+          providerID: m.provider,
+          providerName: p.providerName,
+          modelID: m.modelId,
+          modelName: m.displayName || m.modelId,
+          isFavorite: favorites.some(
+            (f) => f.providerID === m.provider && f.modelID === m.modelId
+          ),
+        })),
       }))
       .filter(p => p.models.length > 0), // Only include providers with models
   };
 
   console.log("[ModelsCommand] Returning data:", { 
     providerCount: data.providers.length, 
-    totalModels: data.providers.reduce((sum, p) => sum + p.models.length, 0),
+    totalModels: data.providers.reduce((sum: number, p) => sum + p.models.length, 0),
     recentCount: data.recent.length,
     favoritesCount: data.favorites.length
   });

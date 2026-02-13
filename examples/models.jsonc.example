@@ -1,0 +1,39 @@
+{
+  // 模型配置示例
+  // 路径: ~/.config/tong_work/agent-core/environments/{env}/models.jsonc
+  
+  "gpt-4o": {
+    "provider": "openai",
+    "modelId": "gpt-4o",
+    "displayName": "GPT-4o",
+    "capabilities": ["vision", "function-calling", "json-mode"]
+  },
+  
+  "gpt-4-turbo": {
+    "provider": "openai",
+    "modelId": "gpt-4-turbo",
+    "displayName": "GPT-4 Turbo",
+    "capabilities": ["vision", "function-calling", "json-mode"]
+  },
+  
+  "claude-3-opus": {
+    "provider": "anthropic",
+    "modelId": "claude-3-opus-20240229",
+    "displayName": "Claude 3 Opus",
+    "capabilities": ["vision", "function-calling", "long-context"]
+  },
+  
+  "claude-3-sonnet": {
+    "provider": "anthropic",
+    "modelId": "claude-3-sonnet-20240229",
+    "displayName": "Claude 3 Sonnet",
+    "capabilities": ["vision", "function-calling"]
+  },
+  
+  "gemini-pro": {
+    "provider": "google",
+    "modelId": "gemini-1.5-pro",
+    "displayName": "Gemini 1.5 Pro",
+    "capabilities": ["vision", "long-context"]
+  }
+}
