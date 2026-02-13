@@ -131,9 +131,9 @@ describe("OpenTUI 真实环境检测", () => {
       const solid = await import("@opentui/solid");
       
       // 检查是否有 markdown 组件
-      if (solid.markdown) {
+      if ((solid as any).markdown) {
         markdownInfo.exists = true;
-        markdownInfo.isFunction = typeof solid.markdown === "function";
+        markdownInfo.isFunction = typeof (solid as any).markdown === "function";
       }
       
       console.log("[环境检测] @opentui/solid 导出:", {
@@ -227,7 +227,7 @@ describe("TUI 问题诊断", () => {
       const solid = await import("@opentui/solid");
       diagnostics.push("✓ @opentui/solid 可导入");
       
-      if (solid.markdown) {
+      if ((solid as any).markdown) {
         diagnostics.push("✓ markdown 组件存在");
       } else {
         diagnostics.push("⚠ markdown 组件不存在（可能未导出）");

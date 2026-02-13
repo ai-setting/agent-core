@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { ToolInfo } from "../../../../types/index.js";
+import type { ToolInfo, ToolResultMetadata } from "../../../../types/index.js";
 import { glob as globModule } from "glob";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { normalizePath, isAbsolute, resolvePath } from "./filesystem.js";

@@ -4,7 +4,14 @@
  */
 
 import { z } from "zod";
-import { Environment, Prompt, StreamEvent, HistoryMessage } from "../index.js";
+import {
+  Environment,
+  Prompt,
+  StreamEvent,
+  HistoryMessage,
+  type EnvironmentProfile,
+  type EnvironmentAgentSpec,
+} from "../index.js";
 import {
   Context,
   Action,
@@ -25,7 +32,24 @@ import {
   DefaultMetricsCollector,
   AggregatedMetrics,
 } from "./index.js";
-import { createInvokeLLM, createSystem1IntuitiveReasoning, type InvokeLLMConfig } from "./invoke-llm.js";
+import { 
+  invokeLLM, 
+  intuitiveReasoning, 
+  type InvokeLLMConfig, 
+  type LLMOptions, 
+  type LLMMessage,
+  type LLMOutput,
+  type StreamEventHandler 
+} from "./invoke-llm.js";
+import { Session } from "../../session/index.js";
+import type { SessionCreateOptions } from "../../session/types.js";
+import { withEventHook, withEventHookVoid } from "./with-event-hook.js";
+
+/** Session lifecycle events for subscribers */
+export type SessionEvent =
+  | { type: "session.created"; sessionId: string; title: string; directory?: string }
+  | { type: "session.updated"; sessionId: string; updates: Record<string, unknown> }
+  | { type: "session.deleted"; sessionId: string };
 
 export interface BaseEnvironmentConfig {
   timeoutManager?: TimeoutManager;
@@ -47,6 +71,11 @@ export interface BaseEnvironmentConfig {
    * Called during invoke_llm streaming response
    */
   onStreamEvent?: (event: StreamEvent, context: Context) => void | Promise<void>;
+  /**
+   * Hook for session lifecycle events (created, updated, deleted)
+   * Called when session operations complete
+   */
+  onSessionEvent?: (event: SessionEvent) => void | Promise<void>;
 }
 
 export interface ToolRegistration {
@@ -87,6 +116,10 @@ export abstract class BaseEnvironment implements Environment {
     if (config?.onStreamEvent) {
       this.onStreamEvent = config.onStreamEvent;
     }
+    // Set session event hook from config
+    if (config?.onSessionEvent) {
+      this.onSessionEvent = config.onSessionEvent;
+    }
 
     if (this.systemPrompt) {
       this.addPrompt({ id: "system", content: this.systemPrompt });
@@ -114,7 +147,16 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   protected async configureLLMWithModel(model: string, baseURL?: string, apiKey?: string): Promise<void> {
-    const { createLLMConfigFromEnv } = await import("./invoke-llm.js");
+    const { createLLMConfigFromEnv, createLLMConfig } = await import("./invoke-llm.js");
+    
+    // If baseURL and apiKey are provided, use them directly
+    if (baseURL && apiKey) {
+      const config = createLLMConfig(model, baseURL, apiKey);
+      this.configureLLM(config);
+      return;
+    }
+    
+    // Otherwise, try to load from environment variables
     const config = createLLMConfigFromEnv(model);
     if (config) {
       this.configureLLM(config);
@@ -170,6 +212,99 @@ export abstract class BaseEnvironment implements Environment {
   getTools(): Tool[] {
     return this.listTools();
   }
+
+  /**
+   * 默认实现：从 getPrompt("system") 与 listTools() 推导单一默认 profile，
+   * 供 env_spec 做 describeEnv/listProfiles/listAgents/getAgent 推导。子类可覆盖。
+   */
+  getProfiles(): EnvironmentProfile[] {
+    const toolNames = this.listTools().map((t) => t.name);
+    const hasSystemPrompt = !!this.getPrompt("system");
+    const primaryAgent: EnvironmentAgentSpec = {
+      id: "default",
+      role: "primary",
+      promptId: hasSystemPrompt ? "system" : undefined,
+      allowedTools: toolNames,
+    };
+    return [
+      {
+        id: "default",
+        displayName: "Default Profile",
+        primaryAgents: [primaryAgent],
+      },
+    ];
+  }
+
+  /**
+   * Session 管理：委托给 core/session 的 Session 与 Storage。
+   * 子类可覆盖以使用其他 session 实现（如持久化存储）。
+   * 通过 withEventHook 注入 session 生命周期事件，供 onSessionEvent 订阅。
+   */
+  createSession = withEventHook(
+    (options?: SessionCreateOptions) => Session.create(options),
+    {
+      after: (self, session) => {
+        self.emitSessionEvent?.({
+          type: "session.created",
+          sessionId: session.id,
+          title: session.title,
+          directory: session.directory,
+        });
+      },
+    }
+  );
+
+  getSession(id: string): Session | undefined {
+    return Session.get(id);
+  }
+
+  listSessions(): Session[] {
+    return Session.list();
+  }
+
+  updateSession = withEventHookVoid(
+    (id: string, payload: { title?: string; metadata?: Record<string, unknown> }): boolean => {
+      const s = Session.get(id);
+      if (s) {
+        if (payload.title !== undefined) s.setTitle(payload.title);
+        if (payload.metadata) for (const [k, v] of Object.entries(payload.metadata)) s.setMetadata(k, v);
+        return true;
+      }
+      return false;
+    },
+    {
+      after: (self, updated, id, payload) => {
+        if (updated) {
+          self.emitSessionEvent?.({
+            type: "session.updated",
+            sessionId: id,
+            updates: payload as Record<string, unknown>,
+          });
+        }
+      },
+    }
+  );
+
+  deleteSession = withEventHookVoid(
+    (id: string): { deleted: boolean; sessionId: string } => {
+      const s = Session.get(id);
+      if (s) {
+        s.delete();
+        return { deleted: true, sessionId: id };
+      }
+      return { deleted: false, sessionId: id };
+    },
+    {
+      after: (self, result) => {
+        if (result.deleted) {
+          self.emitSessionEvent?.({
+            type: "session.deleted",
+            sessionId: result.sessionId,
+          });
+        }
+      },
+    }
+  );
 
   addPrompt(prompt: Prompt): void {
     this.prompts.set(prompt.id, prompt);
@@ -268,7 +403,14 @@ export abstract class BaseEnvironment implements Environment {
       this.addPrompt(prompt);
     }
 
-    const agent = new Agent(event, this as Environment, this.listTools(), prompt, context ?? {}, undefined, history);
+    // Generate a stable messageId for this query
+    const messageId = `msg_${Date.now()}`;
+    const agentContext = {
+      ...context,
+      message_id: messageId,
+    };
+
+    const agent = new Agent(event, this as Environment, this.listTools(), prompt, agentContext, undefined, history);
     return agent.run();
   }
 
@@ -447,11 +589,114 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   configureLLM(config: InvokeLLMConfig): void {
-    const invokeLlmTool = createInvokeLLM(config);
-    this.registerTool(invokeLlmTool);
+    this.llmConfig = config;
+  }
 
-    const system1Tool = createSystem1IntuitiveReasoning(config);
-    this.registerTool(system1Tool);
+  protected llmConfig?: InvokeLLMConfig;
+
+  /**
+   * Invoke LLM as a native environment capability
+   * This is the primary way for agents to interact with LLM
+   */
+  async invokeLLM(
+    messages: LLMMessage[],
+    tools?: ToolInfo[],
+    context?: Context,
+    options?: Omit<LLMOptions, "messages" | "tools">
+  ): Promise<ToolResult> {
+    console.log("[BaseEnvironment.invokeLLM] Called");
+    await this.ensureLLMInitialized();
+    console.log("[BaseEnvironment.invokeLLM] LLM initialized, config exists:", !!this.llmConfig);
+
+    if (!this.llmConfig) {
+      console.log("[BaseEnvironment.invokeLLM] ERROR: LLM not configured");
+      return {
+        success: false,
+        output: "",
+        error: "LLM not configured. Call configureLLM() first.",
+        metadata: {
+          execution_time_ms: 0,
+        },
+      };
+    }
+
+    const ctx = context || ({} as Context);
+    console.log("[BaseEnvironment.invokeLLM] Calling invokeLLM with", messages.length, "messages");
+
+    const eventHandler: StreamEventHandler = {
+      onStart: (metadata) => {
+        console.log("[BaseEnvironment.invokeLLM] onStart callback");
+        this.emitStreamEvent({ type: "start", metadata }, ctx);
+      },
+      onText: (content, delta) => {
+        this.emitStreamEvent({ type: "text", content, delta }, ctx);
+      },
+      onReasoning: (content) => {
+        this.emitStreamEvent({ type: "reasoning", content }, ctx);
+      },
+      onToolCall: (toolName, toolArgs, toolCallId) => {
+        this.emitStreamEvent(
+          { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId },
+          ctx
+        );
+      },
+      onCompleted: (content, metadata) => {
+        console.log("[BaseEnvironment.invokeLLM] onCompleted callback");
+        this.emitStreamEvent({ type: "completed", content, metadata }, ctx);
+      },
+    };
+
+    const result = await invokeLLM(
+      this.llmConfig,
+      {
+        messages,
+        tools,
+        ...options,
+        stream: true,
+      },
+      {
+        workdir: process.cwd(),
+        session_id: ctx.session_id,
+        message_id: ctx.message_id,
+        metadata: ctx.metadata,
+      },
+      eventHandler
+    );
+    
+    console.log("[BaseEnvironment.invokeLLM] invokeLLM returned, success:", result.success);
+    return result;
+  }
+
+  /**
+   * Simple non-streaming LLM call for intuitive reasoning
+   */
+  async intuitiveReasoning(
+    messages: LLMMessage[],
+    options?: Omit<LLMOptions, "messages" | "tools" | "stream">
+  ): Promise<ToolResult> {
+    await this.ensureLLMInitialized();
+
+    if (!this.llmConfig) {
+      return {
+        success: false,
+        output: "",
+        error: "LLM not configured. Call configureLLM() first.",
+        metadata: {
+          execution_time_ms: 0,
+        },
+      };
+    }
+
+    return intuitiveReasoning(
+      this.llmConfig,
+      {
+        messages,
+        ...options,
+      },
+      {
+        workdir: process.cwd(),
+      }
+    );
   }
 
   protected abstract getDefaultTimeout(toolName: string): number;
@@ -467,10 +712,17 @@ export abstract class BaseEnvironment implements Environment {
   };
 
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
+  onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
   protected emitStreamEvent(event: StreamEvent, context: Context): void | Promise<void> {
     if (this.onStreamEvent) {
       return this.onStreamEvent(event, context);
+    }
+  }
+
+  protected emitSessionEvent(event: SessionEvent): void | Promise<void> {
+    if (this.onSessionEvent) {
+      return this.onSessionEvent(event);
     }
   }
 }

@@ -1,0 +1,48 @@
+{
+  // ==================== Global 配置 ====================
+  // 当前激活的 Agent 运行时 Environment
+  "activeEnvironment": "os_env",
+
+  // ==================== 默认模型配置（全局回退） ====================
+  // 当 Environment 未指定模型时使用此配置
+  // apiKey 使用 ${auth:provider-name} 格式引用 auth.json 中的配置
+  "defaultModel": "anthropic/claude-sonnet-4-5",
+  "baseURL": "https://api.anthropic.com",
+  "apiKey": "${auth:anthropic-claude}",
+
+  // ==================== Provider 配置 ====================
+  // 使用 ${auth:provider-name} 引用 auth.json 中的认证配置
+  "provider": {
+    "anthropic": {
+      "baseURL": "https://api.anthropic.com/v1",
+      "apiKey": "${auth:anthropic-claude}",
+      "defaultModel": "claude-sonnet-4-5"
+    },
+    "openai": {
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "${auth:openai-gpt}",
+      "defaultModel": "gpt-4o"
+    },
+    "ollama": {
+      "baseURL": "http://localhost:11434",
+      "defaultModel": "llama3.2"
+      // ollama 不需要 apiKey
+    },
+    // 国内 Provider 配置
+    "zhipuai": {
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKey": "${auth:zhipuai-coding-plan}",
+      "defaultModel": "glm-4"
+    },
+    "moonshot": {
+      "baseURL": "https://api.moonshot.cn/v1",
+      "apiKey": "${auth:kimi-for-coding}",
+      "defaultModel": "moonshot-v1-128k"
+    },
+    "minimax": {
+      "baseURL": "https://api.minimax.chat/v1",
+      "apiKey": "${auth:minimax-cn}",
+      "defaultModel": "abab6.5s"
+    }
+  }
+}

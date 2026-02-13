@@ -19,6 +19,10 @@
     "./server": {
       "import": "./dist/server/index.js",
       "types": "./dist/server/index.d.ts"
+    },
+    "./env-spec": {
+      "import": "./dist/env_spec/index.js",
+      "types": "./dist/env_spec/index.d.ts"
     }
   },
   "scripts": {
@@ -34,6 +38,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@ai-sdk/anthropic": "^3.0.37",
     "@ai-sdk/cerebras": "^2.0.30",
     "@ai-sdk/cohere": "^3.0.18",
