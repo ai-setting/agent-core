@@ -130,15 +130,65 @@ export function CommandDialog(props: CommandDialogProps) {
       await command.executeCommand(selectedCmd.name, "");
     } else {
       // 不需要参数：直接执行并显示结果
-      tuiLogger.info("[CommandDialog] Command has no args, popping dialog");
-      dialog.pop();
+      tuiLogger.info("[CommandDialog] Command has no args, executing without popping first");
+      
+      // Execute command first
       tuiLogger.info("[CommandDialog] Executing command via API");
       const result = await command.executeCommand(selectedCmd.name, "");
-      tuiLogger.info("[CommandDialog] Command executed", { success: result.success, name: selectedCmd.name });
+      tuiLogger.info("[CommandDialog] Command executed", { success: result.success, name: selectedCmd.name, resultData: JSON.stringify(result.data) });
       
-      // 显示结果对话框
-      tuiLogger.info("[CommandDialog] Showing result dialog");
-      showResultDialog(selectedCmd, result);
+      // Check if result indicates dialog mode
+      tuiLogger.info("[CommandDialog] Checking for dialog mode", { 
+        hasData: !!result.data, 
+        mode: (result.data as any)?.mode,
+        dataKeys: result.data ? Object.keys(result.data as any) : []
+      });
+      
+      if (result.success && result.data && (result.data as any).mode === "dialog") {
+        // Open corresponding dialog based on command type - use replace instead of pop then push
+        tuiLogger.info("[CommandDialog] Opening dialog for command", { name: selectedCmd.name });
+        try {
+          switch (selectedCmd.name) {
+            case "models": {
+              tuiLogger.info("[CommandDialog] Importing ModelsDialog...");
+              const { ModelsDialog } = await import("./ModelsDialog.js");
+              tuiLogger.info("[CommandDialog] ModelsDialog imported, calling replace");
+              dialog.replace(() => <ModelsDialog data={(result.data as any)} />);
+              tuiLogger.info("[CommandDialog] ModelsDialog replace called");
+              break;
+            }
+            case "connect": {
+              tuiLogger.info("[CommandDialog] Importing ConnectDialog...");
+              const { ConnectDialog } = await import("./ConnectDialog.js");
+              tuiLogger.info("[CommandDialog] ConnectDialog imported, calling replace");
+              dialog.replace(() => <ConnectDialog />);
+              tuiLogger.info("[CommandDialog] ConnectDialog replace called");
+              break;
+            }
+            case "echo": {
+              tuiLogger.info("[CommandDialog] Importing EchoDialog...");
+              const { EchoDialog } = await import("./EchoDialog.js");
+              tuiLogger.info("[CommandDialog] EchoDialog imported, calling replace");
+              dialog.replace(() => <EchoDialog defaultMessage={(result.data as any).defaultMessage || ""} />);
+              tuiLogger.info("[CommandDialog] EchoDialog replace called");
+              break;
+            }
+            default:
+              tuiLogger.info("[CommandDialog] Unknown dialog command, showing result");
+              dialog.pop();
+              showResultDialog(selectedCmd, result);
+          }
+        } catch (error) {
+          tuiLogger.error("[CommandDialog] Error opening dialog", { error: String(error) });
+          dialog.pop();
+          showResultDialog(selectedCmd, { success: false, message: `Error opening dialog: ${error}` });
+        }
+      } else {
+        // Show result dialog
+        tuiLogger.info("[CommandDialog] Not a dialog command, popping and showing result");
+        dialog.pop();
+        showResultDialog(selectedCmd, result);
+      }
     }
   };
 

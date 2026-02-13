@@ -44,6 +44,7 @@ export function ConnectDialog() {
   let customNameRef: any = null;
   let customBaseURLRef: any = null;
   let customModelsRef: any = null;
+  let filterInputRef: any = null;
 
   const handleAddCustomProvider = () => {
     const name = customNameRef?.value || customNameRef?.plainText || "";
@@ -344,9 +345,14 @@ export function ConnectDialog() {
       <box flexDirection="row" height={1} marginBottom={1}>
         <text fg={theme.theme().primary}>&gt; </text>
         <input
+          ref={(ref: any) => { filterInputRef = ref; }}
           flexGrow={1}
           value={filter()}
-          onChange={setFilter}
+          onContentChange={(event: any) => {
+            const value = filterInputRef?.plainText || filterInputRef?.value || "";
+            tuiLogger.info("[ConnectDialog] Filter changed from ref", { value, hasRef: !!filterInputRef });
+            setFilter(value);
+          }}
           placeholder="Search providers..."
           focused={true}
           onKeyDown={(e: any) => {

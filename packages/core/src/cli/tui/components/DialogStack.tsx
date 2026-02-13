@@ -44,10 +44,10 @@ export function DialogStack(props: DialogStackProps) {
         {(current: () => DialogItem) => (
           <box
             position="absolute"
-            top="30%"
-            left="20%"
-            width="60%"
-            height="40%"
+            top="10%"
+            left="10%"
+            width="80%"
+            height="80%"
             flexDirection="column"
             borderStyle="single"
             borderColor={theme.theme().primary}

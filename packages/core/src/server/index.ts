@@ -10,6 +10,7 @@ import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
 import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
 import { connectCommand } from "./command/built-in/connect.js";
+import { modelsCommand } from "./command/built-in/models.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
 async function main() {
@@ -37,6 +38,7 @@ async function main() {
   const commandRegistry = CommandRegistry.getInstance();
   commandRegistry.register(echoCommand);
   commandRegistry.register(connectCommand);
+  commandRegistry.register(modelsCommand);
   console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   console.log();
 
