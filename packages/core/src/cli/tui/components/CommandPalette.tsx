@@ -13,6 +13,7 @@ import type { TextareaRenderable } from "@opentui/core";
 import { ConnectDialog } from "./ConnectDialog.js";
 import { EchoDialog } from "./EchoDialog.js";
 import { ModelsDialog } from "./ModelsDialog.js";
+import { AgentEnvDialog } from "./AgentEnvDialog.js";
 
 export interface CommandPaletteRef {
   onInput: (value: string, textarea: TextareaRenderable) => void;
@@ -124,7 +125,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     hide();
     
     // 检查是否有特殊 dialog 的命令（即使 hasArgs 为 true，也应该直接打开 dialog）
-    const commandsWithDialog = ["connect", "echo", "models"];
+    const commandsWithDialog = ["connect", "echo", "models", "agent-env"];
     if (commandsWithDialog.includes(cmd.name)) {
       tuiLogger.info("[CommandPalette] Command has special dialog, opening directly", { name: cmd.name });
       executeCommand(cmd.name, "");
@@ -185,6 +186,34 @@ export function CommandPalette(props: CommandPaletteProps) {
           id: `cmd-error-${Date.now()}`,
           role: "system",
           content: `✗ /${name} failed: ${result.message || "Failed to load models"}`,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+    
+    // 特殊处理 agent-env 命令 - 先执行获取数据，然后打开 AgentEnvDialog
+    if (name === "agent-env") {
+      tuiLogger.info("[CommandPalette] Executing agent-env command to get data");
+      const result = await command.executeCommand(name, args);
+      
+      if (result.success && result.data && (result.data as any).mode === "dialog") {
+        tuiLogger.info("[CommandPalette] Opening AgentEnvDialog with data", { 
+          envCount: (result.data as any).environments?.length || 0 
+        });
+        dialog.push(
+          () => <AgentEnvDialog data={(result.data as any)} />,
+          { title: "Manage Environments" }
+        );
+      } else {
+        tuiLogger.error("[CommandPalette] Agent-env command failed or returned invalid data", { 
+          success: result.success, 
+          hasData: !!result.data 
+        });
+        store.addMessage({
+          id: `cmd-error-${Date.now()}`,
+          role: "system",
+          content: `✗ /${name} failed: ${result.message || "Failed to load environments"}`,
           timestamp: Date.now(),
         });
       }

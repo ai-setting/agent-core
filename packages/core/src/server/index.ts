@@ -11,6 +11,7 @@ import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
 import { connectCommand } from "./command/built-in/connect.js";
 import { modelsCommand } from "./command/built-in/models.js";
+import { agentEnvCommand } from "./command/built-in/agent-env.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
 async function main() {
@@ -39,6 +40,7 @@ async function main() {
   commandRegistry.register(echoCommand);
   commandRegistry.register(connectCommand);
   commandRegistry.register(modelsCommand);
+  commandRegistry.register(agentEnvCommand);
   console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   console.log();
 

@@ -173,6 +173,14 @@ export function CommandDialog(props: CommandDialogProps) {
               tuiLogger.info("[CommandDialog] EchoDialog replace called");
               break;
             }
+            case "agent-env": {
+              tuiLogger.info("[CommandDialog] Importing AgentEnvDialog...");
+              const { AgentEnvDialog } = await import("./AgentEnvDialog.js");
+              tuiLogger.info("[CommandDialog] AgentEnvDialog imported, calling replace");
+              dialog.replace(() => <AgentEnvDialog data={(result.data as any)} />);
+              tuiLogger.info("[CommandDialog] AgentEnvDialog replace called");
+              break;
+            }
             default:
               tuiLogger.info("[CommandDialog] Unknown dialog command, showing result");
               dialog.pop();

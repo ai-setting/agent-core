@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import { resolveValue, resolveObject, resolveConfig } from "./resolver.js";
-import { Auth_save } from "./auth.js";
+import { Auth_save, Auth_clearCache } from "./auth.js";
 import { ConfigPaths } from "./paths.js";
 import type { Config } from "./types.js";
 
@@ -15,6 +15,9 @@ describe("Resolver", () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "resolver-test-"));
     originalHome = process.env.AGENT_CORE_TEST_HOME;
     process.env.AGENT_CORE_TEST_HOME = tempDir;
+    
+    // 清理 auth 缓存，确保使用测试路径
+    Auth_clearCache();
   });
 
   afterEach(async () => {
