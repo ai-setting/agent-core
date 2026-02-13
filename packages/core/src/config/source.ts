@@ -15,6 +15,12 @@ export interface ConfigSourceRegistry {
   /** 注册配置来源 */
   register(source: ConfigSource): void;
 
+  /** 注销指定名称的配置来源
+   * @param name 配置来源名称
+   * @returns 是否成功注销
+   */
+  unregister(name: string): boolean;
+
   /** 清空所有已注册来源 */
   clear(): void;
 

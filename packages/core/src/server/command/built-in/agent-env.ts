@@ -10,7 +10,8 @@ import fs from "fs/promises";
 import path from "path";
 import { ConfigPaths } from "../../../config/paths.js";
 import { Config_get, Config_reload } from "../../../config/config.js";
-import { loadEnvironmentConfig } from "../../../config/sources/environment.js";
+import { loadEnvironmentConfig, createEnvironmentSource } from "../../../config/sources/environment.js";
+import { configRegistry } from "../../../config/registry.js";
 
 // Action types
 interface AgentEnvAction {
@@ -218,6 +219,21 @@ async function handleSelectAction(
       JSON.stringify(globalConfig, null, 2),
       "utf-8"
     );
+
+    // Update config registry: remove old environment sources and add new one
+    // First, find and unregister any existing environment sources
+    const sources = configRegistry.getSources();
+    for (const source of sources) {
+      if (source.name.startsWith("environment:")) {
+        configRegistry.unregister(source.name);
+        console.log(`[AgentEnvCommand] Unregistered old environment source: ${source.name}`);
+      }
+    }
+    
+    // Register new environment source with higher priority
+    const newEnvSource = createEnvironmentSource(action.envName, 10);
+    configRegistry.register(newEnvSource);
+    console.log(`[AgentEnvCommand] Registered new environment source: ${newEnvSource.name}`);
 
     // Reload configuration
     await Config_reload();
