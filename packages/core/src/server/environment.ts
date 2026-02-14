@@ -328,11 +328,16 @@ export class ServerEnvironment extends BaseEnvironment {
    * Switch to a different environment
    * Updates config registry and reloads configuration without recreating the environment instance
    * @param envName Name of the environment to switch to
+   * @param context Optional context including session_id for notifications
    * @returns true if switch successful, false otherwise
    */
-  async switchEnvironment(envName: string): Promise<boolean> {
+  async switchEnvironment(envName: string, context?: Context): Promise<boolean> {
     try {
       console.log(`[ServerEnvironment] Switching to environment: ${envName}`);
+      
+      // Get old environment info before switching
+      const oldEnvName = (await Config_get()).activeEnvironment || "unknown";
+      const oldToolsCount = this.getTools().length;
       
       // 1. Update config registry: remove old environment sources and add new one
       const sources = configRegistry.getSources();
@@ -375,8 +380,10 @@ export class ServerEnvironment extends BaseEnvironment {
       await this.initializeMcp(newConfig.mcp);
       
       // 7. Register new MCP tools
+      let newMcpToolsCount = 0;
       if (this.mcpManager) {
         const mcpTools = this.mcpManager.getTools();
+        newMcpToolsCount = mcpTools.length;
         for (const tool of mcpTools) {
           this.registerTool(tool);
           console.log(`[ServerEnvironment] Registered MCP tool: ${tool.name}`);
@@ -386,6 +393,67 @@ export class ServerEnvironment extends BaseEnvironment {
       
       // 8. Re-initialize LLM with new config
       await this.loadFromConfig();
+      
+      // 9. Build notification message about environment changes
+      const newToolsCount = this.getTools().length;
+      const skills = this.listSkills();
+      const messages: string[] = [];
+      
+      messages.push(`🔄 **环境已切换**: ${oldEnvName} → ${envName}`);
+      
+      if (newToolsCount !== oldToolsCount) {
+        messages.push(`📝 **可用工具**: ${oldToolsCount} → ${newToolsCount} 个`);
+      }
+      
+      if (this.mcpManager) {
+        const mcpServers = this.mcpManager.getServerNames();
+        if (mcpServers.length > 0) {
+          messages.push(`🛠️ **MCP 服务**: ${mcpServers.join(", ")}`);
+          messages.push(`🔧 **MCP 工具**: ${newMcpToolsCount} 个`);
+        }
+      }
+      
+      if (skills.length > 0) {
+        const skillNames = skills.map(s => s.name).join(", ");
+        messages.push(`📦 **Skills**: ${skillNames}`);
+      }
+      
+      if (newConfig.defaultModel) {
+        messages.push(`🤖 **模型**: ${newConfig.defaultModel}`);
+      }
+      
+      const notification = messages.join("\n");
+      const sessionId = context?.session_id || "default";
+      const messageId = `msg_${Date.now()}`;
+      
+      // 10. Emit stream event to frontend
+      this.emitStreamEvent(
+        { type: "text", content: notification, delta: "" },
+        { session_id: sessionId, message_id: messageId }
+      );
+      
+      // 11. Try to add message to session history if session exists
+      try {
+        const { Storage } = await import("../core/session/index.js");
+        const session = Storage.getSession(sessionId);
+        if (session) {
+          session.addMessage({
+            id: messageId,
+            sessionID: sessionId,
+            role: "assistant",
+            timestamp: Date.now(),
+          }, [
+            {
+              id: `prt_${Date.now()}`,
+              type: "text",
+              text: notification,
+            },
+          ]);
+          console.log(`[ServerEnvironment] Added environment switch notification to session ${sessionId}`);
+        }
+      } catch (err) {
+        console.log(`[ServerEnvironment] Could not add message to session history:`, err);
+      }
       
       console.log(`[ServerEnvironment] Successfully switched to environment: ${envName}`);
       return true;

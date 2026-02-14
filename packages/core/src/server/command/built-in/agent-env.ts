@@ -224,7 +224,7 @@ async function handleSelectAction(
     // This is the preferred way as it updates both config registry and LLM config
     if (context.env && "switchEnvironment" in context.env) {
       try {
-        const switched = await (context.env as any).switchEnvironment(action.envName);
+        const switched = await (context.env as any).switchEnvironment(action.envName, context);
         if (switched) {
           return {
             success: true,
