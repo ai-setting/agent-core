@@ -1,0 +1,20 @@
+{
+  "id": "test_env",
+  "displayName": "Test Environment",
+  "description": "测试环境，包含 MCP 功能测试",
+  
+  "mcp": {
+    "clients": {
+      "hello": {
+        "type": "local",
+        "command": ["bun", "run", "./mcpservers/hello/server.mjs"],
+        "enabled": true
+      },
+      "todo": {
+        "type": "local",
+        "command": ["bun", "run", "./mcpservers/todo/server.mjs"],
+        "enabled": true
+      }
+    }
+  }
+}
