@@ -249,6 +249,13 @@ export class McpManager {
   }
 
   /**
+   * 获取所有已连接的 MCP 服务器名称
+   */
+  getServerNames(): string[] {
+    return Array.from(this.clients.keys())
+  }
+
+  /**
    * 获取工具描述（用于 system prompt）
    */
   getToolsDescription(): string {
