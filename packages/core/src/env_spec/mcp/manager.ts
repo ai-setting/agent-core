@@ -18,6 +18,7 @@ import type {
 } from "./types.js"
 import { convertMcpTool, createMcpToolsDescription } from "./convert.js"
 import { McpServerLoader, type DiscoveredMcpServer } from "./loader.js"
+import { serverLogger } from "../../server/logger.js"
 
 export interface McpClientLoadResult {
   loaded: number
@@ -30,6 +31,7 @@ export interface McpClientLoadResult {
  */
 export class McpManager {
   private clients: Map<string, Client> = new Map()
+  private transports: Map<string, StdioClientTransport | StreamableHTTPClientTransport> = new Map()
   private tools: Map<string, ToolInfo> = new Map()
   private status: Map<string, McpClientStatus> = new Map()
   private mcpserversDir?: string
@@ -54,6 +56,7 @@ export class McpManager {
     if (this.mcpserversDir) {
       const loader = new McpServerLoader(this.mcpserversDir)
       const discovered = await loader.discover()
+      console.log(`[MCP] Discovered ${discovered.length} MCP servers from ${this.mcpserversDir}`)
 
       for (const server of discovered) {
         const explicitServerConfig = explicitConfig?.[server.name]
@@ -119,24 +122,35 @@ export class McpManager {
     }
 
     this.status.set(name, { name, status: "connecting" })
+    serverLogger.info(`[MCP] Connecting to ${name}`, { config })
 
     try {
       // 创建传输层并连接
       const transport = this.createTransport(config)
+      serverLogger.debug(`[MCP] Transport created for ${name}`)
+      
       const client = new Client({ name: "agent-core", version: "1.0.0" })
+      serverLogger.debug(`[MCP] Connecting client for ${name}...`)
       await client.connect(transport)
+      serverLogger.debug(`[MCP] Client connected for ${name}`)
 
       this.clients.set(name, client)
+      this.transports.set(name, transport)
 
       // 获取工具列表并转换
+      serverLogger.debug(`[MCP] Listing tools for ${name}...`)
       const toolsResult = await client.listTools()
 
       const mcpTools = toolsResult.tools as McpTool[]
+      serverLogger.debug(`[MCP] Found ${mcpTools?.length ?? 0} tools for ${name}`)
+      
       const options: McpToolConversionOptions = {
         timeout: config.timeout,
+        transport: transport as StdioClientTransport,
       }
 
       for (const mcpTool of mcpTools || []) {
+        serverLogger.debug(`[MCP] Converting tool: ${mcpTool.name}`)
         const toolInfo = convertMcpTool(mcpTool, client, name, options)
         this.tools.set(toolInfo.name, toolInfo)
       }
@@ -150,6 +164,7 @@ export class McpManager {
       console.log(`[MCP] Loaded ${mcpTools?.length ?? 0} tools from ${name}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
+      serverLogger.error(`[MCP] Failed to connect to ${name}:`, { error: errorMsg, stack: error instanceof Error ? error.stack : undefined })
       this.status.set(name, { name, status: "error", error: errorMsg })
       throw error
     }
@@ -158,7 +173,7 @@ export class McpManager {
   /**
    * 创建传输层
    */
-  private createTransport(config: McpClientConfig) {
+  private createTransport(config: McpClientConfig): StdioClientTransport | StreamableHTTPClientTransport {
     if (config.type === "local") {
       const [cmd, ...args] = config.command!
       const env: Record<string, string> = {}
@@ -174,6 +189,7 @@ export class McpManager {
         command: cmd,
         args,
         env,
+        stderr: "pipe",
       })
     } else {
       // 远程 MCP

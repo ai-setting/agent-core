@@ -863,22 +863,24 @@ export abstract class BaseEnvironment implements Environment {
       return;
     }
 
+    if (mcpserversDir) {
+      console.log(`[BaseEnvironment] MCP servers directory: ${mcpserversDir}`);
+    }
+
     // 动态导入 MCP 管理器
     const { McpManager } = await import("../../../env_spec/mcp/manager.js");
     this.mcpManager = new McpManager(mcpserversDir);
 
-    // 加载 MCP Clients
-    if (mcpConfig?.clients) {
-      const result = await this.mcpManager.loadClients(mcpConfig.clients);
-      console.log(`[BaseEnvironment] Loaded ${result.loaded} MCP clients, ${result.failed.length} failed`);
+    // 加载 MCP Clients（即使没有显式配置，也会扫描 mcpservers 目录）
+    const result = await this.mcpManager.loadClients(mcpConfig?.clients ?? {});
+    console.log(`[BaseEnvironment] Loaded ${result.loaded} MCP clients, ${result.failed.length} failed`);
 
-      // 注册 MCP 工具
-      const mcpTools = this.mcpManager.getTools();
-      for (const tool of mcpTools) {
-        this.registerTool(tool);
-      }
-      console.log(`[BaseEnvironment] Registered ${mcpTools.length} MCP tools`);
+    // 注册 MCP 工具
+    const mcpTools = this.mcpManager.getTools();
+    for (const tool of mcpTools) {
+      this.registerTool(tool);
     }
+    console.log(`[BaseEnvironment] Registered ${mcpTools.length} MCP tools`);
   }
 
   /**
