@@ -219,7 +219,7 @@ description: A test skill
       const tools = env.getTools();
       const skillTool = tools.find(t => t.name === "skill");
       expect(skillTool).toBeDefined();
-      expect(skillTool?.description).toContain("Test Skill");
+      expect(skillTool?.description).toContain("A test skill");
     });
   });
 

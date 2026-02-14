@@ -21,8 +21,9 @@ describe("skill-tool", () => {
       const tool = createSkillToolWithDescription(skills);
 
       expect(tool.name).toBe("skill");
-      expect(tool.description).toContain("test-skill (Test Skill): A test skill description");
-      expect(tool.description).toContain("Execute a skill. Available skills:");
+      expect(tool.description).toContain("<name>test-skill</name>");
+      expect(tool.description).toContain("<description>A test skill description</description>");
+      expect(tool.description).toContain("Load a specialized skill");
     });
 
     it("should list multiple skills in description", () => {
@@ -43,14 +44,14 @@ describe("skill-tool", () => {
 
       const tool = createSkillToolWithDescription(skills);
 
-      expect(tool.description).toContain("skill-one (Skill One): First skill");
-      expect(tool.description).toContain("skill-two (Skill Two): Second skill");
+      expect(tool.description).toContain("<name>skill-one</name>");
+      expect(tool.description).toContain("<name>skill-two</name>");
     });
 
     it("should handle empty skills array", () => {
       const tool = createSkillToolWithDescription([]);
 
-      expect(tool.description).toBe("Execute a skill. Available skills:\n");
+      expect(tool.description).toContain("No skills currently available");
     });
 
     it("should preserve baseSkillTool structure", () => {
