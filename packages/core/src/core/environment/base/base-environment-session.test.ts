@@ -43,6 +43,9 @@ class TestEnv extends BaseEnvironment {
   } {
     return { type: "error" };
   }
+  protected getSkillsDirectory(): string | undefined {
+    return undefined;
+  }
 }
 
 describe("BaseEnvironment session event hooks", () => {

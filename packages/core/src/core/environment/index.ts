@@ -5,6 +5,7 @@
 import type { Context, Action, ToolResult, Tool, LLMStream, StreamHandler, LLMStreamEvent, ToolInfo } from "../types";
 import type { LLMMessage, LLMOptions } from "./base/invoke-llm.js";
 import type { Session, SessionCreateOptions } from "../session/index.js";
+import type { SkillInfo } from "./skills/types.js";
 
 export type StreamEventType = "text" | "reasoning" | "tool_call" | "tool_result" | "completed" | "error" | "start";
 
@@ -180,6 +181,21 @@ export interface Environment {
    * 可选：删除会话。
    */
   deleteSession?(id: string): void | Promise<void>;
+
+  /**
+   * 获取所有已加载的 Skills 元信息
+   */
+  listSkills(): SkillInfo[];
+
+  /**
+   * 获取单个 Skill 元信息
+   */
+  getSkill(id: string): SkillInfo | undefined;
+
+  /**
+   * 获取 Skills 元信息用于 Tool Description
+   */
+  getSkillsInfoForToolDescription(): string;
 }
 
 export interface Prompt {
@@ -197,3 +213,4 @@ export {
 } from "./base/index.js";
 export { BaseEnvironment } from "./base/base-environment.js";
 export * from "./expend/os/index.js";
+export * from "./skills/index.js";
