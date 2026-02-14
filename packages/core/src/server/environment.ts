@@ -344,14 +344,12 @@ export class ServerEnvironment extends BaseEnvironment {
       for (const source of sources) {
         if (source.name.startsWith("environment:")) {
           configRegistry.unregister(source.name);
-          console.log(`[ServerEnvironment] Unregistered old environment source: ${source.name}`);
         }
       }
       
       // 2. Register new environment source
       const newEnvSource = createEnvironmentSource(envName, 10);
       configRegistry.register(newEnvSource);
-      console.log(`[ServerEnvironment] Registered new environment source: ${newEnvSource.name}`);
       
       // 3. Reload configuration from new environment
       await Config_reload();
@@ -363,7 +361,6 @@ export class ServerEnvironment extends BaseEnvironment {
           const mcpTools = this.mcpManager.getTools().filter((t: any) => t.name.startsWith(`${serverName}_`));
           for (const tool of mcpTools) {
             this.unregisterTool(tool.name);
-            console.log(`[ServerEnvironment] Unregistered MCP tool: ${tool.name}`);
           }
         }
       }
@@ -386,9 +383,7 @@ export class ServerEnvironment extends BaseEnvironment {
         newMcpToolsCount = mcpTools.length;
         for (const tool of mcpTools) {
           this.registerTool(tool);
-          console.log(`[ServerEnvironment] Registered MCP tool: ${tool.name}`);
         }
-        console.log(`[ServerEnvironment] Registered ${mcpTools.length} MCP tools for new environment`);
       }
       
       // 8. Re-initialize LLM with new config
@@ -426,28 +421,17 @@ export class ServerEnvironment extends BaseEnvironment {
       const sessionId = context?.session_id || "default";
       const messageId = `msg_${Date.now()}`;
       
-      console.log(`[ServerEnvironment] Environment switch notification:`, {
-        sessionId,
-        messageId,
-        hasContext: !!context,
-        notification
-      });
-      
-      // 10. Emit stream event to frontend (always)
-      console.log(`[ServerEnvironment] Emitting stream event...`);
+      // Emit stream event to frontend (always)
       this.emitStreamEvent(
         { type: "text", content: notification, delta: "" },
         { session_id: sessionId, message_id: messageId }
       );
-      console.log(`[ServerEnvironment] Stream event emitted`);
       
-      // 11. Try to add message to session history if session exists in memory
+      // Try to add message to session history if session exists in memory
       // Note: Sessions need to be loaded/created first via createSession API
-      console.log(`[ServerEnvironment] Checking session for history...`, { sessionId });
       try {
         const { Storage } = await import("../core/session/index.js");
         const session = Storage.getSession(sessionId);
-        console.log(`[ServerEnvironment] Session in memory:`, !!session, sessionId);
         if (session) {
           session.addMessage({
             id: messageId,
@@ -461,15 +445,12 @@ export class ServerEnvironment extends BaseEnvironment {
               text: notification,
             },
           ]);
-          console.log(`[ServerEnvironment] Added environment switch notification to session ${sessionId}`);
-        } else {
-          console.log(`[ServerEnvironment] No session in memory (session was not loaded/created). Stream event already sent to Bus.`);
         }
       } catch (err) {
-        console.log(`[ServerEnvironment] Error accessing session:`, err);
+        // Ignore session errors
       }
       
-      console.log(`[ServerEnvironment] Successfully switched to environment: ${envName}`);
+      console.log(`[ServerEnvironment] Switched to environment: ${envName}`);
       return true;
     } catch (error) {
       console.error(`[ServerEnvironment] Failed to switch environment: ${error}`);

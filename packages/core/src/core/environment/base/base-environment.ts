@@ -428,12 +428,6 @@ export abstract class BaseEnvironment implements Environment {
       const msgId = `msg_${Date.now()}`;
       
       // Emit text event to frontend
-      console.log(`[BaseEnvironment] Emitting skill change notification:`, {
-        session_id: context?.session_id || "default",
-        message_id: msgId,
-        notification
-      });
-      
       this.emitStreamEvent(
         { type: "text", content: notification, delta: "" },
         { session_id: context?.session_id || "default", message_id: msgId }
