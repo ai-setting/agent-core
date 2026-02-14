@@ -124,6 +124,39 @@ export async function bash(
 }
 
 /**
+ * Get the shell info at initialization time.
+ * This is used to provide accurate shell information to the LLM.
+ */
+function getShellInfo(): { shell: string; useBash: boolean; platform: string } {
+  if (process.platform === "win32") {
+    const gitPath = resolveGitBashPath();
+    if (gitPath) {
+      return { shell: gitPath, useBash: true, platform: "Windows (Git Bash)" };
+    }
+    const comspec = process.env.COMSPEC || "cmd.exe";
+    return { shell: comspec, useBash: false, platform: "Windows (cmd.exe)" };
+  }
+
+  if (process.platform === "darwin") {
+    const shell = process.env.SHELL || "/bin/zsh";
+    return { shell, useBash: true, platform: "macOS" };
+  }
+
+  const shell = process.env.SHELL || "sh";
+  const shellName = shell.split("/").pop() || "sh";
+
+  if (shellName === "fish") {
+    const bash = resolveBashPath();
+    if (bash) {
+      return { shell: bash, useBash: true, platform: "Linux (fish -> bash)" };
+    }
+    return { shell, useBash: false, platform: "Linux (fish)" };
+  }
+
+  return { shell, useBash: shellName === "bash", platform: "Linux" };
+}
+
+/**
  * Get the appropriate shell and arguments for the current platform.
  *
  * @param command - The command to execute
@@ -247,9 +280,11 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 }
 
 export function createBashTool(): ToolInfo {
-  return {
-    name: "bash",
-    description: `Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+  const shellInfo = getShellInfo();
+  
+  const description = `Current shell: ${shellInfo.shell} (${shellInfo.platform}). Commands should be compatible with this shell.
+
+Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
 
 All commands run in the working directory by default. Use the workdir parameter if you need to run a command in a different directory. AVOID using cd <directory> && <command> patterns - use workdir instead.
 
@@ -265,7 +300,11 @@ Usage notes:
 - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
 - Avoid using Bash with the find, grep, cat, head, tail, sed, awk, or echo commands, unless explicitly instructed. Instead, always prefer using the dedicated tools.
 - When issuing multiple commands: If the commands are independent and can run in parallel, use multiple Bash tool calls. If they depend on each other, use && to chain them.
-- AVOID using cd <directory> && <command>. Use the workdir parameter to change directories instead.`,
+- AVOID using cd <directory> && <command>. Use the workdir parameter to change directories instead.`;
+
+  return {
+    name: "bash",
+    description,
     parameters: z.object({
       command: z.string().describe("The bash command to execute"),
       timeout: z.number().optional().describe("Optional timeout in milliseconds (default: 60000)"),
