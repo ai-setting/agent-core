@@ -30,6 +30,7 @@ export function App(props: AppProps) {
       } else {
         const newSessionId = await eventStream.createSession();
         console.log(`Created new session: ${newSessionId}`);
+        store.setSessionId(newSessionId);
         // 创建会话后连接事件流
         await eventStream.connect();
       }

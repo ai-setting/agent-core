@@ -418,36 +418,39 @@ export class ServerEnvironment extends BaseEnvironment {
       }
       
       const notification = messages.join("\n");
-      const sessionId = context?.session_id || "default";
+      const sessionId = context?.session_id;
       const messageId = `msg_${Date.now()}`;
-      
-      // Emit stream event to frontend (always)
-      this.emitStreamEvent(
-        { type: "text", content: notification, delta: "" },
-        { session_id: sessionId, message_id: messageId }
-      );
-      
-      // Try to add message to session history if session exists in memory
-      // Note: Sessions need to be loaded/created first via createSession API
-      try {
-        const { Storage } = await import("../core/session/index.js");
-        const session = Storage.getSession(sessionId);
-        if (session) {
-          session.addMessage({
-            id: messageId,
-            sessionID: sessionId,
-            role: "assistant",
-            timestamp: Date.now(),
-          }, [
-            {
-              id: `prt_${Date.now()}`,
-              type: "text",
-              text: notification,
-            },
-          ]);
+
+      // Only emit stream event if we have a valid sessionId (not undefined or "default")
+      if (sessionId && sessionId !== "default") {
+        // Emit stream event to frontend
+        this.emitStreamEvent(
+          { type: "text", content: notification, delta: "" },
+          { session_id: sessionId, message_id: messageId }
+        );
+
+        // Try to add message to session history if session exists in memory
+        // Note: Sessions need to be loaded/created first via createSession API
+        try {
+          const { Storage } = await import("../core/session/index.js");
+          const session = Storage.getSession(sessionId);
+          if (session) {
+            session.addMessage({
+              id: messageId,
+              sessionID: sessionId,
+              role: "assistant",
+              timestamp: Date.now(),
+            }, [
+              {
+                id: `prt_${Date.now()}`,
+                type: "text",
+                text: notification,
+              },
+            ]);
+          }
+        } catch (err) {
+          // Ignore session errors
         }
-      } catch (err) {
-        // Ignore session errors
       }
       
       console.log(`[ServerEnvironment] Switched to environment: ${envName}`);
