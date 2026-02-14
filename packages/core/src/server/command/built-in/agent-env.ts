@@ -222,10 +222,8 @@ async function handleSelectAction(
 
     // If ServerEnvironment supports switchEnvironment, use it for hot reload
     // This is the preferred way as it updates both config registry and LLM config
-    console.log("[AgentEnvCommand] context:", JSON.stringify({ sessionId: context.sessionId, hasEnv: !!context.env }));
     if (context.env && "switchEnvironment" in context.env) {
       try {
-        console.log("[AgentEnvCommand] Calling switchEnvironment with context");
         // Convert CommandContext to Context format (sessionId -> session_id)
         const ctx = {
           session_id: context.sessionId,
