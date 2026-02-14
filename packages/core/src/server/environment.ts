@@ -426,16 +426,28 @@ export class ServerEnvironment extends BaseEnvironment {
       const sessionId = context?.session_id || "default";
       const messageId = `msg_${Date.now()}`;
       
-      // 10. Emit stream event to frontend
+      console.log(`[ServerEnvironment] Environment switch notification:`, {
+        sessionId,
+        messageId,
+        hasContext: !!context,
+        notification
+      });
+      
+      // 10. Emit stream event to frontend (always)
+      console.log(`[ServerEnvironment] Emitting stream event...`);
       this.emitStreamEvent(
         { type: "text", content: notification, delta: "" },
         { session_id: sessionId, message_id: messageId }
       );
+      console.log(`[ServerEnvironment] Stream event emitted`);
       
-      // 11. Try to add message to session history if session exists
+      // 11. Try to add message to session history if session exists in memory
+      // Note: Sessions need to be loaded/created first via createSession API
+      console.log(`[ServerEnvironment] Checking session for history...`, { sessionId });
       try {
         const { Storage } = await import("../core/session/index.js");
         const session = Storage.getSession(sessionId);
+        console.log(`[ServerEnvironment] Session in memory:`, !!session, sessionId);
         if (session) {
           session.addMessage({
             id: messageId,
@@ -450,9 +462,11 @@ export class ServerEnvironment extends BaseEnvironment {
             },
           ]);
           console.log(`[ServerEnvironment] Added environment switch notification to session ${sessionId}`);
+        } else {
+          console.log(`[ServerEnvironment] No session in memory (session was not loaded/created). Stream event already sent to Bus.`);
         }
       } catch (err) {
-        console.log(`[ServerEnvironment] Could not add message to session history:`, err);
+        console.log(`[ServerEnvironment] Error accessing session:`, err);
       }
       
       console.log(`[ServerEnvironment] Successfully switched to environment: ${envName}`);
