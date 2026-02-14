@@ -11,6 +11,7 @@ import {
   HistoryMessage,
   type EnvironmentProfile,
   type EnvironmentAgentSpec,
+  type SkillInfo,
 } from "../index.js";
 import {
   Context,
@@ -97,6 +98,8 @@ export abstract class BaseEnvironment implements Environment {
   protected maxConcurrentStreams: number;
   protected defaultModel: string;
   protected systemPrompt: string;
+  protected skills: Map<string, SkillInfo> = new Map();
+  protected skillsLoaded: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   private modelToInitialize: string | undefined;
   private baseURLToInitialize: string | undefined;
@@ -211,6 +214,20 @@ export abstract class BaseEnvironment implements Environment {
 
   getTools(): Tool[] {
     return this.listTools();
+  }
+
+  listSkills(): SkillInfo[] {
+    return Array.from(this.skills.values());
+  }
+
+  getSkill(id: string): SkillInfo | undefined {
+    return this.skills.get(id);
+  }
+
+  getSkillsInfoForToolDescription(): string {
+    return this.listSkills()
+      .map(s => `- ${s.name}: ${s.description}`)
+      .join("\n");
   }
 
   /**
@@ -710,6 +727,47 @@ export abstract class BaseEnvironment implements Environment {
     maxRetries?: number;
     fallbackTool?: string;
   };
+
+  /**
+  目录路径（子类 * 获取 Skills 实现）
+   */
+  protected abstract getSkillsDirectory(): string | undefined;
+
+  /**
+   * 加载 Skills
+   * 每次调用都会重新扫描 skills 目录，并重新注册 skillTool
+   */
+  public async loadSkills(): Promise<void> {
+    const skillsDir = this.getSkillsDirectory();
+    if (!skillsDir) {
+      console.log("[BaseEnvironment] No skills directory configured");
+      return;
+    }
+
+    const { SkillLoader } = await import("../skills/skill-loader.js");
+    const { createSkillToolWithDescription } = await import("../skills/skill-tool.js");
+
+    try {
+      const loader = new SkillLoader(skillsDir);
+      const skillInfos = await loader.loadAll();
+
+      this.skills.clear();
+      for (const skill of skillInfos) {
+        this.skills.set(skill.id, skill);
+      }
+
+      if (skillInfos.length > 0) {
+        const skillToolWithDesc = createSkillToolWithDescription(skillInfos);
+        this.registerTool(skillToolWithDesc);
+      }
+
+      console.log(`[BaseEnvironment] Loaded ${this.skills.size} skills`);
+    } catch (error) {
+      console.error("[BaseEnvironment] Failed to load skills:", error);
+    }
+
+    this.skillsLoaded = true;
+  }
 
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
   onSessionEvent?(event: SessionEvent): void | Promise<void>;

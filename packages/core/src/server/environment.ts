@@ -4,6 +4,7 @@
  * Extends BaseEnvironment to publish stream events via EventBus.
  */
 
+import path from "path";
 import {
   BaseEnvironment,
   BaseEnvironmentConfig,
@@ -52,6 +53,7 @@ export class ServerEnvironment extends BaseEnvironment {
   private modelStore: ModelStore;
   private currentModelSelection: { providerID: string; modelID: string } | null = null;
   private configLoaded: Promise<void> = Promise.resolve();
+  private skillsDirectory: string | undefined;
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -95,6 +97,17 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1. Load config file
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
+
+      // 1.5. Set skills directory and load skills
+      if (config.activeEnvironment) {
+        const { ConfigPaths } = await import("../config/paths.js");
+        this.skillsDirectory = path.join(
+          ConfigPaths.environments,
+          config.activeEnvironment,
+          "skills"
+        );
+        await this.loadSkills();
+      }
 
       // 2. Load user model preferences
       await this.modelStore.load();
@@ -364,11 +377,20 @@ export class ServerEnvironment extends BaseEnvironment {
       for (const tool of allTools) {
         this.registerTool(tool);
       }
-      console.log(`[ServerEnvironment] Registered ${allTools.length} tools`);
+
+      // Register base skill tool (will be replaced by loadSkills if skills exist)
+      const { baseSkillTool } = await import("../core/environment/skills/skill-tool.js");
+      this.registerTool(baseSkillTool);
+
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 1} tools (including skill tool)`);
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");
     }
+  }
+
+  protected getSkillsDirectory(): string | undefined {
+    return this.skillsDirectory;
   }
 
   protected getDefaultTimeout(toolName: string): number {
