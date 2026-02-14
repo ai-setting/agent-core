@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod"
+import type { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 // ========== MCP Server 配置 ==========
 
@@ -95,4 +96,5 @@ export interface McpStatus {
 export interface McpToolConversionOptions {
   timeout?: number
   onError?: (error: Error) => void
+  transport?: StdioClientTransport
 }

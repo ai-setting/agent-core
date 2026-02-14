@@ -7,6 +7,7 @@ import type { Tool as McpTool, CallToolResult as McpCallToolResult } from "@mode
 import type { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js"
 import type { ToolInfo, ToolResult, ToolContext } from "../../core/types/index.js"
 import type { McpToolConversionOptions } from "./types.js"
+import { serverLogger } from "../../server/logger.js"
 
 interface JSONSchema7 {
   type?: string
@@ -42,16 +43,21 @@ export function convertMcpTool(
     description: mcpTool.description ?? `MCP tool: ${mcpTool.name}`,
     parameters: zodParams,
     execute: async (args: unknown, _context: ToolContext): Promise<ToolResult> => {
+      serverLogger.debug(`[MCP] Calling tool: ${toolName}`, { args, mcpTool: mcpTool.name })
+      
       try {
-        // 调用 MCP 工具
-        const result = await (mcpClient as any).request(
-          { method: "tools/call", params: { name: mcpTool.name, arguments: (args as Record<string, unknown>) ?? {} } },
-          (mcpTool as any).resultSchema
-        )
+        serverLogger.debug(`[MCP] Using callTool method for ${mcpTool.name}`)
+        const result = await mcpClient.callTool({
+          name: mcpTool.name,
+          arguments: (args as Record<string, unknown>) ?? {},
+        })
+
+        serverLogger.debug(`[MCP] callTool result:`, { result })
 
         // 转换结果格式
-        return convertMcpCallResult(result)
+        return convertMcpCallResult(result as unknown as McpCallToolResult)
       } catch (error) {
+        serverLogger.error(`[MCP] Tool call failed: ${toolName}`, { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined })
         options?.onError?.(error as Error)
         return {
           success: false,
@@ -132,7 +138,7 @@ function jsonSchemaPropToZod(prop: JSONSchema7): z.ZodType {
 /**
  * 转换 MCP 调用结果为 ToolResult
  */
-function convertMcpCallResult(result: McpCallToolResult): ToolResult {
+function convertMcpCallResult(result: McpCallToolResult, stderr: string = ""): ToolResult {
   // MCP 结果格式: { content: Array<{ type: "text", text: string }>, isError?: boolean }
   const content = result.content
   const textContent = content
@@ -140,10 +146,13 @@ function convertMcpCallResult(result: McpCallToolResult): ToolResult {
     .map(c => c.text)
     .join("")
 
+  // 如果有 stderr 输出，附加到结果中
+  const fullOutput = stderr ? `${textContent}\n\n[Stderr]:\n${stderr}` : textContent
+
   return {
     success: !result.isError,
-    output: textContent,
-    error: result.isError ? textContent : undefined,
+    output: fullOutput,
+    error: result.isError ? fullOutput : undefined,
   }
 }
 
