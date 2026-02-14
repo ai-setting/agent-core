@@ -63,35 +63,14 @@ export const baseSkillTool: ToolInfo = {
     }
 
     try {
+      // Return skill.md content as the skill specification
+      // Agent should read this and execute any scripts (e.g., index.js) as needed
       const fs = await import("fs/promises");
-      const pathModule = await import("path");
-      const skillDir = pathModule.dirname(skillInfo.path);
-      const indexPath = pathModule.join(skillDir, "index.js");
+      const content = await fs.readFile(skillInfo.path, "utf-8");
+      const bodyMatch = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+      const output = bodyMatch ? bodyMatch[1] : content;
 
-      let output = "";
-
-      // Check if skill has executable index.js
-      try {
-        await fs.access(indexPath);
-        // Execute the script directly
-        const { execSync } = await import("child_process");
-        const result = execSync(`bun run "${indexPath}"`, {
-          encoding: "utf-8",
-          timeout: 30000,
-        });
-        
-        output = result.trim();
-      } catch (execError) {
-        // Check if it's "file not found" or execution error
-        if (!String(execError).includes("ENOENT")) {
-          console.warn(`[skillTool] Failed to execute skill ${skillId}:`, execError);
-        }
-        
-        // Fall back to returning skill.md content
-        const content = await fs.readFile(skillInfo.path, "utf-8");
-        const bodyMatch = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
-        output = bodyMatch ? bodyMatch[1] : content;
-      }
+      const skillDir = path.dirname(skillInfo.path);
 
       // Wrap output with skill_content block
       const skillContent = SKILL_CONTENT_TEMPLATE
