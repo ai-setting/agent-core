@@ -29,7 +29,7 @@ export async function startTUI(options: TUIOptions): Promise<void> {
     <StoreProvider>
       <ThemeProvider initialMode="dark">
         <MarkdownStyleProvider>
-          <EventStreamProvider initialUrl={options.url} password={options.password}>
+          <EventStreamProvider initialUrl={options.url} password={options.password} onExit={handleExit}>
             <CommandProvider serverUrl={options.url}>
               <DialogProvider>
                 <App
