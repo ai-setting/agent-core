@@ -407,6 +407,38 @@ export abstract class BaseEnvironment implements Environment {
   async handle_query(query: string, context?: Context, history?: HistoryMessage[]): Promise<string> {
     await this.ensureLLMInitialized();
 
+    // Reload skills before each query to support dynamic skill addition
+    const skillChanges = await this.loadSkills();
+
+    // Handle skill changes notification
+    if (skillChanges.added.length > 0 || skillChanges.removed.length > 0) {
+      const messages: string[] = [];
+      
+      if (skillChanges.added.length > 0) {
+        const addedList = skillChanges.added.map(s => `• ${s.name}: ${s.description}`).join("\n");
+        messages.push(`📦 新增了 ${skillChanges.added.length} 个 skill:\n${addedList}`);
+      }
+      
+      if (skillChanges.removed.length > 0) {
+        messages.push(`🗑️ 删除了 ${skillChanges.removed.length} 个 skill: ${skillChanges.removed.join(", ")}`);
+      }
+
+      const notification = messages.join("\n\n");
+
+      // Emit text event to frontend
+      this.emitStreamEvent(
+        { type: "text", content: notification },
+        { session_id: context?.session_id || "default", message_id: `msg_${Date.now()}` }
+      );
+
+      // Add assistant message to history
+      history = history || [];
+      history.push({
+        role: "assistant",
+        content: { type: "text", text: notification } as any,
+      });
+    }
+
     const event = {
       event_type: "user_query",
       timestamp: new Date().toISOString(),
@@ -734,14 +766,20 @@ export abstract class BaseEnvironment implements Environment {
   protected abstract getSkillsDirectory(): string | undefined;
 
   /**
+   * Skill 变动信息
+   */
+  protected lastLoadedSkills: Map<string, SkillInfo> = new Map();
+
+  /**
    * 加载 Skills
    * 每次调用都会重新扫描 skills 目录，并重新注册 skillTool
+   * 返回是否有新增或删除的 skills
    */
-  public async loadSkills(): Promise<void> {
+  public async loadSkills(): Promise<{ added: SkillInfo[]; removed: string[] }> {
     const skillsDir = this.getSkillsDirectory();
     if (!skillsDir) {
       console.log("[BaseEnvironment] No skills directory configured");
-      return;
+      return { added: [], removed: [] };
     }
 
     const { SkillLoader } = await import("../skills/skill-loader.js");
@@ -750,6 +788,23 @@ export abstract class BaseEnvironment implements Environment {
     try {
       const loader = new SkillLoader(skillsDir);
       const skillInfos = await loader.loadAll();
+
+      const added: SkillInfo[] = [];
+      const removed: string[] = [];
+
+      // Check for new skills
+      for (const skill of skillInfos) {
+        if (!this.lastLoadedSkills.has(skill.id)) {
+          added.push(skill);
+        }
+      }
+
+      // Check for removed skills
+      for (const [id] of this.lastLoadedSkills) {
+        if (!skillInfos.find(s => s.id === id)) {
+          removed.push(id);
+        }
+      }
 
       this.skills.clear();
       for (const skill of skillInfos) {
@@ -761,12 +816,25 @@ export abstract class BaseEnvironment implements Environment {
         this.registerTool(skillToolWithDesc);
       }
 
+      // Update last loaded skills
+      this.lastLoadedSkills = new Map(skillInfos.map(s => [s.id, s]));
+
       console.log(`[BaseEnvironment] Loaded ${this.skills.size} skills`);
+      
+      if (added.length > 0) {
+        console.log(`[BaseEnvironment] Added skills: ${added.map(s => s.id).join(", ")}`);
+      }
+      if (removed.length > 0) {
+        console.log(`[BaseEnvironment] Removed skills: ${removed.join(", ")}`);
+      }
+
+      return { added, removed };
     } catch (error) {
       console.error("[BaseEnvironment] Failed to load skills:", error);
+      return { added: [], removed: [] };
+    } finally {
+      this.skillsLoaded = true;
     }
-
-    this.skillsLoaded = true;
   }
 
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
