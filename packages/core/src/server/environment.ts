@@ -54,6 +54,7 @@ export class ServerEnvironment extends BaseEnvironment {
   private currentModelSelection: { providerID: string; modelID: string } | null = null;
   private configLoaded: Promise<void> = Promise.resolve();
   private skillsDirectory: string | undefined;
+  private mcpserversDirectory: string | undefined;
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -107,6 +108,14 @@ export class ServerEnvironment extends BaseEnvironment {
           "skills"
         );
         await this.loadSkills();
+
+        // 1.6. Set mcpservers directory and load MCP clients
+        this.mcpserversDirectory = path.join(
+          ConfigPaths.environments,
+          config.activeEnvironment,
+          "mcpservers"
+        );
+        await this.initializeMcp(config.mcp);
       }
 
       // 2. Load user model preferences
@@ -391,6 +400,10 @@ export class ServerEnvironment extends BaseEnvironment {
 
   protected getSkillsDirectory(): string | undefined {
     return this.skillsDirectory;
+  }
+
+  protected getMcpserversDirectory(): string | undefined {
+    return this.mcpserversDirectory;
   }
 
   protected getDefaultTimeout(toolName: string): number {

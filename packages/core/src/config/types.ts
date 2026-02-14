@@ -93,6 +93,46 @@ export const ConfigInfo = z.object({
   // === Models 配置（从 environments/{env}/models.jsonc 加载）===
   models: z.record(ModelConfig).optional().describe("Model configurations for this environment"),
   
+  // === MCP 配置（从 environments/{env}/config.jsonc 加载）===
+  mcp: z.object({
+    server: z.object({
+      enabled: z.boolean().optional().describe("Enable MCP Server"),
+      transport: z.enum(["stdio", "http"]).optional().describe("Transport type"),
+      http: z.object({
+        port: z.number().int().positive().optional().describe("HTTP port"),
+        host: z.string().optional().describe("HTTP host"),
+      }).optional(),
+    }).optional().describe("MCP Server configuration"),
+    clients: z.record(
+      z.string(),
+      z.union([
+        z.object({
+          type: z.literal("local"),
+          command: z.array(z.string()).describe("Command to run the MCP server"),
+          environment: z.record(z.string(), z.string()).optional().describe("Environment variables"),
+          enabled: z.boolean().optional().describe("Enable this MCP server"),
+          timeout: z.number().int().positive().optional().describe("Timeout in milliseconds"),
+        }),
+        z.object({
+          type: z.literal("remote"),
+          url: z.string().url().describe("Remote MCP server URL"),
+          enabled: z.boolean().optional().describe("Enable this MCP server"),
+          headers: z.record(z.string(), z.string()).optional().describe("HTTP headers"),
+          oauth: z.union([
+            z.object({
+              clientId: z.string().optional().describe("OAuth client ID"),
+              clientSecret: z.string().optional().describe("OAuth client secret"),
+              scope: z.string().optional().describe("OAuth scope"),
+            }),
+            z.literal(false),
+          ]).optional().describe("OAuth configuration"),
+          timeout: z.number().int().positive().optional().describe("Timeout in milliseconds"),
+        }),
+        z.object({ enabled: z.boolean() }),
+      ])
+    ).optional().describe("MCP Clients configuration"),
+  }).optional().describe("MCP configuration (Server and Clients)"),
+  
   // === 其他配置（预留扩展）===
   metadata: z.record(z.unknown()).optional().describe("Additional metadata"),
 });

@@ -837,6 +837,97 @@ export abstract class BaseEnvironment implements Environment {
     }
   }
 
+  // ========== MCP 相关 ==========
+
+  /**
+   * MCP 管理器
+   */
+  protected mcpManager: any = null;
+
+  /**
+   * 获取 MCP 服务器脚本目录（子类可覆盖）
+   * 默认返回 undefined，表示不加载 MCP
+   */
+  protected getMcpserversDirectory(): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * 初始化 MCP
+   * 在子类构造函数中调用
+   */
+  protected async initializeMcp(mcpConfig?: any): Promise<void> {
+    const mcpserversDir = this.getMcpserversDirectory();
+    
+    if (!mcpserversDir && !mcpConfig?.clients) {
+      return;
+    }
+
+    // 动态导入 MCP 管理器
+    const { McpManager } = await import("../../../env_spec/mcp/manager.js");
+    this.mcpManager = new McpManager(mcpserversDir);
+
+    // 加载 MCP Clients
+    if (mcpConfig?.clients) {
+      const result = await this.mcpManager.loadClients(mcpConfig.clients);
+      console.log(`[BaseEnvironment] Loaded ${result.loaded} MCP clients, ${result.failed.length} failed`);
+
+      // 注册 MCP 工具
+      const mcpTools = this.mcpManager.getTools();
+      for (const tool of mcpTools) {
+        this.registerTool(tool);
+      }
+      console.log(`[BaseEnvironment] Registered ${mcpTools.length} MCP tools`);
+    }
+  }
+
+  /**
+   * 获取 MCP 工具描述（用于 system prompt）
+   */
+  public getMcpToolsDescription(): string {
+    if (!this.mcpManager) {
+      return "  No MCP tools currently available.";
+    }
+    return this.mcpManager.getToolsDescription();
+  }
+
+  /**
+   * 重新加载 MCP Clients
+   */
+  public async reloadMcpClients(mcpConfig?: any): Promise<void> {
+    if (!this.mcpManager) {
+      return this.initializeMcp(mcpConfig);
+    }
+
+    // 断开所有现有客户端
+    await this.mcpManager.disconnectAll();
+
+    // 移除所有 MCP 工具
+    const toolNames = Array.from(this.tools.keys()).filter(name => name.includes('_'));
+    for (const name of toolNames) {
+      // 只移除 MCP 工具（格式为 mcpName_toolName）
+      if (name.includes('_')) {
+        // 检查是否是 MCP 工具
+        const mcpStatus = this.mcpManager.getClientStatus(name.split('_')[0]);
+        if (mcpStatus) {
+          this.tools.delete(name);
+        }
+      }
+    }
+
+    // 重新加载
+    if (mcpConfig?.clients) {
+      const result = await this.mcpManager.loadClients(mcpConfig.clients);
+      console.log(`[BaseEnvironment] Reloaded ${result.loaded} MCP clients`);
+
+      // 注册 MCP 工具
+      const mcpTools = this.mcpManager.getTools();
+      for (const tool of mcpTools) {
+        this.registerTool(tool);
+      }
+    }
+  }
+
   onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
   onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
