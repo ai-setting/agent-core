@@ -7,6 +7,7 @@
 import { createContext, useContext, createSignal, batch } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 import { tuiLogger } from "../logger.js";
+import { useStore } from "./store.js";
 
 // ============================================================================
 // 类型定义
@@ -64,8 +65,9 @@ const CommandContext = createContext<CommandContextValue>();
 export function CommandProvider(props: {
   children: any;
   serverUrl: string;
-  sessionId?: string;
 }) {
+  const store = useStore();
+  
   // State
   const [commands, setCommands] = createSignal<CommandItem[]>([]);
   const [isOpen, setIsOpen] = createSignal(false);
@@ -159,7 +161,7 @@ export function CommandProvider(props: {
       const response = await apiCall(`/commands/${encodeURIComponent(name)}`, {
         method: "POST",
         body: JSON.stringify({
-          sessionId: props.sessionId,
+          sessionId: store.sessionId() ?? undefined,
           args: args || "",
         }),
       });
