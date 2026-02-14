@@ -35,6 +35,7 @@ import { Auth_getProvider } from "../config/auth.js";
 import { ModelsConfig_getAll, type ModelEntry } from "../config/models-config.js";
 import { configRegistry } from "../config/registry.js";
 import { createEnvironmentSource } from "../config/sources/environment.js";
+import { ConfigPaths } from "../config/paths.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -350,7 +351,40 @@ export class ServerEnvironment extends BaseEnvironment {
       // 3. Reload configuration from new environment
       await Config_reload();
       
-      // 4. Re-initialize LLM with new config
+      // 4. Unregister old MCP tools before reloading
+      if (this.mcpManager) {
+        const oldServerNames = this.mcpManager.getServerNames();
+        for (const serverName of oldServerNames) {
+          const mcpTools = this.mcpManager.getTools().filter((t: any) => t.name.startsWith(`${serverName}_`));
+          for (const tool of mcpTools) {
+            this.unregisterTool(tool.name);
+            console.log(`[ServerEnvironment] Unregistered MCP tool: ${tool.name}`);
+          }
+        }
+      }
+      
+      // 5. Update mcpservers directory for new environment
+      this.mcpserversDirectory = path.join(
+        ConfigPaths.environments,
+        envName,
+        "mcpservers"
+      );
+      
+      // 6. Get new config and reinitialize MCP
+      const newConfig = await Config_get();
+      await this.initializeMcp(newConfig.mcp);
+      
+      // 7. Register new MCP tools
+      if (this.mcpManager) {
+        const mcpTools = this.mcpManager.getTools();
+        for (const tool of mcpTools) {
+          this.registerTool(tool);
+          console.log(`[ServerEnvironment] Registered MCP tool: ${tool.name}`);
+        }
+        console.log(`[ServerEnvironment] Registered ${mcpTools.length} MCP tools for new environment`);
+      }
+      
+      // 8. Re-initialize LLM with new config
       await this.loadFromConfig();
       
       console.log(`[ServerEnvironment] Successfully switched to environment: ${envName}`);
