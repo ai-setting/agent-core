@@ -222,6 +222,20 @@ export function CommandPalette(props: CommandPaletteProps) {
     
     const result = await command.executeCommand(name, args);
     
+    if ((result.data as any)?.mode === "exit") {
+      tuiLogger.info("[CommandPalette] Exit command received, exiting...");
+      store.addMessage({
+        id: `cmd-result-${Date.now()}`,
+        role: "system",
+        content: "👋 Goodbye!",
+        timestamp: Date.now(),
+      });
+      setTimeout(() => {
+        process.exit(0);
+      }, 500);
+      return;
+    }
+    
     if (result.success) {
       store.addMessage({
         id: `cmd-result-${Date.now()}`,
