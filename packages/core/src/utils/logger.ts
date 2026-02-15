@@ -35,7 +35,7 @@ class Logger {
   };
 
   constructor(config: LoggerConfig = {}) {
-    this.level = config.level || (process.env.LOG_LEVEL as LogLevel) || "info";
+    this.level = (config.level || (process.env.LOG_LEVEL as LogLevel) || "info").toLowerCase() as LogLevel;
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
     this.logFile = join(LOG_DIR, this.filename);

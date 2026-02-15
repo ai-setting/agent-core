@@ -7,6 +7,7 @@
 import { AgentServer } from "./server.js";
 import { ServerEnvironment } from "./environment.js";
 import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
+import { LOG_DIR } from "../utils/logger.js";
 import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
 import { connectCommand } from "./command/built-in/connect.js";
@@ -16,6 +17,9 @@ import { exitCommand } from "./command/built-in/exit.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
 async function main() {
+  // 打印日志目录
+  console.log("[DEBUG] LOG_DIR:", LOG_DIR);
+
   // 立即测试所有 logger
   console.log("[DEBUG] Logger test START");
   console.log("[DEBUG] LOG_LEVEL:", process.env.LOG_LEVEL);
