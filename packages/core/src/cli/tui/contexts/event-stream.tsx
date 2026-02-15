@@ -56,7 +56,6 @@ export function EventStreamProvider(props: {
   children: any; 
   initialUrl: string;
   password?: string;
-  onExit?: () => void;
 }) {
   const store = useStore();
   
@@ -299,14 +298,6 @@ export function EventStreamProvider(props: {
       
       case "server.heartbeat": {
         eventLogger.debug("Heartbeat received");
-        break;
-      }
-
-      case "application.exit": {
-        eventLogger.info("Exit requested from server", event);
-        if (props.onExit) {
-          props.onExit();
-        }
         break;
       }
       
