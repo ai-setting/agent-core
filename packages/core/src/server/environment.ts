@@ -338,6 +338,8 @@ export class ServerEnvironment extends BaseEnvironment {
       // Get old environment info before switching
       const oldEnvName = (await Config_get()).activeEnvironment || "unknown";
       const oldToolsCount = this.getTools().length;
+      const oldSkills = this.listSkills();
+      const oldSkillNames = oldSkills.map(s => s.id);
       
       // 1. Update config registry: remove old environment sources and add new one
       const sources = configRegistry.getSources();
@@ -363,6 +365,8 @@ export class ServerEnvironment extends BaseEnvironment {
             this.unregisterTool(tool.name);
           }
         }
+        // Disconnect all MCP clients before creating new manager
+        await this.mcpManager.disconnectAll();
       }
       
       // 5. Update mcpservers directory for new environment
@@ -372,7 +376,7 @@ export class ServerEnvironment extends BaseEnvironment {
         "mcpservers"
       );
       
-      // 6. Get new config and reinitialize MCP
+      // 6. Get new config and create new MCP manager with new directory
       const newConfig = await Config_get();
       await this.initializeMcp(newConfig.mcp);
       
@@ -385,13 +389,44 @@ export class ServerEnvironment extends BaseEnvironment {
           this.registerTool(tool);
         }
       }
-      
-      // 8. Re-initialize LLM with new config
-      await this.loadFromConfig();
+
+      // 7.5. Update skills directory and reload skills
+      this.skillsDirectory = path.join(
+        ConfigPaths.environments,
+        envName,
+        "skills"
+      );
+      await this.loadSkills();
+
+      // 8. Re-initialize LLM with new config (but skip MCP since already initialized above)
+      const rawConfig = await Config_get();
+      const config = await resolveConfig(rawConfig);
+      await this.modelStore.load();
+      const recent = await this.modelStore.getRecent();
+      const providers = await Providers_getAll();
+      const configModel = config.defaultModel
+        ? this.parseModelString(config.defaultModel)
+        : null;
+      const selectedModel = await this.selectModelWithFallback(
+        this.currentModelSelection,
+        configModel,
+        recent,
+        providers
+      );
+      if (selectedModel) {
+        this.currentModelSelection = selectedModel;
+      }
+      await this.ensureLLMInitialized?.();
       
       // 9. Build notification message about environment changes
       const newToolsCount = this.getTools().length;
-      const skills = this.listSkills();
+      const newSkills = this.listSkills();
+      const newSkillIds = newSkills.map(s => s.id);
+      
+      // Calculate skill changes
+      const addedSkills = newSkillIds.filter(id => !oldSkillNames.includes(id));
+      const removedSkills = oldSkillNames.filter(id => !newSkillIds.includes(id));
+      
       const messages: string[] = [];
       
       messages.push(`🔄 **环境已切换**: ${oldEnvName} → ${envName}`);
@@ -408,8 +443,17 @@ export class ServerEnvironment extends BaseEnvironment {
         }
       }
       
-      if (skills.length > 0) {
-        const skillNames = skills.map(s => s.name).join(", ");
+      if (addedSkills.length > 0 || removedSkills.length > 0) {
+        const parts: string[] = [];
+        if (addedSkills.length > 0) {
+          parts.push(`+${addedSkills.join(", ")}`);
+        }
+        if (removedSkills.length > 0) {
+          parts.push(`-${removedSkills.join(", ")}`);
+        }
+        messages.push(`📦 **Skills**: ${parts.join(" | ")}`);
+      } else if (newSkills.length > 0) {
+        const skillNames = newSkills.map(s => s.name).join(", ");
         messages.push(`📦 **Skills**: ${skillNames}`);
       }
       

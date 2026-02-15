@@ -337,12 +337,18 @@ export function EventStreamProvider(props: {
     try {
       abortController = new AbortController();
       
+      eventLogger.info("Fetching events endpoint", { endpoint: `/events?session=${encodeURIComponent(sessionId)}` });
+      
       const response = await apiCall(`/events?session=${encodeURIComponent(sessionId)}`, {
         signal: abortController.signal,
       });
 
+      eventLogger.info("Events response status", { status: response.status, ok: response.ok });
+
       if (!response.ok) {
-        throw new Error(`Failed to connect: ${response.status}`);
+        const errorMsg = `Failed to connect: ${response.status}`;
+        eventLogger.error(errorMsg, { status: response.status });
+        throw new Error(errorMsg);
       }
 
       if (!response.body) {
