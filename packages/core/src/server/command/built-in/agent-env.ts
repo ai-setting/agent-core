@@ -12,6 +12,7 @@ import { ConfigPaths } from "../../../config/paths.js";
 import { Config_get, Config_reload } from "../../../config/config.js";
 import { loadEnvironmentConfig, createEnvironmentSource } from "../../../config/sources/environment.js";
 import { configRegistry } from "../../../config/registry.js";
+import { EventTypes, type EnvEvent } from "../../../core/types/event.js";
 
 // Action types
 interface AgentEnvAction {
@@ -191,7 +192,6 @@ async function handleSelectAction(
   const envDir = path.join(ConfigPaths.environments, action.envName);
   
   try {
-    // Check if environment exists
     await fs.access(envDir);
   } catch {
     return {
@@ -200,8 +200,10 @@ async function handleSelectAction(
     };
   }
 
+  const config = await Config_get();
+  const fromEnv = config.activeEnvironment || "unknown";
+
   try {
-    // Update activeEnvironment in global config
     const globalConfigPath = path.join(ConfigPaths.config, "tong_work.jsonc");
     let globalConfig: any = {};
     
@@ -209,7 +211,6 @@ async function handleSelectAction(
       const content = await fs.readFile(globalConfigPath, "utf-8");
       globalConfig = JSON.parse(content);
     } catch {
-      // File might not exist
     }
 
     globalConfig.activeEnvironment = action.envName;
@@ -220,16 +221,14 @@ async function handleSelectAction(
       "utf-8"
     );
 
-    // If ServerEnvironment supports switchEnvironment, use it for hot reload
-    // This is the preferred way as it updates both config registry and LLM config
     if (context.env && "switchEnvironment" in context.env) {
       try {
-        // Convert CommandContext to Context format (sessionId -> session_id)
         const ctx = {
           session_id: context.sessionId,
         };
         const switched = await (context.env as any).switchEnvironment(action.envName, ctx);
         if (switched) {
+          await publishEnvironmentSwitchedEvent(context, fromEnv, action.envName);
           return {
             success: true,
             message: `Switched to environment: ${action.envName}`,
@@ -244,11 +243,8 @@ async function handleSelectAction(
       }
     }
     
-    // Fallback: manually update config registry and reload
-    // This happens when ServerEnvironment is not available (e.g., in tests)
     console.log("[AgentEnvCommand] Using fallback: manually updating config registry");
     
-    // Update config registry: remove old environment sources and add new one
     const sources = configRegistry.getSources();
     for (const source of sources) {
       if (source.name.startsWith("environment:")) {
@@ -257,13 +253,13 @@ async function handleSelectAction(
       }
     }
     
-    // Register new environment source with higher priority
     const newEnvSource = createEnvironmentSource(action.envName, 10);
     configRegistry.register(newEnvSource);
     console.log(`[AgentEnvCommand] Registered new environment source: ${newEnvSource.name}`);
 
-    // Reload configuration
     await Config_reload();
+
+    await publishEnvironmentSwitchedEvent(context, fromEnv, action.envName);
 
     return {
       success: true,
@@ -279,6 +275,43 @@ async function handleSelectAction(
       message: `Failed to switch environment: ${error}`,
     };
   }
+}
+
+/**
+ * Publish environment switched event to trigger agent autonomous handling
+ */
+async function publishEnvironmentSwitchedEvent(
+  context: CommandContext,
+  fromEnv: string,
+  toEnv: string
+): Promise<void> {
+  if (!context.sessionId) {
+    console.log("[AgentEnvCommand] No sessionId, skipping environment switched event");
+    return;
+  }
+
+  if (!context.env || !("publishEvent" in context.env)) {
+    console.log("[AgentEnvCommand] Environment does not support publishEvent, skipping event");
+    return;
+  }
+
+  const event: EnvEvent<{ fromEnv: string; toEnv: string }> = {
+    id: crypto.randomUUID(),
+    type: EventTypes.ENVIRONMENT_SWITCHED,
+    timestamp: Date.now(),
+    metadata: {
+      trigger_session_id: context.sessionId,
+      env_name: toEnv,
+      source: "command",
+    },
+    payload: {
+      fromEnv,
+      toEnv,
+    },
+  };
+
+  console.log("[AgentEnvCommand] Publishing environment switched event:", event);
+  await (context.env as any).publishEvent(event);
 }
 
 /**
