@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-13（完成 Models 配置加载功能 - 从 models.jsonc 配置文件加载模型列表）
+最后更新：2026-02-16（新增 Environment 事件机制设计文档 - 支持异步任务完成事件、环境变化观测等能力）
 
 ---
 
@@ -72,6 +72,10 @@
 | 治理（超时/重试/并发） | 统一策略入口（per-tool override） | [WIP] | manager 已存在；需要补齐"策略可配置/可观测/可回放"的闭环 | `packages/core/src/core/environment/base/{timeout,retry,concurrency}.ts` |
 | 可靠性（恢复） | tool error recovery / fallback | [WIP] | 有 `recovery.ts` 但需定义清晰策略与事件 | `.../base/recovery.ts` |
 | Metrics | 可观测指标采集 | [WIP] | metrics collector 已存在但需接入端到端展示/导出 | `.../base/metrics.ts` |
+| 环境事件机制 | EnvEvent 类型定义 + EventTypes 常量 | [WIP] | 设计文档已创建：预定义事件类型（user_query, session.*, background_task.*, tool.*, stream.*）、EventBus 统一入口 + Rule 路由 + Queue、EventHandlerAgent 无状态处理 | `docs/environment-event-mechanism.md`、`core/types/event.ts` |
+| 环境事件机制 | Session Route 事件化改造 | [TODO] | 改造 `/sessions/:id/prompt` route，只产生 user_query event，由 EventBus 统一处理 | `server/routes/sessions.ts` |
+| 环境事件机制 | EventHandlerAgent 实现 | [TODO] | new 无状态 agent 处理事件，构造 3 条消息插入 session history，触发 handle_query 执行 | `core/agent/event-handler-agent.ts` |
+| 环境事件机制 | StreamEvent 通过 EventBus 发布 | [TODO] | 现有 emitStreamEvent 保持不变，同时通过 EventBus publish 供其他订阅者使用 | `core/environment/base/invoke-llm.ts` |
 | MCP | 连接/发现/将 MCP tool 装配进 env | [WIP] | 已有 Env 协议 JSON 规范与 Env client/server 封装雏形，下一步接入真实 MCP client/server 传输层 | `packages/core/env_spec/**` |
 | Skills | 从目录/配置加载技能→注册为工具 | [TODO] | 目前未形成技能加载与隔离体系 | （待创建） |
 | Sub-agents | 子代理编排、权限收敛、并行探索 | [TODO] | 目前未看到 sub-agent 相关实现 | （待创建） |
@@ -135,7 +139,18 @@
 ~~- 交付物：`BaseEnvironment` 集成配置加载，配置能正确注入 LLM/治理策略/Session~~
 ~~- 验收：通过配置文件和环境变量能控制 Agent 行为~~
 
-1) **统一事件协议与版本**（M1）
+1) **Environment 事件机制实现**（新增）
+- 交付物：
+  - `core/types/event.ts`：新增 `EnvEvent` 类型 + `EventTypes` 常量
+  - `server/eventbus/bus.ts`：改造为统一入口 + Rule 路由 + Queue + AgentHandler 支持
+  - `server/environment.ts`：注册默认 rules + 暴露 `publishEvent`
+  - `server/routes/sessions.ts`：改造 `/prompt` route 只产生 event
+  - `core/agent/event-handler-agent.ts`：无状态 EventHandlerAgent 类
+  - `core/environment/base/invoke-llm.ts`：StreamEvent 通过 EventBus publish
+- 验收：
+  - POST /sessions/:id/prompt 产生 user_query event 并由 EventBus 处理
+  - background_task.completed event 能触发 EventHandlerAgent 处理
+  - 伪造消息正确插入 session history 并触发 agent 执行
 
 4) **统一事件协议与版本**（M1）
 - 交付物：在 `core/types/event.ts`（或等价位置）确定客户端/服务端统一事件 schema + version 字段
@@ -161,3 +176,4 @@
 - 2026-02-13：新增 **Models Command**：实现 `/models` 命令，允许用户通过 TUI dialog 选择和管理 LLM 模型。支持：模型浏览（按 Provider 分组）、搜索过滤、键盘导航（↑↓/Enter/Esc/F）、收藏功能、最近使用记录。集成 ModelStore 和 ServerEnvironment，支持模型切换时实时重新初始化 LLM。
 - 2026-02-13：新增 **Command 开发指南**（`docs/command-development-guide.md`）：详细记录 Command 的完整开发流程，包括后端实现、前端 Dialog 实现、常见问题及解决方案。以前端 Dialog 开发的关键指导原则为核心，如：使用 ref 获取 input 值、键盘处理函数返回 boolean、createMemo 处理过滤列表等。
 - 2026-02-13：新增 **Models 配置加载功能**：支持从 `environments/{env}/models.jsonc` 配置文件加载模型列表，优先级：Environment models > Provider config > Built-in defaults。创建 `models-config.ts` 模块提供 `ModelsConfig_getAll()`、`ModelsConfig_getFromEnvironment()` 等 API，models command 现在优先使用配置中的模型列表。
+- 2026-02-16：新增 **Environment 事件机制设计**（`docs/environment-event-mechanism.md`）：通过 EventBus 统一入口 + Rule 路由机制，让 Environment 产生的事件可被 Agent 感知并插入 LLM 消息上下文。核心组件：EnvEvent 类型定义、EventHandlerAgent 无状态处理、Session Route 事件化改造。支持场景：异步任务完成事件、环境变化观测、工具执行错误等。

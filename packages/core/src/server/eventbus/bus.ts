@@ -10,6 +10,7 @@
 import type { ZodType } from "zod";
 import type { EventDefinition, EventPayload } from "./bus-event.js";
 import { publishGlobal, subscribeGlobal } from "./global.js";
+import type { EnvEvent } from "../../core/types/event.js";
 
 /**
  * Subscription function type
@@ -252,4 +253,179 @@ export function getStats(): {
     sessions: state.size,
     subscriptions: totalSubs,
   };
+}
+
+/**
+ * Event handler for function-based processing
+ */
+export interface EnvEventHandler {
+  type: "function";
+  fn: (event: EnvEvent) => Promise<void>;
+}
+
+/**
+ * Agent handler for AI-based processing
+ */
+export interface EnvAgentHandler {
+  type: "agent";
+  prompt: string;
+  systemPrompt?: string;
+}
+
+/**
+ * Event rule for routing events to handlers
+ */
+export interface EnvEventRule {
+  eventType: string | string[];
+  handler: EnvEventHandler | EnvAgentHandler;
+  options?: {
+    enabled?: boolean;
+    priority?: number;
+  };
+}
+
+/**
+ * EnvEventBus - Event processing bus with rule-based routing
+ * 
+ * Provides unified event processing with:
+ * - Rule-based event routing
+ * - Queue mechanism for handling rapid events
+ * - Idempotency check
+ * - Function and Agent handler support
+ */
+export class EnvEventBus {
+  private rules: EnvEventRule[] = [];
+  private queue: EnvEvent[] = [];
+  private processing: boolean = false;
+  private seen: Set<string> = new Set();
+  private env: any;
+
+  constructor(env?: any) {
+    this.env = env;
+  }
+
+  /**
+   * Set environment reference for agent handlers
+   */
+  setEnv(env: any): void {
+    this.env = env;
+  }
+
+  /**
+   * Publish an event to the bus
+   * Handles idempotency, queueing, and processing
+   */
+  async publish<T>(event: EnvEvent<T>): Promise<void> {
+    if (this.seen.has(event.id)) {
+      console.warn(`[EnvEventBus] Duplicate event ignored: ${event.id}`);
+      return;
+    }
+
+    this.seen.add(event.id);
+    this.queue.push(event as EnvEvent);
+    await this.processQueue();
+  }
+
+  /**
+   * Process events in the queue sequentially
+   */
+  private async processQueue(): Promise<void> {
+    if (this.processing) return;
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const event = this.queue.shift()!;
+      await this.handleEvent(event);
+    }
+
+    this.processing = false;
+  }
+
+  /**
+   * Handle a single event - match rule and execute handler
+   */
+  private async handleEvent<T>(event: EnvEvent<T>): Promise<void> {
+    const matchedRule = this.findMatchedRule(event.type);
+
+    if (!matchedRule) {
+      console.warn(`[EnvEventBus] No rule matched for event: ${event.type}`);
+      return;
+    }
+
+    if (matchedRule.options?.enabled !== false) {
+      if (matchedRule.handler.type === "function") {
+        await matchedRule.handler.fn(event);
+      } else if (matchedRule.handler.type === "agent") {
+        await this.handleWithAgent(event, matchedRule.handler);
+      }
+    }
+  }
+
+  /**
+   * Handle event with agent
+   */
+  private async handleWithAgent<T>(event: EnvEvent<T>, handler: EnvAgentHandler): Promise<void> {
+    if (!this.env) {
+      console.error("[EnvEventBus] No env configured for agent handler");
+      return;
+    }
+
+    const { EventHandlerAgent } = await import("../../core/agent/event-handler-agent.js");
+    const agent = new EventHandlerAgent(this.env, handler.prompt, handler.systemPrompt);
+    await agent.handle(event);
+  }
+
+  /**
+   * Find matching rule for event type
+   */
+  private findMatchedRule(eventType: string): EnvEventRule | undefined {
+    for (const rule of this.rules) {
+      const types = Array.isArray(rule.eventType) ? rule.eventType : [rule.eventType];
+
+      for (const type of types) {
+        if (type === "*") {
+          return rule;
+        }
+        if (type === eventType) {
+          return rule;
+        }
+        if (type.endsWith(".*")) {
+          const prefix = type.slice(0, -1);
+          if (eventType.startsWith(prefix)) {
+            return rule;
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Register a new event rule
+   */
+  registerRule(rule: EnvEventRule): void {
+    this.rules.push(rule);
+    this.rules.sort((a, b) => (b.options?.priority ?? 0) - (a.options?.priority ?? 0));
+  }
+
+  /**
+   * Get all registered rules
+   */
+  getRules(): EnvEventRule[] {
+    return [...this.rules];
+  }
+
+  /**
+   * Get queue status
+   */
+  getQueueLength(): number {
+    return this.queue.length;
+  }
+
+  /**
+   * Clear seen set (for testing)
+   */
+  clearSeen(): void {
+    this.seen.clear();
+  }
 }

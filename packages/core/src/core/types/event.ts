@@ -17,3 +17,33 @@ export interface Attachment {
   url: string;
   name?: string;
 }
+
+export const EventTypes = {
+  USER_QUERY: "user_query",
+  SESSION_CREATED: "session.created",
+  SESSION_UPDATED: "session.updated",
+  SESSION_DELETED: "session.deleted",
+  BACKGROUND_TASK_COMPLETED: "background_task.completed",
+  BACKGROUND_TASK_FAILED: "background_task.failed",
+  TOOL_EXECUTED: "tool.executed",
+  TOOL_ERROR: "tool.error",
+  STREAM_START: "stream.start",
+  STREAM_TEXT: "stream.text",
+  STREAM_COMPLETED: "stream.completed",
+  STREAM_ERROR: "stream.error",
+} as const;
+
+export interface EnvEvent<T = unknown> {
+  id: string;
+  type: string;
+  timestamp: number;
+  metadata: {
+    trigger_session_id?: string;
+    trigger_agent_id?: string;
+    trigger_agent_name?: string;
+    env_name?: string;
+    source?: string;
+    [key: string]: unknown;
+  };
+  payload: T;
+}
