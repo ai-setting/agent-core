@@ -10,7 +10,7 @@ export interface CreateSubSessionOptions {
   parentSessionId: string;
   title: string;
   subagentType: string;
-  prompt?: string;
+  description?: string;
   permission?: SessionPermission[];
 }
 
@@ -18,7 +18,7 @@ export class SubAgentManager {
   constructor(private env: ServerEnvironment) {}
 
   async createSubSession(options: CreateSubSessionOptions): Promise<Session> {
-    const { parentSessionId, title, subagentType, prompt } = options;
+    const { parentSessionId, title, subagentType, description } = options;
 
     const parentSession = this.env.getSession(parentSessionId);
     if (!parentSession) {
@@ -40,7 +40,11 @@ export class SubAgentManager {
       },
     });
 
-    const systemPrompt = prompt || subAgent?.promptOverride || getDefaultSubAgentPrompt(title);
+    let systemPrompt = subAgent?.promptOverride || getDefaultSubAgentPrompt(title);
+    if (description) {
+      systemPrompt = systemPrompt.replace(/\{task_description\}/g, description);
+    }
+    
     const textPart: TextPart = {
       id: ID.ascending("part"),
       type: "text",
