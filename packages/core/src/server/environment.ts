@@ -13,7 +13,9 @@ import {
 import type { Context } from "../core/types/context.js";
 import type { Action } from "../core/types/action.js";
 import type { StreamEvent } from "../core/environment/index.js";
+import { EventTypes, type EnvEvent } from "../core/types/event.js";
 import * as Bus from "./eventbus/bus.js";
+import { EnvEventBus } from "./eventbus/bus.js";
 import {
   StreamStartEvent,
   StreamTextEvent,
@@ -56,6 +58,7 @@ export class ServerEnvironment extends BaseEnvironment {
   private configLoaded: Promise<void> = Promise.resolve();
   private skillsDirectory: string | undefined;
   private mcpserversDirectory: string | undefined;
+  private eventBus: EnvEventBus;
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -71,6 +74,10 @@ export class ServerEnvironment extends BaseEnvironment {
     super(envConfig);
     this.sessionId = config?.sessionId || "default";
     this.modelStore = new ModelStore();
+    this.eventBus = new EnvEventBus(this);
+
+    // Initialize event rules
+    this.initEventRules();
 
     // Initialize current model selection if provided
     if (config?.currentModel) {
@@ -738,5 +745,69 @@ export class ServerEnvironment extends BaseEnvironment {
         );
         break;
     }
+  }
+
+  async publishEvent<T>(event: EnvEvent<T>): Promise<void> {
+    await this.eventBus.publish(event);
+  }
+
+  private initEventRules(): void {
+    const bus = this.eventBus;
+
+    bus.registerRule({
+      eventType: EventTypes.USER_QUERY,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { sessionId, content } = event.payload as { sessionId: string; content: string };
+          const session = await this.getSession!(sessionId);
+          const history = session?.toHistory() || [];
+          
+          session?.addUserMessage(content);
+          const response = await this.handle_query(content, { session_id: sessionId }, history);
+          session?.addAssistantMessage(response);
+        }
+      },
+      options: { priority: 100 }
+    });
+
+    bus.registerRule({
+      eventType: [EventTypes.SESSION_CREATED, EventTypes.SESSION_UPDATED, EventTypes.SESSION_DELETED],
+      handler: {
+        type: "function",
+        fn: (event: EnvEvent): Promise<void> => {
+          console.log(`[EventBus] Session event: ${event.type}`, event);
+          return Promise.resolve();
+        }
+      },
+      options: { priority: 50 }
+    });
+
+    bus.registerRule({
+      eventType: EventTypes.BACKGROUND_TASK_COMPLETED,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { taskId, result } = event.payload as { taskId: string; result: unknown };
+          
+          const { EventHandlerAgent } = await import("../core/agent/event-handler-agent.js");
+          const agent = new EventHandlerAgent(
+            this,
+            "You are a background task expert. Analyze task results and decide how to handle."
+          );
+          await agent.handle(event);
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
+      eventType: "*",
+      handler: {
+        type: "agent",
+        prompt: `You are an event handling expert. Analyze event content and decide: 1) respond to user; 2) continue execution; 3) interact with user for confirmation.`
+      },
+      options: { priority: 10 }
+    });
   }
 }

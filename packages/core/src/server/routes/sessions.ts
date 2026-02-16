@@ -11,6 +11,7 @@ import type { ServerEnvironment } from "../environment.js";
 import { sessionLogger } from "../logger.js";
 import type { Session } from "../../core/session/index.js";
 import type { MessageWithParts, TextPart } from "../../core/session/types.js";
+import { EventTypes, type EnvEvent } from "../../core/types/event.js";
 
 interface Env {
   Variables: {
@@ -147,7 +148,7 @@ app.get("/:id/messages", async (c) => {
 /**
  * POST /sessions/:id/prompt - Send prompt to AI
  *
- * Uses env's session: get or create session, add user message, handle_query, add assistant message.
+ * Produces user_query event, let EventBus handle it.
  */
 app.post("/:id/prompt", async (c) => {
   const env = await ensureSessionEnv(c);
@@ -163,31 +164,25 @@ app.post("/:id/prompt", async (c) => {
     return c.json({ error: "Content is required" }, 400);
   }
 
-  let session = await resolve(env.getSession!(id));
-  if (!session) {
-    sessionLogger.info("Creating new session for prompt", { sessionId: id });
-    session = await resolve(env.createSession!({ id, title: "New Chat" }));
-  }
+  const event: EnvEvent<{ sessionId: string; content: string }> = {
+    id: crypto.randomUUID(),
+    type: EventTypes.USER_QUERY,
+    timestamp: Date.now(),
+    metadata: {
+      trigger_session_id: id,
+      source: "user"
+    },
+    payload: {
+      sessionId: id,
+      content: body.content
+    }
+  };
 
-  session.addUserMessage(body.content);
-  sessionLogger.info("Added user message", { sessionId: session.id });
-
-  const history = session.toHistory();
-  sessionLogger.info("Starting AI processing", { sessionId: session.id, historyLength: history.length });
-
-  env
-    .handle_query(body.content, { session_id: session.id }, history)
-    .then((response: string) => {
-      sessionLogger.info("AI processing completed", { sessionId: session!.id, responseLength: response.length });
-      session!.addAssistantMessage(response);
-    })
-    .catch((error: Error) => {
-      sessionLogger.error("AI processing failed", { sessionId: session!.id, error: error.message });
-    });
+  await env.publishEvent(event);
 
   return c.json({
     success: true,
-    sessionId: session.id,
+    sessionId: id,
     message: "Processing started",
   });
 });
