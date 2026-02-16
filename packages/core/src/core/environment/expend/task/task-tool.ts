@@ -17,18 +17,34 @@ export function createTaskTool(env: ServerEnvironment): ToolInfo {
 ## Parameters
 - **description**: A short (3-5 words) description of the task
 - **prompt**: The task for the agent to perform
-- **subagent_type**: The type of subagent to use (default: "general")
-- **background**: Whether to run in background (default: false)
+- **subagent_type**: The type of specialized agent to use for this task (default: "general")
+- **background**: Whether to run in background (default: false). If true, returns immediately and notifies when complete.
+- **session_id**: Existing session to continue (optional)
 - **timeout**: Task timeout in milliseconds (optional)
-- **cleanup**: Whether to delete sub session after completion (default: "keep")
+- **cleanup**: "delete" to remove sub session after completion, "keep" to retain (default: "keep")
 
 ## Available SubAgents
 ${getSubAgentToolDescription()}
 
 ## Usage
-- Use synchronous mode (default) for quick tasks that need immediate results
-- Use background=true for long-running tasks that shouldn't block the main agent
-- Background tasks will notify the main session when complete`,
+
+**Synchronous mode (default)**:
+- The tool waits for the subagent to complete and returns the result directly
+- Use for quick tasks that need immediate results
+
+**Background mode (background=true)**:
+- The tool returns immediately with "accepted" status
+- The subagent runs independently in the background
+- When complete, the main session is notified via event
+- Use for long-running tasks that shouldn't block the main agent
+
+**Result format**:
+- Output includes <task_metadata> with session_id for tracking
+- Background tasks include task_id for status查询
+
+## Security
+- Subagents are denied access to todowrite, todoread, and task tools by default
+- Subagents cannot spawn other subagents`,
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();
