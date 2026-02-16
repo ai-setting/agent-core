@@ -78,7 +78,8 @@
 | 环境事件机制 | StreamEvent 通过 EventBus 发布 | [TODO] | 现有 emitStreamEvent 保持不变，同时通过 EventBus publish 供其他订阅者使用 | `core/environment/base/invoke-llm.ts` |
 | MCP | 连接/发现/将 MCP tool 装配进 env | [WIP] | 已有 Env 协议 JSON 规范与 Env client/server 封装雏形，下一步接入真实 MCP client/server 传输层 | `packages/core/env_spec/**` |
 | Skills | 从目录/配置加载技能→注册为工具 | [TODO] | 目前未形成技能加载与隔离体系 | （待创建） |
-| Sub-agents | 子代理编排、权限收敛、并行探索 | [TODO] | 目前未看到 sub-agent 相关实现 | （待创建） |
+| Sub-agents | TaskTool 与 SubAgent 实现 | [DONE] | 设计文档已创建：TaskTool 参数定义、SubAgent Manager、后台任务执行、事件集成机制 | `docs/task-tool-subagent-design.md` |
+| Sub-agents | 子代理编排、权限收敛、并行探索 | [TODO] | 设计文档已创建，实现需按 Phase 1-4 逐步落地 | `docs/task-tool-subagent-design.md` |
 | Env 原生接口 | 运行日志查询、事件回放、审计查询 | [TODO] | 目前主要是 console log + SSE 推送，没有统一查询接口 | （待创建） |
 | 安全 | 参数脱敏、权限模型、审计记录 | [TODO] | 需要设计并与 handle_action 集成 | （待创建） |
 

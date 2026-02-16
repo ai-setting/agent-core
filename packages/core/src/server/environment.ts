@@ -542,7 +542,12 @@ export class ServerEnvironment extends BaseEnvironment {
       const { baseSkillTool } = await import("../core/environment/skills/skill-tool.js");
       this.registerTool(baseSkillTool);
 
-      console.log(`[ServerEnvironment] Registered ${allTools.length + 1} tools (including skill tool)`);
+      // Register TaskTool for subagent delegation
+      const { createTaskTool } = await import("../core/environment/expend/task/task-tool.js");
+      const taskTool = createTaskTool(this);
+      this.registerTool(taskTool);
+
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 2} tools (including skill tool and task tool)`);
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");
