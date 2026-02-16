@@ -90,6 +90,7 @@ async function handleSyncTask(
       parentSessionId,
       title: description,
       subagentType,
+      description: description,
     });
 
     const result = await subAgentManager.executeSubSession(subSession, prompt, timeout);

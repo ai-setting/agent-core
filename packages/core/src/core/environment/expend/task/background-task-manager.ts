@@ -30,6 +30,7 @@ export class BackgroundTaskManager {
       parentSessionId,
       title: description,
       subagentType,
+      description: description,
     });
 
     const task: BackgroundTask = {
