@@ -25,6 +25,7 @@ export const EventTypes = {
   SESSION_DELETED: "session.deleted",
   BACKGROUND_TASK_COMPLETED: "background_task.completed",
   BACKGROUND_TASK_FAILED: "background_task.failed",
+  ENVIRONMENT_SWITCHED: "environment.switched",
   TOOL_EXECUTED: "tool.executed",
   TOOL_ERROR: "tool.error",
   STREAM_START: "stream.start",

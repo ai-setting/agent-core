@@ -788,14 +788,24 @@ export class ServerEnvironment extends BaseEnvironment {
       handler: {
         type: "function",
         fn: async (event: EnvEvent) => {
-          const { taskId, result } = event.payload as { taskId: string; result: unknown };
-          
-          const { EventHandlerAgent } = await import("../core/agent/event-handler-agent.js");
-          const agent = new EventHandlerAgent(
-            this,
-            "You are a background task expert. Analyze task results and decide how to handle."
-          );
-          await agent.handle(event);
+          const { processEventInSession } = await import("../core/event-processor.js");
+          await processEventInSession(this, event, {
+            prompt: "You are a background task expert. Analyze task results and decide how to handle.",
+          });
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
+      eventType: EventTypes.ENVIRONMENT_SWITCHED,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { processEventInSession } = await import("../core/event-processor.js");
+          await processEventInSession(this, event, {
+            prompt: "You are an environment switching expert. The environment has been switched. Analyze the change and decide how to proceed with the current task.",
+          });
         }
       },
       options: { priority: 80 }
