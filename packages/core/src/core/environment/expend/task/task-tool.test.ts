@@ -39,11 +39,14 @@ describe("TaskTool - Tool Definition", () => {
     const mockEnv = createMockEnv();
     const tool = createTaskTool(mockEnv);
     
-    expect(tool.description).toContain("Delegate a task");
+    expect(tool.description).toContain("Launch a new agent");
     expect(tool.description).toContain("subagent");
     expect(tool.description).toContain("general");
     expect(tool.description).toContain("explore");
     expect(tool.description).toContain("background");
+    expect(tool.description).toContain("When to use");
+    expect(tool.description).toContain("When NOT to use");
+    expect(tool.description).toContain("Example");
   });
 
   test("should reference available subagents in description", () => {
