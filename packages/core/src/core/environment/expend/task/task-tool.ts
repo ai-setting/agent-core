@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import type { ToolInfo, ToolContext, ToolResult } from "../../../types/tool.js";
 import type { ServerEnvironment } from "../../../../server/environment.js";
 import { TaskToolParameters, type TaskToolParams } from "./types.js";
@@ -6,45 +9,26 @@ import { SubAgentManager } from "./subagent-manager.js";
 import { BackgroundTaskManager } from "./background-task-manager.js";
 import { getSubAgentSpec, getSubAgentToolDescription } from "./agents.js";
 
+function loadTaskDescription(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const taskTxtPath = join(__dirname, "task.txt");
+  return readFileSync(taskTxtPath, "utf-8");
+}
+
+function buildTaskDescription(): string {
+  const taskDescription = loadTaskDescription();
+  const agentsList = getSubAgentToolDescription();
+  return taskDescription.replace("{agents}", agentsList);
+}
+
 export function createTaskTool(env: ServerEnvironment): ToolInfo {
   const subAgentManager = new SubAgentManager(env);
   const backgroundTaskManager = new BackgroundTaskManager(env);
 
   return {
     name: "task",
-    description: `Delegate a task to a subagent for execution.
-
-## Parameters
-- **description**: A short (3-5 words) description of the task
-- **prompt**: The task for the agent to perform
-- **subagent_type**: The type of specialized agent to use for this task (default: "general")
-- **background**: Whether to run in background (default: false). If true, returns immediately and notifies when complete.
-- **session_id**: Existing session to continue (optional)
-- **timeout**: Task timeout in milliseconds (optional)
-- **cleanup**: "delete" to remove sub session after completion, "keep" to retain (default: "keep")
-
-## Available SubAgents
-${getSubAgentToolDescription()}
-
-## Usage
-
-**Synchronous mode (default)**:
-- The tool waits for the subagent to complete and returns the result directly
-- Use for quick tasks that need immediate results
-
-**Background mode (background=true)**:
-- The tool returns immediately with "accepted" status
-- The subagent runs independently in the background
-- When complete, the main session is notified via event
-- Use for long-running tasks that shouldn't block the main agent
-
-**Result format**:
-- Output includes <task_metadata> with session_id for tracking
-- Background tasks include task_id for status查询
-
-## Security
-- Subagents are denied access to todowrite, todoread, and task tools by default
-- Subagents cannot spawn other subagents`,
+    description: buildTaskDescription(),
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();

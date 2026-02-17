@@ -1,0 +1,60 @@
+Launch a new agent to handle complex, multistep tasks autonomously.
+
+Available agent types:
+{agents}
+
+When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+
+## When to use the Task tool:
+- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+- When you need to perform complex, multi-step tasks that require independent execution
+- When you need to explore a codebase thoroughly (use "explore" subagent)
+- When you need to run long-running tasks without blocking the main agent (use background=true)
+
+## When NOT to use the Task tool:
+- If you want to read a specific file path, use the Read tool instead
+- If you are searching for a specific class definition like "class Foo", use the Glob tool instead
+- If you are searching for code within a specific file or set of 2-3 files, use the Glob tool instead
+- For simple one-off commands that can be done with bash, read, or glob tools directly
+
+## Usage notes:
+1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
+2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
+3. Each agent invocation is stateless unless you provide a session_id. Your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
+4. The agent's outputs should generally be trusted
+5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
+6. Subagents have limited permissions by default: they cannot use todowrite, todoread, or spawn other subagents
+
+## Parameters:
+- **description**: A short (3-5 words) description of the task
+- **prompt**: The task for the agent to perform
+- **subagent_type**: The type of specialized agent to use (e.g., "general", "explore")
+- **background**: Whether to run in background. If true, returns immediately and notifies when complete (default: false)
+- **session_id**: Existing session to continue (optional)
+- **timeout**: Task timeout in milliseconds (optional)
+- **cleanup**: "delete" to remove sub session after completion, "keep" to retain (default: "keep")
+
+## Synchronous vs Background mode:
+
+**Synchronous mode (default)**:
+- The tool waits for the subagent to complete and returns the result directly
+- Use for quick tasks that need immediate results
+
+**Background mode (background=true)**:
+- The tool returns immediately with "accepted" status
+- The subagent runs independently in the background
+- When complete, the main session is notified via event
+- Use for long-running tasks that shouldn't block the main agent
+
+## Example:
+
+<example>
+user: "Search the codebase for all usages of the function 'parseJSON'"
+assistant: I'll use the explore subagent to search for all usages of parseJSON
+assistant: Uses the Task tool to launch the explore subagent
+Tool: Task(description="Search parseJSON usages", prompt="Search the entire codebase for all usages of the function 'parseJSON'. List each file path and line number where it's called. Provide a summary of what each usage does.", subagent_type="explore")
+</example>
+
+## Result format:
+- Output includes &lt;task_metadata&gt; with session_id for tracking
+- Background tasks include task_id for status查询
