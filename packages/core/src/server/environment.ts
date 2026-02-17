@@ -794,8 +794,40 @@ export class ServerEnvironment extends BaseEnvironment {
         type: "function",
         fn: async (event: EnvEvent) => {
           const { processEventInSession } = await import("../core/event-processor.js");
+          const payload = event.payload as any;
           await processEventInSession(this, event, {
-            prompt: "You are a background task expert. Analyze task results and decide how to handle.",
+            prompt: `A background task has completed.
+
+Task Description: ${payload.description}
+SubAgent Type: ${payload.subagentType}
+Execution Time: ${payload.execution_time_ms}ms
+Sub Session ID: ${payload.sub_session_id}
+
+Result:
+${payload.result}
+
+Analyze this result and provide a clear summary to the user. If there are any errors, explain them and suggest next steps.`,
+          });
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
+      eventType: EventTypes.BACKGROUND_TASK_FAILED,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { processEventInSession } = await import("../core/event-processor.js");
+          const payload = event.payload as any;
+          await processEventInSession(this, event, {
+            prompt: `A background task has failed.
+
+Task Description: ${payload.description}
+SubAgent Type: ${payload.subagentType}
+Error: ${payload.error}
+
+The task failed to complete. Explain the error to the user and suggest possible next steps (retry, different approach, etc.).`,
           });
         }
       },
