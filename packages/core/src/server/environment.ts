@@ -38,6 +38,8 @@ import { ModelsConfig_getAll, type ModelEntry } from "../config/models-config.js
 import { configRegistry } from "../config/registry.js";
 import { createEnvironmentSource } from "../config/sources/environment.js";
 import { ConfigPaths } from "../config/paths.js";
+import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
+import { serverLogger } from "./logger.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -124,6 +126,40 @@ export class ServerEnvironment extends BaseEnvironment {
           "mcpservers"
         );
         await this.initializeMcp(config.mcp);
+
+        // 1.7. Load prompts from environment config
+        serverLogger.info(`[ServerEnvironment] activeEnvironment: ${config.activeEnvironment}`);
+        const loadedPrompts = await loadPromptsFromEnvironment(config.activeEnvironment);
+        serverLogger.info(`[ServerEnvironment] loadedPrompts count: ${loadedPrompts.length}`);
+        
+        if (loadedPrompts.length > 0) {
+          serverLogger.info(`[ServerEnvironment] loading ${loadedPrompts.length} prompts...`);
+          const tools = this.listTools();
+          const toolListDesc = buildToolListDescription(tools.map((t) => ({ name: t.name, description: t.description })));
+          const envInfo = buildEnvInfo(config.activeEnvironment || "unknown");
+          const envName = config.activeEnvironment || "unknown";
+          
+          const resolvedPrompts = loadedPrompts.map((p) => ({
+            id: p.id,
+            content: resolveVariables(p.content, {
+              toolList: toolListDesc,
+              capabilities: "",
+              envName,
+              agentId: p.id,
+              role: p.metadata.role || "system",
+              envInfo,
+            }),
+          }));
+          
+          this.loadPromptsFromConfig(resolvedPrompts);
+          serverLogger.info(`[ServerEnvironment] Loaded ${resolvedPrompts.length} prompts from ${envName}`);
+          
+          // Verify prompts are loaded
+          const sysPrompt = this.getPrompt("system");
+          serverLogger.info(`[ServerEnvironment] getPrompt('system'): ${sysPrompt?.content?.slice(0, 50)}...`);
+        } else {
+          serverLogger.info(`[ServerEnvironment] No prompts loaded - prompts directory may not exist`);
+        }
       }
 
       // 2. Load user model preferences
@@ -769,6 +805,10 @@ export class ServerEnvironment extends BaseEnvironment {
           const history = session?.toHistory() || [];
           
           session?.addUserMessage(content);
+          
+          // Wait for config to be loaded (including prompts)
+          await this.configLoaded;
+          
           const response = await this.handle_query(content, { session_id: sessionId }, history);
           session?.addAssistantMessage(response);
         }
