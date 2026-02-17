@@ -31,7 +31,8 @@ const activeConnections = new Map<string, number>();
  * - server.error: Error occurred
  */
 app.get("/", async (c) => {
-  const sessionId = c.req.query("sessionId");
+  // Support both "sessionId" and "session" query parameters
+  const sessionId = c.req.query("sessionId") || c.req.query("session");
   
     // Track connection count for this session
   if (sessionId) {

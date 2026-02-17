@@ -161,7 +161,8 @@ export function subscribeToSession(
   callback: (event: { type: string; properties: unknown }) => void | Promise<void>
 ): () => void {
   return subscribeGlobal((data) => {
-    if (data.sessionId === sessionId || data.sessionId === undefined) {
+    // Only match events with exact sessionId (not undefined)
+    if (data.sessionId === sessionId) {
       callback(data.payload);
     }
   });
