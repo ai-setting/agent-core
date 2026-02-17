@@ -133,6 +133,10 @@ export interface Environment {
   handle_action(action: Action, context: Context): Promise<ToolResult>;
   getTools(): Tool[];
   getPrompt(prompt_id: string): Prompt | undefined;
+  /**
+   * 从配置加载 prompts（由 ServerEnvironment 初始化时调用）
+   */
+  loadPromptsFromConfig?(loadedPrompts: { id: string; content: string }[]): void;
   subscribe(handler: StreamHandler): void;
   unsubscribe(handler: StreamHandler): void;
   getStream(stream_id: string): LLMStream | undefined;

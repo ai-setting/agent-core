@@ -13,6 +13,7 @@ import {
   type EnvironmentAgentSpec,
   type SkillInfo,
 } from "../index.js";
+import { createLogger } from "../../../utils/logger.js";
 import {
   Context,
   Action,
@@ -85,6 +86,7 @@ export interface ToolRegistration {
 }
 
 export abstract class BaseEnvironment implements Environment {
+  private static baseLogger = createLogger("base:environment", "server.log");
   protected tools: Map<string, Tool> = new Map();
   protected toolCategories: Map<string, Set<string>> = new Map();
   protected prompts: Map<string, Prompt> = new Map();
@@ -327,6 +329,15 @@ export abstract class BaseEnvironment implements Environment {
     this.prompts.set(prompt.id, prompt);
   }
 
+  loadPromptsFromConfig(loadedPrompts: { id: string; content: string }[]): void {
+    for (const prompt of loadedPrompts) {
+      this.prompts.set(prompt.id, {
+        id: prompt.id,
+        content: prompt.content,
+      });
+    }
+  }
+
   subscribe(handler: StreamHandler): void {
     this.streamHandlers.add(handler);
   }
@@ -449,9 +460,11 @@ export abstract class BaseEnvironment implements Environment {
     };
 
     let prompt = this.getPrompt("system");
+    BaseEnvironment.baseLogger.info(`getPrompt('system'): ${prompt?.content?.slice(0, 80)}...`);
     if (!prompt) {
       prompt = { id: "default", content: "You are a helpful AI assistant." };
       this.addPrompt(prompt);
+      BaseEnvironment.baseLogger.info(`Using default prompt`);
     }
 
     // Generate a stable messageId for this query

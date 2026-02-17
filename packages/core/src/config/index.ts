@@ -63,3 +63,17 @@ export {
   type ModelEntry,
   type ProviderModels,
 } from "./models-config.js";
+
+// Prompts configuration loader
+export {
+  loadPromptsFromEnvironment,
+  loadPromptFromEnvironment,
+  resolveVariables,
+  buildToolListDescription,
+  buildEnvInfo,
+  type PromptMetadata,
+  type PromptFile,
+  type ResolvedPrompt,
+  type PromptContext,
+  type LoadedPrompt,
+} from "./prompts/index.js";
