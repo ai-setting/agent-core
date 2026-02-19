@@ -347,15 +347,52 @@ export function createFileTools(): ToolInfo[] {
     ...extra,
   });
 
+  const readFileDescription = `Reads a file from the local filesystem. You can access any file directly by using this tool.
+Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+
+Usage:
+- The filePath parameter must be an absolute path, not a relative path
+- By default, it reads up to 2000 lines starting from the beginning of the file
+- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
+- Any lines longer than 2000 characters will be truncated
+- Results are returned using cat -n format, with line numbers starting at 1
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
+- You can read image files using this tool.`;
+
+  const grepDescription = `- Fast content search tool that works with any codebase size
+- Searches file contents using regular expressions
+- Supports full regex syntax (eg. "log.*Error", "function\\s+\\w+", etc.)
+- Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
+- Returns file paths and line numbers with at least one match sorted by modification time
+- Use this tool when you need to find files containing specific patterns
+- If you need to identify/count the number of matches within files, use the Bash tool with \`rg\` (ripgrep) directly. Do NOT use \`grep\`.
+- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead`;
+
+  const globDescription = `- Fast file pattern matching tool that works with any codebase size
+- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+- Returns matching file paths sorted by modification time
+- Use this tool when you need to find files by name patterns
+- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.`;
+
+  const writeFileDescription = `Writes a file to the local filesystem.
+
+Usage:
+- This tool will overwrite the existing file if there is one at the provided path.
+- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.`;
+
   return [
     {
       name: "read_file",
-      description: "Read the contents of a file with optional pagination and formatting",
+      description: readFileDescription,
       parameters: z.object({
-        path: z.string().describe("Path to the file to read"),
-        encoding: z.string().optional().describe("File encoding (default: utf-8)"),
-        offset: z.number().optional().describe("Line number to start reading from (0-based, default: 0)"),
-        limit: z.number().optional().describe("Number of lines to read (default: 2000)"),
+        path: z.string().describe("The path to the file to read"),
+        offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
+        limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
       }),
       execute: async (args) => {
         try {
@@ -448,10 +485,10 @@ export function createFileTools(): ToolInfo[] {
     },
     {
       name: "write_file",
-      description: "Write content to a file",
+      description: writeFileDescription,
       parameters: z.object({
-        path: z.string().describe("Path to the file to write"),
-        content: z.string().describe("Content to write to the file"),
+        path: z.string().describe("The path to the file to write"),
+        content: z.string().describe("The content to write to the file"),
         append: z.boolean().optional().describe("Append to file instead of overwrite"),
         createDirs: z.boolean().optional().describe("Create parent directories if they don't exist"),
         showDiff: z.boolean().optional().describe("Show diff when overwriting existing file"),
@@ -513,16 +550,16 @@ export function createFileTools(): ToolInfo[] {
     },
     {
       name: "glob",
-      description: "Find files matching a glob pattern",
+      description: globDescription,
       parameters: z.object({
-        patterns: z.union([z.string(), z.array(z.string())]).describe("Glob patterns"),
-        cwd: z.string().optional().describe("Working directory to search in"),
-        maxResults: z.number().optional().describe("Maximum results (default: 100)"),
+        pattern: z.string().describe("The glob pattern to match files against"),
+        path: z.string().optional().describe("The directory to search in. If not specified, the current working directory will be used."),
+        maxResults: z.number().optional().describe("Maximum results to return (default: 100)"),
       }),
       execute: async (args) => {
         try {
-          const results = await glob(args.patterns, {
-            cwd: args.cwd,
+          const results = await glob(args.pattern, {
+            cwd: args.path,
             maxResults: args.maxResults ?? 100,
           });
           return {
@@ -544,23 +581,28 @@ export function createFileTools(): ToolInfo[] {
     },
     {
       name: "grep",
-      description: "Search for text patterns in files",
+      description: grepDescription,
       parameters: z.object({
-        patterns: z.union([z.string(), z.array(z.string())]).describe("Search patterns"),
-        cwd: z.string().optional().describe("Working directory to search in"),
-        maxMatches: z.number().optional().describe("Maximum matches (default: 100)"),
-        caseSensitive: z.boolean().optional().describe("Case sensitive search (default: true)"),
-        include: z.array(z.string()).optional().describe("File patterns to include"),
-        exclude: z.array(z.string()).optional().describe("File patterns to exclude"),
+        pattern: z.string().describe("The regex pattern to search for in file contents"),
+        path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
+        include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
+        maxMatches: z.number().optional().describe("Maximum matches to return (default: 100)"),
       }),
       execute: async (args) => {
         try {
-          const results = await grep(args.patterns, {
-            cwd: args.cwd,
+          if (!args.pattern) {
+            return {
+              success: false,
+              output: "",
+              error: "Missing required parameter: pattern",
+              metadata: createMetadata(),
+            };
+          }
+
+          const results = await grep(args.pattern, {
+            cwd: args.path,
             maxMatches: args.maxMatches ?? 100,
-            caseSensitive: args.caseSensitive,
-            includePatterns: args.include,
-            excludePatterns: args.exclude,
+            includePatterns: args.include ? [args.include] : undefined,
           });
 
           const output = results

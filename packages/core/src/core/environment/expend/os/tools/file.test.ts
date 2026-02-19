@@ -16,6 +16,7 @@ import {
   writeFile,
   glob,
   grep,
+  createFileTools,
 } from "./file.js";
 import { normalizePath, isAbsolute, resolvePath } from "./filesystem.js";
 
@@ -390,5 +391,206 @@ describe("File Tools - Integration Tests", () => {
     expect(result.diff).toContain("- Original content");
     expect(result.diff).toContain("+ Modified content");
     expect(result.diff).toContain("+ New line");
+  });
+});
+
+describe("File Tools - Tool Definitions", () => {
+  const testDir = join(tmpdir(), `agent-core-tool-def-${Date.now()}`);
+  const testFile = join(testDir, "test.ts");
+
+  beforeAll(() => {
+    mkdirSync(testDir, { recursive: true });
+    writeFileSync(testFile, "Line 1\nLine 2\nLine 3");
+  });
+
+  afterAll(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  describe("createFileTools", () => {
+    const tools = createFileTools();
+
+    test("should create all required tools", () => {
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).toContain("read_file");
+      expect(toolNames).toContain("write_file");
+      expect(toolNames).toContain("glob");
+      expect(toolNames).toContain("grep");
+      expect(toolNames.length).toBe(4);
+    });
+
+    describe("read_file tool", () => {
+      const readTool = tools.find((t) => t.name === "read_file")!;
+
+      test("should have detailed description", () => {
+        expect(readTool.description).toContain("Reads a file from the local filesystem");
+        expect(readTool.description).toContain("cat -n format");
+        expect(readTool.description).toContain("2000 lines");
+      });
+
+      test("should have correct parameters", async () => {
+        const toolInfo = await readTool.init?.({}) ?? { parameters: readTool.parameters };
+        const paramsParse = toolInfo.parameters.parse;
+        expect(() => paramsParse({ path: testFile })).not.toThrow();
+        expect(() => paramsParse({ path: testFile, offset: 1 })).not.toThrow();
+        expect(() => paramsParse({ path: testFile, offset: "1", limit: "2" })).not.toThrow();
+      });
+
+      test("should execute successfully", async () => {
+        const result = await readTool.execute({ path: testFile, offset: 0, limit: 10 }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toContain("<file>");
+        expect(result.output).toContain("00001| Line 1");
+        expect(result.output).toContain("</file>");
+      });
+
+      test("should handle pagination with offset and limit", async () => {
+        const result = await readTool.execute({ path: testFile, offset: 1, limit: 1 }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toContain("00002| Line 2");
+        expect(result.output).not.toContain("00001| Line 1");
+      });
+
+      test("should handle string parameters with coercion", async () => {
+        const result = await readTool.execute({ path: testFile, offset: 0, limit: "2" }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toContain("00001| Line 1");
+        expect(result.output).toContain("00002| Line 2");
+      });
+
+      test("should handle missing path parameter", async () => {
+        const result = await readTool.execute({}, {});
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Missing required parameter");
+      });
+
+      test("should handle non-existent file", async () => {
+        const result = await readTool.execute({ path: join(testDir, "nonexistent.txt") }, {});
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("File not found");
+      });
+    });
+
+    describe("write_file tool", () => {
+      const writeTool = tools.find((t) => t.name === "write_file")!;
+
+      test("should have detailed description with usage guidelines", () => {
+        expect(writeTool.description).toContain("Writes a file to the local filesystem");
+        expect(writeTool.description).toContain("overwrite");
+        expect(writeTool.description).toContain("Read tool first");
+        expect(writeTool.description).toContain("NEVER proactively create documentation");
+      });
+
+      test("should have correct parameters", async () => {
+        const toolInfo = await writeTool.init?.({}) ?? { parameters: writeTool.parameters };
+        const paramsParse = toolInfo.parameters.parse;
+        expect(() => paramsParse({ path: "test.txt", content: "hello" })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", append: true })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", createDirs: true })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", showDiff: true })).not.toThrow();
+      });
+
+      test("should execute successfully", async () => {
+        const outputFile = join(testDir, "output.txt");
+        const result = await writeTool.execute(
+          { path: outputFile, content: "Hello World" },
+          {},
+        );
+        expect(result.success).toBe(true);
+        expect(readFileSync(outputFile, "utf-8")).toBe("Hello World");
+      });
+
+      test("should handle append mode", async () => {
+        const outputFile = join(testDir, "append.txt");
+        await writeTool.execute({ path: outputFile, content: "First" }, {});
+        const result = await writeTool.execute(
+          { path: outputFile, content: "Second", append: true },
+          {},
+        );
+        expect(result.success).toBe(true);
+        expect(readFileSync(outputFile, "utf-8")).toBe("FirstSecond");
+      });
+
+      test("should handle missing required parameters", async () => {
+        const result = await writeTool.execute({ path: "test.txt" }, {});
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Missing required parameter");
+      });
+    });
+
+    describe("glob tool", () => {
+      const globTool = tools.find((t) => t.name === "glob")!;
+
+      test("should have concise description", () => {
+        expect(globTool.description).toContain("Fast file pattern matching");
+        expect(globTool.description).toContain("glob patterns");
+      });
+
+      test("should have simplified single pattern parameter", async () => {
+        const toolInfo = await globTool.init?.({}) ?? { parameters: globTool.parameters };
+        const paramsParse = toolInfo.parameters.parse;
+        expect(() => paramsParse({ pattern: "*.ts" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "*.ts", path: testDir })).not.toThrow();
+        expect(() => paramsParse({ pattern: "*.ts", maxResults: 10 })).not.toThrow();
+      });
+
+      test("should execute successfully", async () => {
+        const result = await globTool.execute({ pattern: "*.ts", path: testDir }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toContain("test.ts");
+      });
+
+      test("should handle default path", async () => {
+        const result = await globTool.execute({ pattern: "*.ts" }, {});
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe("grep tool", () => {
+      const grepTool = tools.find((t) => t.name === "grep")!;
+
+      test("should have concise description", () => {
+        expect(grepTool.description).toContain("Fast content search");
+        expect(grepTool.description).toContain("regular expressions");
+        expect(grepTool.description).toContain("ripgrep");
+      });
+
+      test("should have simplified parameters", async () => {
+        const toolInfo = await grepTool.init?.({}) ?? { parameters: grepTool.parameters };
+        const paramsParse = toolInfo.parameters.parse;
+        expect(() => paramsParse({ pattern: "Line", path: testDir })).not.toThrow();
+        expect(() => paramsParse({ pattern: "Line", include: "*.ts" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "Line", maxMatches: 10 })).not.toThrow();
+      });
+
+      test("should execute successfully", async () => {
+        const result = await grepTool.execute({ pattern: "Line", path: testDir }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toContain("Line 1");
+      });
+
+      test("should handle include parameter", async () => {
+        const result = await grepTool.execute({
+          pattern: "Line",
+          path: testDir,
+          include: "*.ts",
+        }, {});
+        expect(result.success).toBe(true);
+      });
+
+      test("should handle missing pattern", async () => {
+        const result = await grepTool.execute({ path: testDir }, {});
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      test("should return no matches result", async () => {
+        const result = await grepTool.execute({ pattern: "nonexistentpattern123", path: testDir }, {});
+        expect(result.success).toBe(true);
+        expect(result.output).toBe("");
+      });
+    });
   });
 });
