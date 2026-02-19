@@ -36,6 +36,10 @@ export function InputBox() {
   const [streamingDotIndex, setStreamingDotIndex] = createSignal(0);
   const [pendingResult, setPendingResult] = createSignal<PendingCommandResult | null>(null);
 
+  // 双按 ESC 中断 session
+  let lastEscPress = 0;
+  const DOUBLE_ESC_WINDOW_MS = 5000;
+
   // CommandPalette ref - OpenCode 风格
   let commandPalette: CommandPaletteRef | null = null;
   // textarea ref
@@ -323,9 +327,33 @@ export function InputBox() {
                 }
               }}
               onKeyDown={(e: any) => {
-                // 如果正在提交，忽略键盘事件（但不清空标志位，因为那是给 onContentChange 用的）
+                // ESC 键是紧急操作，即使在提交中也允许中断
+                if (e.name === "escape" || e.key === "Escape") {
+                  const now = Date.now();
+                  const sessionId = store.sessionId();
+                  
+                  if (!sessionId) {
+                    tuiLogger.warn("[InputBox] No sessionId, cannot interrupt");
+                    lastEscPress = now;
+                    return;
+                  }
+                  
+                  if (now - lastEscPress < DOUBLE_ESC_WINDOW_MS) {
+                    // 第二次按 ESC，触发中断
+                    tuiLogger.info("[InputBox] Double ESC pressed, interrupting session", { sessionId });
+                    const serverUrl = eventStream.url();
+                    fetch(`${serverUrl}/sessions/${sessionId}/interrupt`, {
+                      method: "POST",
+                    }).catch((err) => {
+                      tuiLogger.error("[InputBox] Failed to interrupt session", { error: String(err) });
+                    });
+                  }
+                  lastEscPress = now;
+                  return;
+                }
+
+                // 如果正在提交，忽略其他键盘事件
                 if (isSubmitting()) {
-                  tuiLogger.info("[InputBox] onKeyDown ignored - submitting");
                   e.preventDefault();
                   return;
                 }

@@ -222,75 +222,83 @@ export async function invokeLLM(
       eventHandler.onStart({ model: config.model });
     }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === "data: [DONE]") continue;
-        if (!trimmed.startsWith("data: ")) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (!trimmed.startsWith("data: ")) continue;
 
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") continue;
 
-        try {
-          const chunk: StreamChunk = JSON.parse(data);
-          const delta = chunk.choices?.[0]?.delta;
-          if (!delta) continue;
+          try {
+            const chunk: StreamChunk = JSON.parse(data);
+            const delta = chunk.choices?.[0]?.delta;
+            if (!delta) continue;
 
-          if (delta.content) {
-            content += delta.content;
-            if (eventHandler?.onText) {
-              eventHandler.onText(content, delta.content);
+            if (delta.content) {
+              content += delta.content;
+              if (eventHandler?.onText) {
+                eventHandler.onText(content, delta.content);
+              }
             }
-          }
 
-          if (delta.reasoning_content) {
-            reasoningContent += delta.reasoning_content;
-            if (eventHandler?.onReasoning) {
-              eventHandler.onReasoning(reasoningContent);
+            if (delta.reasoning_content) {
+              reasoningContent += delta.reasoning_content;
+              if (eventHandler?.onReasoning) {
+                eventHandler.onReasoning(reasoningContent);
+              }
             }
-          }
 
-          if (delta.tool_calls) {
-            console.log(`[invokeLLM] AI requested tool_calls: ${delta.tool_calls.map((tc: any) => tc.function?.name || "unknown").join(", ")}`);
-            for (const tc of delta.tool_calls) {
-              if (tc.index !== undefined) {
-                if (!toolCalls[tc.index]) {
-                  toolCalls[tc.index] = {
-                    id: tc.id || `call-${tc.index}`,
-                    function: { name: "", arguments: "" },
-                  };
+            if (delta.tool_calls) {
+              console.log(`[invokeLLM] AI requested tool_calls: ${delta.tool_calls.map((tc: any) => tc.function?.name || "unknown").join(", ")}`);
+              for (const tc of delta.tool_calls) {
+                if (tc.index !== undefined) {
+                  if (!toolCalls[tc.index]) {
+                    toolCalls[tc.index] = {
+                      id: tc.id || `call-${tc.index}`,
+                      function: { name: "", arguments: "" },
+                    };
+                  }
+                  if (tc.function?.name) {
+                    toolCalls[tc.index].function.name = tc.function.name;
+                  }
+                  if (tc.function?.arguments) {
+                    toolCalls[tc.index].function.arguments += tc.function.arguments;
+                  }
                 }
-                if (tc.function?.name) {
-                  toolCalls[tc.index].function.name = tc.function.name;
-                }
-                if (tc.function?.arguments) {
-                  toolCalls[tc.index].function.arguments += tc.function.arguments;
+              }
+              
+              // Emit tool_call event
+              if (eventHandler?.onToolCall && toolCalls.length > 0) {
+                const lastTool = toolCalls[toolCalls.length - 1];
+                if (lastTool.function.name) {
+                  eventHandler.onToolCall(
+                    lastTool.function.name,
+                    JSON.parse(lastTool.function.arguments || "{}"),
+                    lastTool.id
+                  );
                 }
               }
             }
-            
-            // Emit tool_call event
-            if (eventHandler?.onToolCall && toolCalls.length > 0) {
-              const lastTool = toolCalls[toolCalls.length - 1];
-              if (lastTool.function.name) {
-                eventHandler.onToolCall(
-                  lastTool.function.name,
-                  JSON.parse(lastTool.function.arguments || "{}"),
-                  lastTool.id
-                );
-              }
-            }
+          } catch {
+            // Skip parse errors
           }
-        } catch {
-          // Skip parse errors
         }
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        console.log("[invokeLLM] Stream aborted by user");
+      } else {
+        throw err;
       }
     }
 
