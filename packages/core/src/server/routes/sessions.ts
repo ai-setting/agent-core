@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ServerEnvironment } from "../environment.js";
 import { sessionLogger } from "../logger.js";
 import type { Session } from "../../core/session/index.js";
+import { sessionAbortManager } from "../../core/session/abort-manager.js";
 import type { MessageWithParts, TextPart } from "../../core/session/types.js";
 import { EventTypes, type EnvEvent } from "../../core/types/event.js";
 
@@ -185,6 +186,24 @@ app.post("/:id/prompt", async (c) => {
     sessionId: id,
     message: "Processing started",
   });
+});
+
+/**
+ * POST /sessions/:id/interrupt - Interrupt a running session
+ */
+app.post("/:id/interrupt", async (c) => {
+  const env = await ensureSessionEnv(c);
+  if (!env) return c.json({ error: "Session support not available" }, 503);
+
+  const id = c.req.param("id");
+  
+  if (sessionAbortManager.has(id)) {
+    sessionAbortManager.abort(id);
+    sessionLogger.info("Session interrupted", { sessionId: id });
+    return c.json({ success: true, interrupted: true });
+  }
+  
+  return c.json({ success: true, interrupted: false });
 });
 
 export default app;

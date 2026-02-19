@@ -44,6 +44,7 @@ import {
   type StreamEventHandler 
 } from "./invoke-llm.js";
 import { Session } from "../../session/index.js";
+import { sessionAbortManager } from "../../session/abort-manager.js";
 import type { SessionCreateOptions } from "../../session/types.js";
 import { withEventHook, withEventHookVoid } from "./with-event-hook.js";
 
@@ -469,9 +470,21 @@ export abstract class BaseEnvironment implements Environment {
 
     // Generate a stable messageId for this query
     const messageId = `msg_${Date.now()}`;
+    
+    // Get or create abort signal for this session
+    const sessionId = context?.session_id;
+    let abortSignal: AbortSignal | undefined;
+    if (sessionId) {
+      if (!sessionAbortManager.has(sessionId)) {
+        sessionAbortManager.create(sessionId);
+      }
+      abortSignal = sessionAbortManager.get(sessionId);
+    }
+    
     const agentContext = {
       ...context,
       message_id: messageId,
+      abort: abortSignal,
     };
 
     const agent = new Agent(event, this as Environment, this.listTools(), prompt, agentContext, undefined, history);
@@ -723,6 +736,7 @@ export abstract class BaseEnvironment implements Environment {
         session_id: ctx.session_id,
         message_id: ctx.message_id,
         metadata: ctx.metadata,
+        abort: ctx.abort,
       },
       eventHandler
     );
