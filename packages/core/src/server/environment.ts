@@ -836,7 +836,13 @@ export class ServerEnvironment extends BaseEnvironment {
           
           try {
             const response = await this.handle_query(content, { session_id: sessionId }, history);
-            session?.addAssistantMessage(response);
+            
+            // Save assistant message with reasoning if available
+            if (this.currentStreamingContent.reasoning) {
+              session?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${response}`);
+            } else {
+              session?.addAssistantMessage(response);
+            }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             
