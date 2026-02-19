@@ -129,10 +129,10 @@ export class OsEnv extends BaseEnvironment {
 
   private llmConfigPromise: Promise<void> | null = null;
 
-  static async create(): Promise<OsEnv> {
-    const model = process.env.LLM_MODEL;
-    const apiKey = process.env.LLM_API_KEY;
-    const baseURL = process.env.LLM_BASE_URL;
+  static async create(config?: OsEnvConfig): Promise<OsEnv> {
+    const model = config?.model ?? process.env.LLM_MODEL;
+    const apiKey = config?.apiKey ?? process.env.LLM_API_KEY;
+    const baseURL = config?.baseURL ?? process.env.LLM_BASE_URL;
 
     const env = new OsEnv({ model, apiKey, baseURL });
     await env.registerDefaultTools();
@@ -147,12 +147,25 @@ export class OsEnv extends BaseEnvironment {
   }
 
   private async registerDefaultTools(): Promise<void> {
-    const { createOsTools, createTodoTools } = await import("./tools/index.js");
+    const { createOsTools, createTodoTools, createWebFetchTool } = await import("./tools/index.js");
     const osTools = createOsTools();
     const todoTools = createTodoTools();
-    for (const tool of [...osTools, ...todoTools]) {
+    const webFetchTool = createWebFetchTool({
+      maxChars: 50000,
+      timeout: 30000,
+    });
+    
+    console.log("[OsEnv] Registering tools", {
+      osTools: osTools.map((t: any) => t.name),
+      todoTools: todoTools.map((t: any) => t.name),
+      webFetchTool: webFetchTool.name,
+    });
+    
+    for (const tool of [...osTools, ...todoTools, webFetchTool]) {
       this.registerTool(tool);
     }
+    
+    console.log("[OsEnv] Registered tools count:", this.listTools().length);
   }
 
   private configureDefaults(): void {
@@ -176,6 +189,10 @@ export class OsEnv extends BaseEnvironment {
 
   getWorkdir(): string {
     return this.workdir;
+  }
+
+  protected getSkillsDirectory(): string | undefined {
+    return undefined;
   }
 
   setWorkdir(path: string): void {

@@ -872,14 +872,20 @@ export abstract class BaseEnvironment implements Environment {
    * 在子类构造函数中调用
    */
   protected async initializeMcp(mcpConfig?: any): Promise<void> {
+    BaseEnvironment.baseLogger.info("[BaseEnvironment] initializeMcp called", { 
+      hasMcpConfig: !!mcpConfig,
+      mcpConfigKeys: mcpConfig?.clients ? Object.keys(mcpConfig.clients) : [],
+    });
+    
     const mcpserversDir = this.getMcpserversDirectory();
     
     if (!mcpserversDir && !mcpConfig?.clients) {
+      BaseEnvironment.baseLogger.info("[BaseEnvironment] No MCP config provided, skipping MCP initialization");
       return;
     }
 
     if (mcpserversDir) {
-      console.log(`[BaseEnvironment] MCP servers directory: ${mcpserversDir}`);
+      BaseEnvironment.baseLogger.info(`[BaseEnvironment] MCP servers directory: ${mcpserversDir}`);
     }
 
     // 动态导入 MCP 管理器
@@ -887,15 +893,24 @@ export abstract class BaseEnvironment implements Environment {
     this.mcpManager = new McpManager(mcpserversDir);
 
     // 加载 MCP Clients（即使没有显式配置，也会扫描 mcpservers 目录）
+    BaseEnvironment.baseLogger.info("[BaseEnvironment] Loading MCP clients", { clients: mcpConfig?.clients || {} });
     const result = await this.mcpManager.loadClients(mcpConfig?.clients ?? {});
-    console.log(`[BaseEnvironment] Loaded ${result.loaded} MCP clients, ${result.failed.length} failed`);
+    BaseEnvironment.baseLogger.info(`[BaseEnvironment] MCP load result`, { 
+      loaded: result.loaded, 
+      failed: result.failed,
+    });
 
     // 注册 MCP 工具
     const mcpTools = this.mcpManager.getTools();
+    BaseEnvironment.baseLogger.info("[BaseEnvironment] MCP tools to register", { 
+      count: mcpTools.length,
+      tools: mcpTools.map((t: any) => t.name),
+    });
+    
     for (const tool of mcpTools) {
       this.registerTool(tool);
     }
-    console.log(`[BaseEnvironment] Registered ${mcpTools.length} MCP tools`);
+    BaseEnvironment.baseLogger.info(`[BaseEnvironment] Registered ${mcpTools.length} MCP tools`);
   }
 
   /**

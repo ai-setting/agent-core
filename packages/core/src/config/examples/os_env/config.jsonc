@@ -37,6 +37,20 @@
     }
   },
 
+  // ==================== MCP 配置 ====================
+  // Web Search: 使用 Exa MCP (无需 API Key，开箱即用)
+  // 工具名: exa_web_search_exa
+  "mcp": {
+    "clients": {
+      "exa": {
+        "type": "remote",
+        "url": "https://mcp.exa.ai/mcp?tools=web_search_exa",
+        "enabled": true,
+        "timeout": 30000
+      }
+    }
+  },
+
   // ==================== Environment 运行时配置 ====================
   "environment": {
     "id": "os_env",
@@ -49,7 +63,7 @@
       "events": true,      // 支持事件订阅
       "metrics": true,     // 支持指标采集
       "profiles": true,    // 支持多 Profile
-      "mcpTools": false    // 暂不支持 MCP
+      "mcpTools": true    // 支持 MCP 工具
     },
 
     // Environment Profiles - 定义不同的 Agent 组合
@@ -62,7 +76,7 @@
             "id": "os_agent",
             "role": "primary",
             "promptId": "system",
-            "allowedTools": ["bash", "file_read", "file_write", "file_glob", "grep"],
+            "allowedTools": ["bash", "file_read", "file_write", "file_glob", "grep", "webfetch", "exa_web_search_exa"],
             "metadata": {
               "maxConcurrency": 5,
               "description": "General OS operations agent"
@@ -90,7 +104,7 @@
             "role": "primary",
             "promptId": "developer",
             "promptOverride": "You are a helpful development assistant. You can run tests, manage git, and help with code review.",
-            "allowedTools": ["bash", "file_read", "file_write", "git"],
+            "allowedTools": ["bash", "file_read", "file_write", "git", "webfetch", "exa_web_search_exa"],
             "deniedTools": ["file_delete"],
             "metadata": {
               "safeMode": true
