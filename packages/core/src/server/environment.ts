@@ -61,6 +61,13 @@ export class ServerEnvironment extends BaseEnvironment {
   private skillsDirectory: string | undefined;
   private mcpserversDirectory: string | undefined;
   private eventBus: EnvEventBus;
+  
+  // Track streaming content for interrupt handling
+  private currentStreamingContent: {
+    reasoning: string;
+    text: string;
+    toolCalls: Array<{ id: string; name: string; args: string }>;
+  } = { reasoning: "", text: "", toolCalls: [] };
 
   constructor(config?: ServerEnvironmentConfig) {
     const envConfig: BaseEnvironmentConfig = {
@@ -661,6 +668,8 @@ export class ServerEnvironment extends BaseEnvironment {
     switch (event.type) {
       case "start":
         console.log("[ServerEnvironment] Publishing stream.start event", { sessionId, messageId });
+        // Reset streaming content for new request
+        this.currentStreamingContent = { reasoning: "", text: "", toolCalls: [] };
         await Bus.publish(
           StreamStartEvent,
           {
@@ -674,6 +683,7 @@ export class ServerEnvironment extends BaseEnvironment {
 
       case "text":
         console.log("[ServerEnvironment] Publishing stream.text event", { sessionId, messageId, contentLength: event.content?.length });
+        this.currentStreamingContent.text = event.content || "";
         await Bus.publish(
           StreamTextEvent,
           {
@@ -688,6 +698,7 @@ export class ServerEnvironment extends BaseEnvironment {
 
       case "reasoning":
         console.log("[ServerEnvironment] Publishing stream.reasoning event", { sessionId, messageId, contentLength: event.content?.length });
+        this.currentStreamingContent.reasoning = event.content || "";
         await Bus.publish(
           StreamReasoningEvent,
           {
@@ -700,6 +711,13 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "tool_call":
+        if (event.tool_name) {
+          this.currentStreamingContent.toolCalls.push({
+            id: event.tool_call_id || "",
+            name: event.tool_name,
+            args: JSON.stringify(event.tool_args || {}),
+          });
+        }
         await Bus.publish(
           StreamToolCallEvent,
           {
@@ -816,8 +834,30 @@ export class ServerEnvironment extends BaseEnvironment {
           // Wait for config to be loaded (including prompts)
           await this.configLoaded;
           
-          const response = await this.handle_query(content, { session_id: sessionId }, history);
-          session?.addAssistantMessage(response);
+          try {
+            const response = await this.handle_query(content, { session_id: sessionId }, history);
+            session?.addAssistantMessage(response);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            // Check if it's an abort error
+            if (errorMessage === "Agent execution aborted") {
+              console.log("[ServerEnvironment] Session interrupted, saving partial response");
+              
+              // Save reasoning content if exists
+              if (this.currentStreamingContent.reasoning) {
+                session?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${this.currentStreamingContent.text || "(interrupted)"}`);
+              } else if (this.currentStreamingContent.text) {
+                session?.addAssistantMessage(this.currentStreamingContent.text);
+              }
+              
+              // Add user interrupt notice message
+              session?.addUserMessage("[Session interrupted by user]");
+            } else {
+              // Re-throw other errors
+              throw error;
+            }
+          }
         }
       },
       options: { priority: 100 }
