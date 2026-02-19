@@ -566,9 +566,16 @@ export class ServerEnvironment extends BaseEnvironment {
       );
       const osTools = toolsModule.createOsTools();
       const todoTools = toolsModule.createTodoTools();
+      
+      // Import and create webfetch tool
+      const { createWebFetchTool } = await import("../tools/web/web-fetch.js");
+      const webFetchTool = createWebFetchTool({
+        maxChars: 50000,
+        timeout: 30000,
+      });
 
       // All tools are external - LLM capabilities are native to Environment
-      const allTools = [...osTools, ...todoTools];
+      const allTools = [...osTools, ...todoTools, webFetchTool];
 
       for (const tool of allTools) {
         this.registerTool(tool);
@@ -583,7 +590,7 @@ export class ServerEnvironment extends BaseEnvironment {
       const taskTool = createTaskTool(this);
       this.registerTool(taskTool);
 
-      console.log(`[ServerEnvironment] Registered ${allTools.length + 2} tools (including skill tool and task tool)`);
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 2} tools (including skill tool and task tool):`, allTools.map((t: any) => t.name));
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");

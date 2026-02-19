@@ -24,3 +24,6 @@ export {
   isSubpath,
   pathsOverlap,
 } from "./filesystem.js";
+
+// Web tools - for environments that support web access
+export { createWebFetchTool } from "../../../../../tools/web/web-fetch.js";
