@@ -104,7 +104,7 @@ function convertTools(tools: ToolInfo[]): any[] {
       parameters: extractToolSchema(t.parameters),
     },
   }));
-  console.log(`[convertTools] Input: ${tools.map(t => t.name).join(", ")} -> Output: ${result.map(t => t.function.name).join(", ")}`);
+  invokeLLMLogger.debug("[convertTools] Converting tools", { input: tools.map(t => t.name), output: result.map(t => t.function.name) });
   return result;
 }
 
@@ -180,7 +180,7 @@ export async function invokeLLM(
   }
 
   try {
-    invokeLLMLogger.info("[invokeLLM] About to fetch LLM API");
+    invokeLLMLogger.debug("[invokeLLM] About to fetch LLM API");
     const response = await fetch(`${config.baseURL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -254,7 +254,7 @@ export async function invokeLLM(
 
             if (delta.content) {
               content += delta.content;
-              invokeLLMLogger.info("[invokeLLM] onText called", { contentLength: content.length });
+              invokeLLMLogger.debug("[invokeLLM] onText called", { contentLength: content.length });
               if (eventHandler?.onText) {
                 eventHandler.onText(content, delta.content);
               }
@@ -262,14 +262,14 @@ export async function invokeLLM(
 
             if (delta.reasoning_content) {
               reasoningContent += delta.reasoning_content;
-              invokeLLMLogger.info("[invokeLLM] onReasoning called", { reasoningLength: reasoningContent.length });
+              invokeLLMLogger.debug("[invokeLLM] onReasoning called", { reasoningLength: reasoningContent.length });
               if (eventHandler?.onReasoning) {
                 eventHandler.onReasoning(reasoningContent);
               }
             }
 
             if (delta.tool_calls) {
-              invokeLLMLogger.info("[invokeLLM] onToolCall called", { count: delta.tool_calls.length });
+              invokeLLMLogger.debug("[invokeLLM] onToolCall called", { count: delta.tool_calls.length });
               for (const tc of delta.tool_calls) {
                 if (tc.index !== undefined) {
                   if (!toolCalls[tc.index]) {
@@ -323,9 +323,9 @@ export async function invokeLLM(
 
     if (validToolCalls.length > 0) {
       output.tool_calls = validToolCalls;
-      console.log(`[invokeLLM] Returning with ${validToolCalls.length} tool_calls: ${validToolCalls.map(t => t.function.name).join(", ")}`);
+      invokeLLMLogger.debug("[invokeLLM] Returning with tool_calls", { count: validToolCalls.length, tools: validToolCalls.map(t => t.function.name) });
     } else {
-      console.log(`[invokeLLM] Returning content (no tool_calls)`);
+      invokeLLMLogger.debug("[invokeLLM] Returning content (no tool_calls)");
       // Emit completed event only when returning final content (no tool calls)
       if (eventHandler?.onCompleted) {
         eventHandler.onCompleted(content, { model: config.model });
