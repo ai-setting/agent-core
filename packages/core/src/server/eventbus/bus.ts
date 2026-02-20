@@ -11,6 +11,7 @@ import type { ZodType } from "zod";
 import type { EventDefinition, EventPayload } from "./bus-event.js";
 import { publishGlobal, subscribeGlobal } from "./global.js";
 import type { EnvEvent } from "../../core/types/event.js";
+import { busLogger } from "../logger.js";
 
 /**
  * Subscription function type
@@ -317,8 +318,9 @@ export class EnvEventBus {
    * Handles idempotency, queueing, and processing
    */
   async publish<T>(event: EnvEvent<T>): Promise<void> {
+    busLogger.debug(`[EnvEventBus] Publishing event: ${event.type}`, { id: event.id });
     if (this.seen.has(event.id)) {
-      console.warn(`[EnvEventBus] Duplicate event ignored: ${event.id}`);
+      busLogger.warn(`[EnvEventBus] Duplicate event ignored: ${event.id}`);
       return;
     }
 
@@ -346,15 +348,18 @@ export class EnvEventBus {
    * Handle a single event - match rule and execute handler
    */
   private async handleEvent<T>(event: EnvEvent<T>): Promise<void> {
+    busLogger.debug(`[EnvEventBus] Handling event: ${event.type}`);
     const matchedRule = this.findMatchedRule(event.type);
 
     if (!matchedRule) {
-      console.warn(`[EnvEventBus] No rule matched for event: ${event.type}`);
+      busLogger.warn(`[EnvEventBus] No rule matched for event: ${event.type}`);
       return;
     }
 
+    busLogger.debug(`[EnvEventBus] Found rule for event: ${event.type}, handler type: ${matchedRule.handler.type}`);
     if (matchedRule.options?.enabled !== false) {
       if (matchedRule.handler.type === "function") {
+        busLogger.debug(`[EnvEventBus] Calling function handler for: ${event.type}`);
         await matchedRule.handler.fn(event);
       } else if (matchedRule.handler.type === "agent") {
         await this.handleWithAgent(event, matchedRule.handler);
