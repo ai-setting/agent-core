@@ -8,6 +8,9 @@
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
+import { createLogger } from "../../../utils/logger.js";
+
+const invokeLLMLogger = createLogger("invoke:llm", "server.log");
 
 export interface InvokeLLMConfig {
   model: string;
@@ -140,7 +143,7 @@ export async function invokeLLM(
   const tools = options.tools;
   const stream = options.stream ?? true;
 
-  console.log(`[invokeLLM] Received ${tools?.length || 0} tools: ${tools?.map(t => t.name).join(", ") || "none"}`);
+  invokeLLMLogger.info("[invokeLLM] Function called", { toolCount: tools?.length || 0, stream });
 
   const requestBody: any = {
     model: options.model || config.model,
@@ -171,12 +174,13 @@ export async function invokeLLM(
   if (tools && tools.length > 0) {
     requestBody.tools = convertTools(tools);
     requestBody.tool_choice = "auto";
-    console.log(`[invokeLLM] Sending ${requestBody.tools.length} tools to LLM: ${requestBody.tools.map((t: any) => t.function.name).join(", ")}`);
+    invokeLLMLogger.info("[invokeLLM] Sending tools to LLM", { count: requestBody.tools.length });
   } else {
-    console.log(`[invokeLLM] Sending NO tools to LLM`);
+    invokeLLMLogger.info("[invokeLLM] Sending NO tools to LLM");
   }
 
   try {
+    invokeLLMLogger.info("[invokeLLM] About to fetch LLM API");
     const response = await fetch(`${config.baseURL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -186,6 +190,7 @@ export async function invokeLLM(
       body: JSON.stringify(requestBody),
       signal: ctx.abort,
     });
+    invokeLLMLogger.info("[invokeLLM] Fetch completed", { status: response.status });
 
     if (!response.ok) {
       const error = await response.text();
@@ -225,7 +230,10 @@ export async function invokeLLM(
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          invokeLLMLogger.info("[invokeLLM] Stream reading done");
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -246,6 +254,7 @@ export async function invokeLLM(
 
             if (delta.content) {
               content += delta.content;
+              invokeLLMLogger.info("[invokeLLM] onText called", { contentLength: content.length });
               if (eventHandler?.onText) {
                 eventHandler.onText(content, delta.content);
               }
@@ -253,13 +262,14 @@ export async function invokeLLM(
 
             if (delta.reasoning_content) {
               reasoningContent += delta.reasoning_content;
+              invokeLLMLogger.info("[invokeLLM] onReasoning called", { reasoningLength: reasoningContent.length });
               if (eventHandler?.onReasoning) {
                 eventHandler.onReasoning(reasoningContent);
               }
             }
 
             if (delta.tool_calls) {
-              console.log(`[invokeLLM] AI requested tool_calls: ${delta.tool_calls.map((tc: any) => tc.function?.name || "unknown").join(", ")}`);
+              invokeLLMLogger.info("[invokeLLM] onToolCall called", { count: delta.tool_calls.length });
               for (const tc of delta.tool_calls) {
                 if (tc.index !== undefined) {
                   if (!toolCalls[tc.index]) {
@@ -296,7 +306,7 @@ export async function invokeLLM(
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        console.log("[invokeLLM] Stream aborted by user");
+        invokeLLMLogger.info("[invokeLLM] Stream aborted by user");
       } else {
         throw err;
       }

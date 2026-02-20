@@ -682,7 +682,7 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "text":
-        console.log("[ServerEnvironment] Publishing stream.text event", { sessionId, messageId, contentLength: event.content?.length });
+        console.log("[ServerEnvironment] Publishing stream.text event", { sessionId, messageId, contentLength: event.content?.length, deltaLength: event.delta?.length });
         this.currentStreamingContent.text = event.content || "";
         await Bus.publish(
           StreamTextEvent,

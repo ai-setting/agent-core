@@ -681,12 +681,12 @@ export abstract class BaseEnvironment implements Environment {
     context?: Context,
     options?: Omit<LLMOptions, "messages" | "tools">
   ): Promise<ToolResult> {
-    console.log("[BaseEnvironment.invokeLLM] Called");
+    BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Called");
     await this.ensureLLMInitialized();
-    console.log("[BaseEnvironment.invokeLLM] LLM initialized, config exists:", !!this.llmConfig);
+    BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] LLM initialized", { hasConfig: !!this.llmConfig });
 
     if (!this.llmConfig) {
-      console.log("[BaseEnvironment.invokeLLM] ERROR: LLM not configured");
+      BaseEnvironment.baseLogger.warn("[BaseEnvironment.invokeLLM] LLM not configured");
       return {
         success: false,
         output: "",
@@ -698,27 +698,30 @@ export abstract class BaseEnvironment implements Environment {
     }
 
     const ctx = context || ({} as Context);
-    console.log("[BaseEnvironment.invokeLLM] Calling invokeLLM with", messages.length, "messages");
+    BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Calling invokeLLM", { messageCount: messages.length });
 
     const eventHandler: StreamEventHandler = {
       onStart: (metadata) => {
-        console.log("[BaseEnvironment.invokeLLM] onStart callback");
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onStart callback");
         this.emitStreamEvent({ type: "start", metadata }, ctx);
       },
       onText: (content, delta) => {
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onText callback", { contentLength: content.length });
         this.emitStreamEvent({ type: "text", content, delta }, ctx);
       },
       onReasoning: (content) => {
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onReasoning callback", { contentLength: content.length });
         this.emitStreamEvent({ type: "reasoning", content }, ctx);
       },
       onToolCall: (toolName, toolArgs, toolCallId) => {
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onToolCall callback", { toolName });
         this.emitStreamEvent(
           { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId },
           ctx
         );
       },
       onCompleted: (content, metadata) => {
-        console.log("[BaseEnvironment.invokeLLM] onCompleted callback");
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onCompleted callback");
         this.emitStreamEvent({ type: "completed", content, metadata }, ctx);
       },
     };
@@ -741,7 +744,7 @@ export abstract class BaseEnvironment implements Environment {
       eventHandler
     );
     
-    console.log("[BaseEnvironment.invokeLLM] invokeLLM returned, success:", result.success);
+    BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] invokeLLM returned", { success: result.success });
     return result;
   }
 
