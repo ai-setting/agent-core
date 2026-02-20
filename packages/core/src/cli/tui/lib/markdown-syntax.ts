@@ -1,16 +1,10 @@
-/**
- * @fileoverview Markdown Syntax Generator
- *
- * 生成 Markdown 渲染所需的语法规则
- * 与 UI 框架无关，可独立测试
- */
+import { RGBA } from "@opentui/core";
 
-// ThemeTokenStyle type from OpenTUI
 export interface ThemeTokenStyle {
   scope: string[];
   style: {
-    foreground?: string;
-    background?: string;
+    foreground?: RGBA | string;
+    background?: RGBA | string;
     bold?: boolean;
     italic?: boolean;
     underline?: boolean;
@@ -22,24 +16,17 @@ export interface MarkdownTheme {
   foreground: string;
   background?: string;
   primary: string;
+  secondary?: string;
   muted: string;
   thinking: string;
   border?: string;
   success?: string;
+  warning?: string;
   error?: string;
+  accent?: string;
 }
 
-/**
- * 生成 Markdown 语法高亮规则
- * 
- * 根据主题颜色生成适用于 SyntaxStyle 的规则数组
- * 
- * @param theme - Markdown 主题配置
- * @returns ThemeTokenStyle 规则数组
- */
 export function generateMarkdownSyntax(theme: MarkdownTheme): ThemeTokenStyle[] {
-  // Don't call parseColor here - convertThemeToStyles will call it
-  // Just pass the hex color strings directly
   return [
     {
       scope: ["default"],
@@ -48,7 +35,56 @@ export function generateMarkdownSyntax(theme: MarkdownTheme): ThemeTokenStyle[] 
       },
     },
     {
-      scope: ["markup.strong"],
+      scope: ["markup.heading"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.1"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.2"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.3"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.4"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.5"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.heading.6"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
+      scope: ["markup.bold", "markup.strong"],
       style: {
         foreground: theme.foreground,
         bold: true,
@@ -62,38 +98,78 @@ export function generateMarkdownSyntax(theme: MarkdownTheme): ThemeTokenStyle[] 
       },
     },
     {
-      scope: ["markup.raw"],
-      style: {
-        foreground: theme.muted,
-      },
-    },
-    {
-      scope: ["heading", "heading.1", "heading.2", "heading.3", "heading.4", "heading.5", "heading.6"],
-      style: {
-        foreground: theme.foreground,
-        bold: true,
-      },
-    },
-    {
       scope: ["markup.list"],
       style: {
-        foreground: theme.foreground,
+        foreground: theme.primary,
       },
     },
     {
       scope: ["markup.quote"],
       style: {
         foreground: theme.muted,
+        italic: true,
       },
     },
     {
-      scope: ["link", "markup.link"],
+      scope: ["markup.raw", "markup.raw.block"],
+      style: {
+        foreground: theme.muted,
+      },
+    },
+    {
+      scope: ["markup.raw.inline"],
+      style: {
+        foreground: theme.muted,
+      },
+    },
+    {
+      scope: ["markup.link"],
       style: {
         foreground: theme.primary,
+        underline: true,
       },
     },
     {
-      scope: ["code", "markup.raw.block"],
+      scope: ["markup.link.label"],
+      style: {
+        foreground: theme.primary,
+        underline: true,
+      },
+    },
+    {
+      scope: ["markup.link.url"],
+      style: {
+        foreground: theme.muted,
+        underline: true,
+      },
+    },
+    {
+      scope: ["markup.strikethrough"],
+      style: {
+        foreground: theme.muted,
+      },
+    },
+    {
+      scope: ["markup.underline"],
+      style: {
+        foreground: theme.foreground,
+        underline: true,
+      },
+    },
+    {
+      scope: ["markup.list.checked"],
+      style: {
+        foreground: theme.success || theme.primary,
+      },
+    },
+    {
+      scope: ["markup.list.unchecked"],
+      style: {
+        foreground: theme.muted,
+      },
+    },
+    {
+      scope: ["code"],
       style: {
         foreground: theme.muted,
       },

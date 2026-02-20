@@ -10,6 +10,7 @@ import type { Accessor } from "solid-js";
 import { SyntaxStyle, resolveRenderLib } from "@opentui/core";
 import { useTheme } from "./theme.js";
 import { generateMarkdownSyntax } from "../lib/markdown-syntax.js";
+import { tuiLogger } from "../logger.js";
 
 export interface MarkdownStyleContextValue {
   syntaxStyle: Accessor<SyntaxStyle | null>;
@@ -26,33 +27,29 @@ export function MarkdownStyleProvider(props: { children: unknown }) {
   // 直接使用 createMemo，不通过 createSignal 中转
   const syntaxStyle = createMemo(() => {
     try {
-      // Check if render lib is available (only in TUI environment)
       const lib = resolveRenderLib();
       if (!lib) {
-        console.debug("[MarkdownStyle] render lib not available");
+        tuiLogger.info("[MarkdownStyle] render lib not available");
         return null;
       }
 
       const t = theme.theme();
-      
-      // Use SyntaxStyle.fromTheme() like OpenCode does
       const rules = generateMarkdownSyntax(t);
       const s = SyntaxStyle.fromTheme(rules);
 
-      // Verify the style has getStyle method
       if (typeof (s as { getStyle?: unknown }).getStyle !== "function") {
-        console.warn("[MarkdownStyle] SyntaxStyle.fromTheme() did not return a valid instance (no getStyle)");
+        tuiLogger.warn("[MarkdownStyle] SyntaxStyle.fromTheme() did not return a valid instance (no getStyle)");
         return null;
       }
 
-      console.debug("[MarkdownStyle] Created SyntaxStyle instance:", {
+      tuiLogger.info("[MarkdownStyle] Created SyntaxStyle instance", {
         hasGetStyle: typeof s.getStyle === "function",
         type: s.constructor.name,
       });
 
       return s;
     } catch (e) {
-      console.warn("[MarkdownStyle] Failed to create SyntaxStyle:", e);
+      tuiLogger.error("[MarkdownStyle] Failed to create SyntaxStyle:", e);
       return null;
     }
   });

@@ -4,10 +4,11 @@
  * 展示对话列表：用户消息左侧蓝色竖条，助手消息含 Thinking 与流式 Markdown 回复，底部显示模型与耗时
  */
 
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createMemo, createEffect, on } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { SyntaxStyle } from "@opentui/core";
 import { useStore, useTheme, useMarkdownStyle } from "../contexts/index.js";
+import { tuiLogger } from "../logger.js";
 
 function UserMessage(props: { content: string }) {
   const theme = useTheme();
@@ -102,6 +103,24 @@ function AssistantMessage(props: { message: any }) {
     return style;
   });
 
+  createEffect(on(validSyntaxStyle, (style) => {
+    tuiLogger.info("[AssistantMessage] validSyntaxStyle changed", {
+      hasStyle: style !== null,
+      hasGetStyle: style ? typeof (style as any).getStyle === "function" : false,
+      contentLength: displayContent().length,
+      messageId: props.message.id,
+      contentPreview: displayContent().substring(0, 100),
+    });
+  }));
+
+  createEffect(on(displayContent, (content) => {
+    tuiLogger.info("[AssistantMessage] displayContent changed", {
+      contentLength: content.length,
+      messageId: props.message.id,
+      hasMarkdownChars: content.includes("**") || content.includes("#") || content.includes("```"),
+    });
+  }));
+
   const modelLine = createMemo(() => {
     if (!isLastMessage()) return null;
     const model = store.lastModelName();
@@ -136,7 +155,7 @@ function AssistantMessage(props: { message: any }) {
                   content={displayContent()}
                   syntaxStyle={rawStyle}
                   streaming={isStreamingThis()}
-                  conceal={false}
+                  conceal={true}
                 />
                 <Show when={isStreamingThis()}>
                   <text fg={theme.theme().foreground}>▊</text>
