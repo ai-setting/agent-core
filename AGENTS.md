@@ -175,10 +175,27 @@ myLogger.info("Message");
 ```
 
 **Logger 方法：**
-- `debug(message, data?)` - 调试信息
+- `debug(message, data?)` - 调试信息（需要 DEBUG 级别才能看到）
 - `info(message, data?)` - 一般信息
 - `warn(message, data?)` - 警告信息
 - `error(message, data?)` - 错误信息
+
+**日志级别使用指导：**
+- `debug`: 仅在排查问题时使用，记录详细的执行流程（如函数调用、参数）
+- `info`: 记录重要的业务事件（如用户操作、状态变化）
+- `warn`: 记录可恢复的异常（如配置缺失使用默认值）
+- `error`: 记录不可恢复的错误（如 API 调用失败）
+
+**新增模块的 logger 配置：**
+```typescript
+// 在 server 模块中新增 logger
+import { createLogger } from "../utils/logger.js";
+const myLogger = createLogger("my:module", "server.log");
+
+// 在 core 模块中新增 logger（如 invoke-llm.ts）
+import { createLogger } from "../../../utils/logger.js";
+const invokeLLMLogger = createLogger("invoke:llm", "server.log");
+```
 
 ### 4.3 联调排查顺序（建议）
 
