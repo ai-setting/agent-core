@@ -193,7 +193,7 @@ export async function Providers_getAll(): Promise<ProviderInfo[]> {
       name: "ZhipuAI", 
       description: "GLM models by ZhipuAI", 
       baseURL: "https://open.bigmodel.cn/api/paas/v4",
-      models: ["glm-4", "glm-4-plus", "glm-3-turbo"]
+      models: ["glm-5", "glm-4", "glm-4-plus", "glm-3-turbo"]
     },
     { 
       id: "kimi", 
