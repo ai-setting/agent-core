@@ -61,6 +61,9 @@ export class ServerEnvironment extends BaseEnvironment {
   private skillsDirectory: string | undefined;
   private mcpserversDirectory: string | undefined;
   private eventBus: EnvEventBus;
+  private envName: string = "default";
+  private rulesDirectory: string | undefined;
+  private promptsDirectory: string | undefined;
   
   // Track streaming content for interrupt handling
   private currentStreamingContent: {
@@ -119,6 +122,22 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1.5. Set skills directory and load skills
       if (config.activeEnvironment) {
         const { ConfigPaths } = await import("../config/paths.js");
+        
+        // 设置环境名称和行为规范目录
+        this.envName = config.activeEnvironment;
+        this.rulesDirectory = path.join(
+          ConfigPaths.environments,
+          config.activeEnvironment
+        );
+        this.promptsDirectory = path.join(
+          ConfigPaths.environments,
+          config.activeEnvironment,
+          "prompts"
+        );
+        
+        // 加载行为规范（env rules + agent prompts）
+        await this.loadBehaviorSpec();
+        
         this.skillsDirectory = path.join(
           ConfigPaths.environments,
           config.activeEnvironment,
@@ -447,6 +466,19 @@ export class ServerEnvironment extends BaseEnvironment {
         "skills"
       );
       await this.loadSkills();
+      
+      // 7.6. Update behavior spec for new environment
+      this.envName = envName;
+      this.rulesDirectory = path.join(
+        ConfigPaths.environments,
+        envName
+      );
+      this.promptsDirectory = path.join(
+        ConfigPaths.environments,
+        envName,
+        "prompts"
+      );
+      await this.refreshBehaviorSpec();
 
       // 8. Re-initialize LLM with new config (but skip MCP since already initialized above)
       const rawConfig = await Config_get();
@@ -610,6 +642,19 @@ export class ServerEnvironment extends BaseEnvironment {
 
   protected getMcpserversDirectory(): string | undefined {
     return this.mcpserversDirectory;
+  }
+
+  protected override getRulesFilePath(): string | undefined {
+    if (!this.rulesDirectory) return undefined;
+    return path.join(this.rulesDirectory, "rules.md");
+  }
+
+  protected override getPromptsDirectory(): string | undefined {
+    return this.promptsDirectory;
+  }
+
+  protected override getEnvName(): string {
+    return this.envName;
   }
 
   protected getDefaultTimeout(toolName: string): number {

@@ -104,6 +104,37 @@ export interface EnvironmentProfile {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * 行为规范（完整）
+ * 包含环境级规则 + agent 特定 prompt 的组合
+ */
+export interface BehaviorSpec {
+  /** 环境名称 */
+  envName: string;
+  /** Agent ID */
+  agentId: string;
+  /** Agent 角色 */
+  agentRole: "primary" | "sub";
+  
+  /** 环境级规则（所有 agent 共享） */
+  envRules: string;
+  /** Agent 特定 prompt（来自 promptId 或 promptOverride） */
+  agentPrompt: string;
+  
+  /** 组合后的完整 system prompt */
+  combinedPrompt: string;
+  
+  /** 工具权限（用于过滤传给 LLM 的 tools 参数） */
+  allowedTools?: string[];
+  deniedTools?: string[];
+  
+  /** 元数据 */
+  metadata?: {
+    lastUpdated?: string;
+    version?: string;
+  };
+}
+
 /** 供 queryLogs 使用的日志级别 */
 export type EnvironmentLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -146,6 +177,30 @@ export interface Environment {
    * Invoke LLM as a native environment capability
    */
   invokeLLM(messages: LLMMessage[], tools?: ToolInfo[], context?: Context, options?: Omit<LLMOptions, "messages" | "tools">): Promise<ToolResult>;
+
+  /**
+   * 获取指定 agent 的完整行为规范
+   * 组合：环境级规则 + agent 特定 prompt
+   * 
+   * @param agentId - agent 标识，默认为 "system"
+   */
+  getBehaviorSpec?(agentId?: string): BehaviorSpec | Promise<BehaviorSpec>;
+  
+  /**
+   * 获取环境级规则（所有 agent 共享）
+   */
+  getEnvRules?(): string | Promise<string>;
+  
+  /**
+   * 刷新行为规范（从文件重新加载）
+   */
+  refreshBehaviorSpec?(): void | Promise<void>;
+  
+  /**
+   * 根据权限过滤工具列表
+   * 用于在 LLM 调用时过滤 tools 参数
+   */
+  filterToolsByPermission?(tools: Tool[], agentId?: string): Tool[];
 
   /**
    * 可选：返回当前 Environment 的 profiles，供 env_spec 推导 describeEnv/listProfiles/listAgents/getAgent。

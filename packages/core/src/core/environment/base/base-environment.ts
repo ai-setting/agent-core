@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import path from "path";
 import {
   Environment,
   Prompt,
@@ -12,6 +13,7 @@ import {
   type EnvironmentProfile,
   type EnvironmentAgentSpec,
   type SkillInfo,
+  type BehaviorSpec,
 } from "../index.js";
 import { createLogger } from "../../../utils/logger.js";
 import {
@@ -107,6 +109,10 @@ export abstract class BaseEnvironment implements Environment {
   private modelToInitialize: string | undefined;
   private baseURLToInitialize: string | undefined;
   private apiKeyToInitialize: string | undefined;
+
+  protected envRules: string | null = null;
+  protected agentPrompts: Map<string, string> = new Map();
+  protected agentSpecs: Map<string, EnvironmentAgentSpec> = new Map();
 
   constructor(config?: BaseEnvironmentConfig) {
     this.timeoutManager = config?.timeoutManager ?? TimeoutManager.default();
@@ -253,6 +259,270 @@ export abstract class BaseEnvironment implements Environment {
         primaryAgents: [primaryAgent],
       },
     ];
+  }
+
+  /**
+   * 获取指定 agent 的完整行为规范
+   * 组合：环境级规则 + agent 特定 prompt
+   */
+  async getBehaviorSpec(agentId: string = "system"): Promise<BehaviorSpec> {
+    if (this.envRules === null) {
+      await this.loadBehaviorSpec();
+    }
+
+    const agentSpec = this.agentSpecs.get(agentId);
+    const agentPrompt = this.agentPrompts.get(agentId) || "";
+
+    const combinedPrompt = this.combinePrompts(
+      this.envRules || "",
+      agentPrompt,
+      agentId
+    );
+
+    return {
+      envName: this.getEnvName(),
+      agentId,
+      agentRole: agentSpec?.role || "primary",
+      envRules: this.envRules || "",
+      agentPrompt,
+      combinedPrompt,
+      allowedTools: agentSpec?.allowedTools,
+      deniedTools: agentSpec?.deniedTools,
+      metadata: {
+        lastUpdated: new Date().toISOString(),
+      },
+    };
+  }
+
+  /**
+   * 获取环境级规则（所有 agent 共享）
+   */
+  async getEnvRules(): Promise<string> {
+    if (this.envRules === null) {
+      await this.loadBehaviorSpec();
+    }
+    return this.envRules || "";
+  }
+
+  /**
+   * 刷新行为规范（从文件重新加载）
+   */
+  async refreshBehaviorSpec(): Promise<void> {
+    this.envRules = null;
+    this.agentPrompts.clear();
+    this.agentSpecs.clear();
+    await this.loadBehaviorSpec();
+  }
+
+  /**
+   * 根据权限过滤工具列表
+   */
+  filterToolsByPermission(tools: Tool[], agentId?: string): Tool[] {
+    const agentSpec = agentId ? this.agentSpecs.get(agentId) : undefined;
+    return this.filterToolsByAgentSpec(tools, agentSpec);
+  }
+
+  /**
+   * 根据权限过滤工具列表（内部方法）
+   */
+  protected filterToolsByAgentSpec(
+    tools: Tool[],
+    agentSpec?: EnvironmentAgentSpec
+  ): Tool[] {
+    let filtered = tools;
+
+    if (agentSpec?.allowedTools) {
+      const allowed = new Set(agentSpec.allowedTools);
+      filtered = filtered.filter((t) => allowed.has(t.name));
+    }
+
+    if (agentSpec?.deniedTools) {
+      const denied = new Set(agentSpec.deniedTools);
+      filtered = filtered.filter((t) => !denied.has(t.name));
+    }
+
+    return filtered;
+  }
+
+  /**
+   * 加载行为规范
+   */
+  protected async loadBehaviorSpec(): Promise<void> {
+    await this.loadEnvRules();
+    await this.loadAgentPrompts();
+    await this.loadAgentSpecs();
+  }
+
+  /**
+   * 加载环境级规则（rules.md）
+   */
+  protected async loadEnvRules(): Promise<void> {
+    const rulesPath = this.getRulesFilePath();
+
+    if (!rulesPath) {
+      this.envRules = this.getDefaultEnvRules();
+      return;
+    }
+
+    try {
+      const fs = await import("fs/promises");
+      this.envRules = await fs.readFile(rulesPath, "utf-8");
+    } catch {
+      this.envRules = this.getDefaultEnvRules();
+    }
+  }
+
+  /**
+   * 加载 agent prompts
+   */
+  protected async loadAgentPrompts(): Promise<void> {
+    const promptsDir = this.getPromptsDirectory();
+    if (!promptsDir) return;
+
+    try {
+      const fs = await import("fs/promises");
+      const files = await fs.readdir(promptsDir);
+
+      for (const file of files) {
+        if (!file.endsWith(".prompt")) continue;
+
+        const filePath = path.join(promptsDir, file);
+        const content = await fs.readFile(filePath, "utf-8");
+
+        // Parse frontmatter
+        const parsedContent = this.parsePromptContent(content);
+        const id = path.basename(file, ".prompt");
+
+        this.agentPrompts.set(id, parsedContent);
+      }
+    } catch {
+      // prompts 目录不存在
+    }
+  }
+
+  /**
+   * 解析 prompt 内容（去除 frontmatter）
+   */
+  protected parsePromptContent(content: string): string {
+    const lines = content.split("\n");
+
+    if (lines[0]?.trim() !== "---") {
+      return content.trim();
+    }
+
+    let endIndex = -1;
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i]?.trim() === "---") {
+        endIndex = i;
+        break;
+      }
+    }
+
+    if (endIndex === -1) {
+      return content.trim();
+    }
+
+    return lines.slice(endIndex + 1).join("\n").trim();
+  }
+
+  /**
+   * 加载 agent specs（从 profile 配置）
+   */
+  protected async loadAgentSpecs(): Promise<void> {
+    const profiles = this.getProfiles();
+    const profile = profiles[0];
+
+    if (profile) {
+      for (const agent of profile.primaryAgents) {
+        this.agentSpecs.set(agent.id, agent);
+
+        if (agent.promptOverride) {
+          this.agentPrompts.set(agent.id, agent.promptOverride);
+        }
+      }
+
+      for (const agent of profile.subAgents || []) {
+        this.agentSpecs.set(agent.id, agent);
+
+        if (agent.promptOverride) {
+          this.agentPrompts.set(agent.id, agent.promptOverride);
+        }
+      }
+    }
+  }
+
+  /**
+   * 组合 prompt（环境规则 + agent prompt）
+   */
+  protected combinePrompts(
+    envRules: string,
+    agentPrompt: string,
+    agentId: string
+  ): string {
+    const parts: string[] = [];
+
+    parts.push(`# Environment: ${this.getEnvName()}`);
+    parts.push(`# Agent: ${agentId}`);
+    parts.push(`Working directory: ${process.cwd()}`);
+    parts.push(`Today: ${new Date().toISOString().split("T")[0]}`);
+    parts.push("");
+
+    if (envRules) {
+      parts.push("---");
+      parts.push("# Environment Behavior Guidelines");
+      parts.push("");
+      parts.push(envRules);
+      parts.push("");
+    }
+
+    if (agentPrompt) {
+      parts.push("---");
+      parts.push(`# Agent: ${agentId}`);
+      parts.push("");
+      parts.push(agentPrompt);
+    }
+
+    return parts.join("\n");
+  }
+
+  /**
+   * 默认环境规则
+   */
+  protected getDefaultEnvRules(): string {
+    return [
+      "# Default Environment Guidelines",
+      "",
+      "## Safety",
+      "- Do not expose sensitive information",
+      "- Validate inputs before processing",
+      "- Ask for confirmation on destructive operations",
+      "",
+      "## Communication",
+      "- Be helpful and accurate",
+      "- Explain your reasoning",
+      "- Summarize after completing tasks",
+    ].join("\n");
+  }
+
+  /**
+   * 获取 rules.md 文件路径（子类实现）
+   */
+  protected getRulesFilePath(): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * 获取 prompts 目录路径（子类实现）
+   */
+  protected getPromptsDirectory(): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * 获取环境名称（子类实现）
+   */
+  protected getEnvName(): string {
+    return "default";
   }
 
   /**
@@ -460,34 +730,21 @@ export abstract class BaseEnvironment implements Environment {
       content: query,
     };
 
-    let prompt = this.getPrompt("system");
-    BaseEnvironment.baseLogger.info(`getPrompt('system'): ${prompt?.content?.slice(0, 80)}...`);
-    if (!prompt) {
-      prompt = { id: "default", content: "You are a helpful AI assistant." };
-      this.addPrompt(prompt);
-      BaseEnvironment.baseLogger.info(`Using default prompt`);
-    }
-
-    // Generate a stable messageId for this query
-    const messageId = `msg_${Date.now()}`;
-    
     // Get or create abort signal for this session
     const sessionId = context?.session_id;
-    let abortSignal: AbortSignal | undefined;
-    if (sessionId) {
-      if (!sessionAbortManager.has(sessionId)) {
-        sessionAbortManager.create(sessionId);
-      }
-      abortSignal = sessionAbortManager.get(sessionId);
+    if (sessionId && !sessionAbortManager.has(sessionId)) {
+      sessionAbortManager.create(sessionId);
     }
-    
+
     const agentContext = {
       ...context,
-      message_id: messageId,
-      abort: abortSignal,
+      message_id: `msg_${Date.now()}`,
+      abort: sessionId ? sessionAbortManager.get(sessionId) : undefined,
     };
 
-    const agent = new Agent(event, this as Environment, this.listTools(), prompt, agentContext, undefined, history);
+    // 使用 getBehaviorSpec 获取行为规范
+    // Agent 会在 run() 时自动调用 getBehaviorSpec
+    const agent = new Agent(event, this as Environment, this.listTools(), agentContext, { agentId: "system" }, history);
     return agent.run();
   }
 
