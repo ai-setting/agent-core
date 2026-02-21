@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-16（新增 Environment 事件机制设计文档 - 支持异步任务完成事件、环境变化观测等能力）
+最后更新：2026-02-21（新增 BehaviorSpec 机制 - 环境级规则 + agent 特定 prompt 的分层注入）
 
 ---
 
@@ -59,6 +59,7 @@
 | Models Command | 模型选择与管理 | [DONE] | 支持 list/select/toggle_favorite，集成 ModelStore 和 ServerEnvironment | `packages/core/src/server/command/built-in/models.ts`、`packages/core/src/cli/tui/components/ModelsDialog.tsx` |
 | Models 配置加载 | 从配置文件加载模型列表 | [DONE] | 支持从 environments/{env}/models.jsonc 或 provider.*.models 加载模型配置，优先级：Environment > Provider > Built-in | `packages/core/src/config/models-config.ts` |
 | Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
+| BehaviorSpec | 环境级规则 + agent 特定 prompt 分层注入 | [DONE] | 支持从 rules.md 加载环境级共享规则，从 prompts/*.prompt 加载 agent 特定 prompt，组合成完整 system prompt | `packages/core/src/core/environment/index.ts`（BehaviorSpec 类型）、`.../base/base-environment.ts`（getBehaviorSpec/filterToolsByPermission） |
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |
 | LLM | invoke_llm 作为工具 + stream hook | [DONE] | 流式事件通过 `onStreamEvent` 向上抛 | `.../base/invoke-llm.ts`、`.../base/base-environment.ts` |

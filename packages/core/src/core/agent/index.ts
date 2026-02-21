@@ -8,9 +8,10 @@
  * - Abort signal support
  * - Detailed error logging
  * - Multimodal history support
+ * - BehaviorSpec support (env rules + agent prompt)
  */
 
-import type { Environment, Prompt, HistoryMessage, MessageContent } from "../environment";
+import type { Environment, HistoryMessage, MessageContent, BehaviorSpec } from "../environment";
 import { Event, Context } from "../types";
 
 interface Message {
@@ -48,6 +49,8 @@ interface AgentConfig {
   retryBackoffFactor?: number;
   maxRetryDelayMs?: number;
   doomLoopThreshold?: number;
+  /** Agent ID（用于获取特定的行为规范） */
+  agentId?: string;
 }
 
 const DEFAULT_CONFIG: Required<AgentConfig> = {
@@ -57,6 +60,7 @@ const DEFAULT_CONFIG: Required<AgentConfig> = {
   retryBackoffFactor: 2,
   maxRetryDelayMs: 30000,
   doomLoopThreshold: 3,
+  agentId: "system",
 };
 
 interface DoomLoopEntry {
@@ -84,34 +88,35 @@ export class Agent {
   private aborted: boolean = false;
   private _history: HistoryMessage[] = [];
   private tools: import("../types").Tool[];
+  private agentId: string;
 
   constructor(
     private event: Event,
     private env: Environment,
     tools: import("../types").Tool[],
-    private prompt: Prompt | undefined,
     private context: Context = {},
-    private configOverrides: AgentConfig = {},
+    configOverrides: AgentConfig = {},
     history?: HistoryMessage[],
   ) {
     this.config = { ...DEFAULT_CONFIG, ...configOverrides };
+    this.agentId = this.config.agentId;
     this._history = history ?? [];
-    // All tools are now external - LLM capabilities are native to Environment
     this.tools = tools;
+    console.log(`[Agent] Agent ID: ${this.agentId}`);
     console.log(`[Agent] Registered tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
   }
 
   async run(): Promise<string> {
-    if (!this.prompt) {
-      throw new Error("System prompt not found");
-    }
-
     this.iteration = 0;
     this.doomLoopCache.clear();
     this.aborted = false;
 
+    // 从 Environment 获取该 agent 的行为规范
+    const behaviorSpec = await this.getBehaviorSpec();
+    const systemPrompt = behaviorSpec.combinedPrompt;
+
     const messages: Message[] = [
-      { role: "system", content: this.prompt.content },
+      { role: "system", content: systemPrompt },
       ...this._history.map(h => ({
         role: h.role as Message["role"],
         content: convertContent(h.content),
@@ -404,6 +409,16 @@ export class Agent {
     return `[${event.event_type}]\n${content}`;
   }
 
+  /**
+   * 获取该 agent 的行为规范
+   */
+  private async getBehaviorSpec(): Promise<BehaviorSpec> {
+    if (!this.env.getBehaviorSpec) {
+      throw new Error("Environment does not support getBehaviorSpec");
+    }
+    return this.env.getBehaviorSpec(this.agentId);
+  }
+
   getIterationCount(): number {
     return this.iteration;
   }
@@ -419,10 +434,9 @@ export function createAgent(
   event: Event,
   env: Environment,
   tools: import("../types").Tool[],
-  prompt: Prompt | undefined,
   context: Context,
   config?: AgentConfig,
   history?: HistoryMessage[],
 ): Agent {
-  return new Agent(event, env, tools, prompt, context, config, history);
+  return new Agent(event, env, tools, context, config, history);
 }
