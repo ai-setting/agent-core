@@ -65,6 +65,13 @@ export const AuthConfig = z.record(AuthProviderConfig).describe(
   "Authentication configurations for providers, keyed by provider name"
 );
 
+// Session 持久化配置
+const SessionPersistenceConfig = z.object({
+  mode: z.enum(["memory", "file"]).default("file").describe("Session storage mode: 'memory' for in-memory only, 'file' for persistent file storage"),
+  path: z.string().optional().describe("Custom storage path (defaults to XDG data directory)"),
+  autoSave: z.boolean().default(true).describe("Auto-save session changes to disk"),
+});
+
 // 主配置 Schema
 export const ConfigInfo = z.object({
   // === Environment 标识（用于 Environment 配置）===
@@ -92,6 +99,11 @@ export const ConfigInfo = z.object({
   
   // === Models 配置（从 environments/{env}/models.jsonc 加载）===
   models: z.record(ModelConfig).optional().describe("Model configurations for this environment"),
+  
+  // === Session 持久化配置 ===
+  session: z.object({
+    persistence: SessionPersistenceConfig.optional().describe("Session persistence configuration"),
+  }).optional().describe("Session management configuration"),
   
   // === MCP 配置（从 environments/{env}/config.jsonc 加载）===
   mcp: z.object({
