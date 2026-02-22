@@ -60,7 +60,8 @@ export class McpManager {
       console.log(`[MCP] Discovered ${discovered.length} MCP servers from ${this.mcpserversDir}`)
 
       for (const server of discovered) {
-        const serverDir = path.dirname(server.entryPath)
+        // 服务器目录名与 server.name 相同
+        const serverDir = path.join(this.mcpserversDir, server.name)
         const directoryConfig = await loader.loadServerConfig(serverDir)
         
         const defaultConfig = this.buildDefaultConfig(server, directoryConfig)

@@ -139,4 +139,140 @@ describe("McpServerLoader", () => {
     
     expect(result).toHaveLength(0);
   });
+
+  test("should discover index.js in subdirectory", async () => {
+    const serverDir = path.join(testDir, "js-server");
+    await fs.mkdir(serverDir);
+    await fs.writeFile(path.join(serverDir, "index.js"), "console.log('hello')");
+    
+    const loader = new McpServerLoader(testDir);
+    const result = await loader.discover();
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("js-server");
+    expect(result[0].entryPath).toContain("index.js");
+  });
+
+  test("should discover src/index.js entry script", async () => {
+    const serverDir = path.join(testDir, "src-server");
+    const srcDir = path.join(serverDir, "src");
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(path.join(srcDir, "index.js"), "console.log('hello')");
+    
+    const loader = new McpServerLoader(testDir);
+    const result = await loader.discover();
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("src-server");
+    expect(result[0].entryPath).toMatch(/src[\\\/]index\.js$/);
+  });
+
+  test("should discover src/index.ts entry script", async () => {
+    const serverDir = path.join(testDir, "src-ts-server");
+    const srcDir = path.join(serverDir, "src");
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(path.join(srcDir, "index.ts"), "console.log('hello')");
+    
+    const loader = new McpServerLoader(testDir);
+    const result = await loader.discover();
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("src-ts-server");
+    expect(result[0].entryPath).toMatch(/src[\\\/]index\.ts$/);
+  });
+
+  test("should prefer root entry over src entry", async () => {
+    const serverDir = path.join(testDir, "mixed-server");
+    const srcDir = path.join(serverDir, "src");
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(path.join(serverDir, "index.js"), "console.log('root')");
+    await fs.writeFile(path.join(srcDir, "index.js"), "console.log('src')");
+    
+    const loader = new McpServerLoader(testDir);
+    const result = await loader.discover();
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].entryPath).toContain("index.js");
+    expect(result[0].entryPath).not.toContain("src");
+  });
+
+  describe("loadServerConfig", () => {
+    test("should load config.jsonc with environment variables", async () => {
+      const serverDir = path.join(testDir, "config-server");
+      await fs.mkdir(serverDir);
+      await fs.writeFile(path.join(serverDir, "server.mjs"), "console.log('hello')");
+      await fs.writeFile(
+        path.join(serverDir, "config.jsonc"),
+        `{
+  "enabled": true,
+  "timeout": 30000,
+  "environment": {
+    "API_URL": "https://api.example.com",
+    "API_KEY": "secret-key"
+  }
+}`
+      );
+      
+      const loader = new McpServerLoader(testDir);
+      const config = await loader.loadServerConfig(serverDir);
+      
+      expect(config).not.toBeNull();
+      expect(config?.enabled).toBe(true);
+      expect(config?.timeout).toBe(30000);
+      expect(config?.environment?.API_URL).toBe("https://api.example.com");
+      expect(config?.environment?.API_KEY).toBe("secret-key");
+    });
+
+    test("should load config.jsonc with custom command", async () => {
+      const serverDir = path.join(testDir, "cmd-server");
+      await fs.mkdir(serverDir);
+      await fs.writeFile(path.join(serverDir, "server.mjs"), "console.log('hello')");
+      await fs.writeFile(
+        path.join(serverDir, "config.jsonc"),
+        JSON.stringify({
+          command: ["node", "--experimental-modules", "./server.mjs"]
+        }, null, 2)
+      );
+      
+      const loader = new McpServerLoader(testDir);
+      const config = await loader.loadServerConfig(serverDir);
+      
+      expect(config).not.toBeNull();
+      expect(config?.command).toEqual(["node", "--experimental-modules", "./server.mjs"]);
+    });
+
+    test("should return null for missing config.jsonc", async () => {
+      const serverDir = path.join(testDir, "no-config-server");
+      await fs.mkdir(serverDir);
+      await fs.writeFile(path.join(serverDir, "server.mjs"), "console.log('hello')");
+      
+      const loader = new McpServerLoader(testDir);
+      const config = await loader.loadServerConfig(serverDir);
+      
+      expect(config).toBeNull();
+    });
+
+    test("should parse JSONC with comments", async () => {
+      const serverDir = path.join(testDir, "jsonc-server");
+      await fs.mkdir(serverDir);
+      await fs.writeFile(path.join(serverDir, "server.mjs"), "console.log('hello')");
+      await fs.writeFile(
+        path.join(serverDir, "config.jsonc"),
+        `{
+          // This is a comment
+          "enabled": true,
+          /* Multi-line
+             comment */
+          "timeout": 30000
+        }`
+      );
+      
+      const loader = new McpServerLoader(testDir);
+      const config = await loader.loadServerConfig(serverDir);
+      
+      expect(config).not.toBeNull();
+      expect(config?.enabled).toBe(true);
+      expect(config?.timeout).toBe(30000);
+    });
+  });
 });
