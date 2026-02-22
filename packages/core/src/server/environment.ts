@@ -40,6 +40,7 @@ import { createEnvironmentSource } from "../config/sources/environment.js";
 import { ConfigPaths } from "../config/paths.js";
 import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
 import { serverLogger } from "./logger.js";
+import type { BackgroundTaskManager } from "../core/environment/expend/task/background-task-manager.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -64,6 +65,7 @@ export class ServerEnvironment extends BaseEnvironment {
   private envName: string = "default";
   private rulesDirectory: string | undefined;
   private promptsDirectory: string | undefined;
+  private backgroundTaskManager: BackgroundTaskManager | undefined;
   
   // Track streaming content for interrupt handling
   private currentStreamingContent: {
@@ -598,6 +600,37 @@ export class ServerEnvironment extends BaseEnvironment {
     await new Promise(r => setTimeout(r, 100));
   }
 
+  stopBackgroundTasksForSession(parentSessionId: string): number {
+    if (!this.backgroundTaskManager) {
+      serverLogger.info("[ServerEnvironment] No backgroundTaskManager available");
+      return 0;
+    }
+
+    const tasks = this.backgroundTaskManager.listTasks(parentSessionId);
+    let stoppedCount = 0;
+
+    for (const task of tasks) {
+      if (task.status === "running" || task.status === "pending") {
+        const result = this.backgroundTaskManager.stopTask(task.id);
+        if (result.success) {
+          stoppedCount++;
+          serverLogger.info(`[ServerEnvironment] Stopped background task`, {
+            taskId: task.id,
+            parentSessionId
+          });
+        }
+      }
+    }
+
+    serverLogger.info(`[ServerEnvironment] Stopped ${stoppedCount} background tasks for session`, {
+      parentSessionId,
+      totalTasks: tasks.length,
+      stoppedCount
+    });
+
+    return stoppedCount;
+  }
+
   private async registerDefaultTools(): Promise<void> {
     try {
       const toolsModule = await import(
@@ -624,12 +657,16 @@ export class ServerEnvironment extends BaseEnvironment {
       const { baseSkillTool } = await import("../core/environment/skills/skill-tool.js");
       this.registerTool(baseSkillTool);
 
-      // Register TaskTool for subagent delegation
+      // Register TaskTool and StopTaskTool for subagent delegation
       const { createTaskTool } = await import("../core/environment/expend/task/task-tool.js");
-      const taskTool = createTaskTool(this);
+      const { createStopTaskTool } = await import("../core/environment/expend/task/stop-task-tool.js");
+      const { tool: taskTool, backgroundTaskManager } = createTaskTool(this);
+      this.backgroundTaskManager = backgroundTaskManager;
+      const stopTaskTool = createStopTaskTool(backgroundTaskManager);
       this.registerTool(taskTool);
+      this.registerTool(stopTaskTool);
 
-      console.log(`[ServerEnvironment] Registered ${allTools.length + 2} tools (including skill tool and task tool):`, allTools.map((t: any) => t.name));
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 3} tools (including skill tool, task tool, and stop_task tool):`, allTools.map((t: any) => t.name));
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");
@@ -973,13 +1010,82 @@ The task failed to complete. Explain the error to the user and suggest possible 
     });
 
     bus.registerRule({
+      eventType: EventTypes.BACKGROUND_TASK_PROGRESS,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { processEventInSession } = await import("../core/event-processor.js");
+          const payload = event.payload as any;
+          await processEventInSession(this, event, {
+            prompt: `后台任务正在执行中。
+
+📋 任务: ${payload.description}
+🔄 类型: ${payload.subagentType}
+⏱️ 已执行: ${payload.elapsed_time_human}
+📌 Task ID: ${payload.taskId}
+
+请简短告知用户任务仍在进行中，预计需要一些时间完成。`,
+          });
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
+      eventType: EventTypes.BACKGROUND_TASK_TIMEOUT,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { processEventInSession } = await import("../core/event-processor.js");
+          const payload = event.payload as any;
+          await processEventInSession(this, event, {
+            prompt: `后台任务执行超时，已暂停。
+
+📋 任务: ${payload.description}
+🔄 类型: ${payload.subagentType}
+⏱️ 执行时长: ${Math.round(payload.execution_time_ms / 1000)}秒
+📌 Task ID: ${payload.taskId}
+📝 Sub Session ID: ${payload.sub_session_id}
+
+${payload.message}
+
+请告知用户任务因超时暂停，可询问是否需要继续或调整方案。`,
+          });
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
+      eventType: EventTypes.BACKGROUND_TASK_STOPPED,
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent) => {
+          const { processEventInSession } = await import("../core/event-processor.js");
+          const payload = event.payload as any;
+          await processEventInSession(this, event, {
+            prompt: `后台任务已被用户停止。
+
+📋 任务: ${payload.description}
+🔄 类型: ${payload.subagentType}
+⏱️ 执行时长: ${Math.round(payload.execution_time_ms / 1000)}秒
+📌 Task ID: ${payload.taskId}
+
+请确认任务已停止，并询问用户是否需要其他帮助。`,
+          });
+        }
+      },
+      options: { priority: 80 }
+    });
+
+    bus.registerRule({
       eventType: EventTypes.ENVIRONMENT_SWITCHED,
       handler: {
         type: "function",
         fn: async (event: EnvEvent) => {
           const { processEventInSession } = await import("../core/event-processor.js");
           await processEventInSession(this, event, {
-            prompt: "You are an environment switching expert. The environment has been switched. Analyze the change and decide how to proceed with the current task.",
+            prompt: "You are an environment switching experts. The environment has been switched. Analyze the change and decide how to proceed with the current task.",
           });
         }
       },

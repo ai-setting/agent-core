@@ -30,14 +30,14 @@ describe("TaskTool - Parameters Validation", () => {
 describe("TaskTool - Tool Definition", () => {
   test("should create task tool with correct name", () => {
     const mockEnv = createMockEnv();
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     expect(tool.name).toBe("task");
   });
 
   test("should have comprehensive description", () => {
     const mockEnv = createMockEnv();
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     expect(tool.description).toContain("Launch a new agent");
     expect(tool.description).toContain("subagent");
@@ -51,7 +51,7 @@ describe("TaskTool - Tool Definition", () => {
 
   test("should reference available subagents in description", () => {
     const mockEnv = createMockEnv();
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     expect(tool.description).toContain("- general:");
     expect(tool.description).toContain("- explore:");
@@ -66,7 +66,7 @@ describe("TaskTool - Execution with Mock", () => {
   });
 
   test("should reject unknown subagent type", async () => {
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     const result = await tool.execute({
       description: "test",
@@ -86,7 +86,7 @@ describe("TaskTool - Execution with Mock", () => {
       publishEvent: vi.fn(),
     };
     
-    const tool = createTaskTool(mockEnvNoSession);
+    const { tool } = createTaskTool(mockEnvNoSession as any);
     
     const result = await tool.execute({
       description: "test",
@@ -99,7 +99,7 @@ describe("TaskTool - Execution with Mock", () => {
   });
 
   test("should include metadata in output on success", async () => {
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     const result = await tool.execute({
       description: "test task",
@@ -136,7 +136,7 @@ describe("TaskTool - Background Mode", () => {
       publishEvent: vi.fn().mockResolvedValue(undefined),
     };
     
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     const result = await tool.execute({
       description: "background test",
@@ -175,7 +175,7 @@ describe("TaskTool - Background Mode", () => {
       publishEvent: vi.fn().mockResolvedValue(undefined),
     };
     
-    const tool = createTaskTool(mockEnv);
+    const { tool } = createTaskTool(mockEnv as any);
     
     const result = await tool.execute({
       description: "background test",
