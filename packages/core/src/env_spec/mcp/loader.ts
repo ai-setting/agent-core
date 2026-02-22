@@ -18,6 +18,7 @@ export interface McpServerDirectoryConfig {
   enabled?: boolean
   timeout?: number
   environment?: Record<string, string>
+  command?: string[]
 }
 
 /**

@@ -4,6 +4,7 @@
  * 统一管理 MCP Server 和 MCP Client 的生命周期
  */
 
+import path from "path"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -17,7 +18,7 @@ import type {
   McpToolConversionOptions,
 } from "./types.js"
 import { convertMcpTool, createMcpToolsDescription } from "./convert.js"
-import { McpServerLoader, type DiscoveredMcpServer } from "./loader.js"
+import { McpServerLoader, type DiscoveredMcpServer, type McpServerDirectoryConfig } from "./loader.js"
 import { serverLogger } from "../../server/logger.js"
 
 export interface McpClientLoadResult {
@@ -59,8 +60,12 @@ export class McpManager {
       console.log(`[MCP] Discovered ${discovered.length} MCP servers from ${this.mcpserversDir}`)
 
       for (const server of discovered) {
+        const serverDir = path.dirname(server.entryPath)
+        const directoryConfig = await loader.loadServerConfig(serverDir)
+        
+        const defaultConfig = this.buildDefaultConfig(server, directoryConfig)
         const explicitServerConfig = explicitConfig?.[server.name]
-        const config = explicitServerConfig ?? this.buildDefaultConfig(server)
+        const config = this.mergeConfig(defaultConfig, explicitServerConfig)
 
         // 检查是否启用
         if (config.enabled === false) {
@@ -104,12 +109,46 @@ export class McpManager {
   /**
    * 构建默认配置
    */
-  private buildDefaultConfig(server: DiscoveredMcpServer): McpClientConfig {
+  private buildDefaultConfig(server: DiscoveredMcpServer, directoryConfig?: McpServerDirectoryConfig | null): McpClientConfig {
+    const command = directoryConfig?.command ?? ["bun", "run", server.entryPath]
     return {
       type: "local",
-      command: ["bun", "run", server.entryPath],
-      enabled: true,
+      command,
+      enabled: directoryConfig?.enabled ?? true,
+      timeout: directoryConfig?.timeout,
+      environment: directoryConfig?.environment,
     }
+  }
+
+  /**
+   * 合并配置（显式配置覆盖默认配置）
+   */
+  private mergeConfig(defaultConfig: McpClientConfig, explicitConfig?: McpClientConfig): McpClientConfig {
+    if (!explicitConfig) {
+      return defaultConfig
+    }
+    
+    // 如果显式配置是 enabled: false，直接返回
+    if (explicitConfig.enabled === false) {
+      return { ...defaultConfig, enabled: false }
+    }
+    
+    // 合并 local 类型配置
+    if (defaultConfig.type === "local" && (!explicitConfig.type || explicitConfig.type === "local")) {
+      return {
+        type: "local",
+        command: explicitConfig.command ?? defaultConfig.command,
+        enabled: explicitConfig.enabled ?? defaultConfig.enabled,
+        timeout: explicitConfig.timeout ?? defaultConfig.timeout,
+        environment: {
+          ...defaultConfig.environment,
+          ...explicitConfig.environment,
+        },
+      }
+    }
+    
+    // 其他情况，显式配置优先
+    return explicitConfig
   }
 
   /**
