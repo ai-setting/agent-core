@@ -23,13 +23,14 @@ export async function extractReadableContent(
       return { text: stripHtml(html) };
     }
 
+    // Convert null to undefined for type compatibility
     return {
-      title: article.title,
+      title: article.title ?? undefined,
       text: article.textContent || "",
-      content: article.content,
-      excerpt: article.excerpt,
-      byline: article.byline,
-      siteName: article.siteName,
+      content: article.content ?? undefined,
+      excerpt: article.excerpt ?? undefined,
+      byline: article.byline ?? undefined,
+      siteName: article.siteName ?? undefined,
     };
   } catch {
     return { text: stripHtml(html) };
