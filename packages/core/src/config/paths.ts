@@ -58,6 +58,7 @@ function getPaths() {
   const _home = getHome();
   const xdg = getXdgPaths(_home);
   const _appDir = path.join(APP_NAME, "agent-core");
+  const _storageDir = path.join(xdg.data, _appDir, "storage");
 
   return {
     home: _home,
@@ -72,7 +73,9 @@ function getPaths() {
     kvStore: path.join(xdg.state, _appDir, "kv.json"),
     authStore: path.join(xdg.data, _appDir, "auth.json"),
     mcpAuthStore: path.join(xdg.data, _appDir, "mcp-auth.json"),
-    storage: path.join(xdg.data, _appDir, "storage"),
+    storage: _storageDir,
+    sessionStorage: path.join(_storageDir, "sessions"),
+    messageStorage: path.join(_storageDir, "messages"),
   };
 }
 
@@ -90,6 +93,8 @@ class ConfigPathsClass {
   get authStore() { return getPaths().authStore; }
   get mcpAuthStore() { return getPaths().mcpAuthStore; }
   get storage() { return getPaths().storage; }
+  get sessionStorage() { return getPaths().sessionStorage; }
+  get messageStorage() { return getPaths().messageStorage; }
 }
 
 export const ConfigPaths = new ConfigPathsClass();

@@ -121,6 +121,15 @@ export class ServerEnvironment extends BaseEnvironment {
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
 
+      // 1.1. Initialize session storage with persistence config
+      const { Storage } = await import("../core/session/storage.js");
+      await Storage.initialize({
+        mode: config.session?.persistence?.mode ?? "file",
+        path: config.session?.persistence?.path,
+        autoSave: config.session?.persistence?.autoSave ?? true,
+      });
+      serverLogger.info(`[ServerEnvironment] Session storage initialized: mode=${Storage.currentMode}`);
+
       // 1.5. Set skills directory and load skills
       if (config.activeEnvironment) {
         const { ConfigPaths } = await import("../config/paths.js");
@@ -927,6 +936,19 @@ export class ServerEnvironment extends BaseEnvironment {
             }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
+            const messageId = `msg_${Date.now()}`;
+            
+            // Send error event to frontend
+            await Bus.publish(
+              StreamErrorEvent,
+              {
+                sessionId,
+                messageId,
+                error: errorMessage,
+                code: error instanceof Error ? error.constructor.name : "Error",
+              },
+              sessionId
+            );
             
             // Check if it's an abort error
             if (errorMessage === "Agent execution aborted") {
@@ -942,7 +964,7 @@ export class ServerEnvironment extends BaseEnvironment {
               // Add user interrupt notice message
               session?.addUserMessage("[Session interrupted by user]");
             } else {
-              // Re-throw other errors
+              // Re-throw other errors after sending error event
               throw error;
             }
           }

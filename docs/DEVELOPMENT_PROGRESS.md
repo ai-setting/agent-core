@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-21（新增 BehaviorSpec 机制 - 环境级规则 + agent 特定 prompt 的分层注入）
+最后更新：2026-02-22（新增 Session 持久化能力 - 支持 memory/file 两种存储模式）
 
 ---
 
@@ -67,7 +67,8 @@
 | Server 事件总线 | publish/subscribe，支持 session scope | [DONE] | bus + global broadcast 已落地 | `packages/core/src/server/eventbus/*` |
 | SSE 推送 | `/events` 推送 EventBus 事件 | [DONE] | 已支持 sessionId 过滤 + heartbeat | `packages/core/src/server/routes/events.ts` |
 | CLI/TUI | 客户端消费 SSE/事件流 | [WIP] | 有大量 TUI 组件与事件流 context，但仍需统一"协议/事件 schema"与回放 | `packages/core/src/cli/tui/**` |
-| 会话（Session） | 会话状态/历史/压缩 | [WIP] | Session/Storage 已存在；Environment 可选 createSession/getSession/listSessions/updateSession/deleteSession，BaseEnvironment 委托 core/session；与"可回放/可审计"尚未统一 | `packages/core/src/core/session/**`、`.../environment/index.ts`、`.../base/base-environment.ts` |
+| 会话（Session） | 会话状态/历史/压缩 | [DONE] | Session/Storage 已完善，支持 memory/file 两种存储模式，通过配置切换；BaseEnvironment 委托 core/session | `packages/core/src/core/session/**`、`.../environment/index.ts`、`.../base/base-environment.ts` |
+| 会话持久化 | Session/Message 文件存储与加载 | [DONE] | 支持 memory/file 两种模式，通过 config.session.persistence 配置；文件存储在 XDG data 目录；服务重启后可恢复历史会话 | `packages/core/src/core/session/storage.ts`、`packages/core/src/config/types.ts` |
 | OS Env | 本地工作目录/环境变量/路径安全 | [DONE] | `OsEnv` 已具备，并注册 OS tools | `packages/core/src/core/environment/expend/os/os-env.ts` |
 | OS Tools | bash/file/glob/grep 等 | [DONE] | OS tools 已存在，带测试用例 | `packages/core/src/core/environment/expend/os/tools/**` |
 | 治理（超时/重试/并发） | 统一策略入口（per-tool override） | [WIP] | manager 已存在；需要补齐"策略可配置/可观测/可回放"的闭环 | `packages/core/src/core/environment/base/{timeout,retry,concurrency}.ts` |
@@ -179,3 +180,4 @@
 - 2026-02-13：新增 **Command 开发指南**（`docs/command-development-guide.md`）：详细记录 Command 的完整开发流程，包括后端实现、前端 Dialog 实现、常见问题及解决方案。以前端 Dialog 开发的关键指导原则为核心，如：使用 ref 获取 input 值、键盘处理函数返回 boolean、createMemo 处理过滤列表等。
 - 2026-02-13：新增 **Models 配置加载功能**：支持从 `environments/{env}/models.jsonc` 配置文件加载模型列表，优先级：Environment models > Provider config > Built-in defaults。创建 `models-config.ts` 模块提供 `ModelsConfig_getAll()`、`ModelsConfig_getFromEnvironment()` 等 API，models command 现在优先使用配置中的模型列表。
 - 2026-02-16：新增 **Environment 事件机制设计**（`docs/environment-event-mechanism.md`）：通过 EventBus 统一入口 + Rule 路由机制，让 Environment 产生的事件可被 Agent 感知并插入 LLM 消息上下文。核心组件：EnvEvent 类型定义、EventHandlerAgent 无状态处理、Session Route 事件化改造。支持场景：异步任务完成事件、环境变化观测、工具执行错误等。
+- 2026-02-22：新增 **Session 持久化能力**：支持 memory/file 两种存储模式，通过 `config.session.persistence` 配置切换。文件存储在 XDG data 目录（`~/.local/share/tong_work/agent-core/storage/`），参考 OpenCode 的存储结构。每个 session 有独立的 JSON 文件，messages 按 session 分目录存储。服务重启后自动加载历史会话，实现会话可回放。
