@@ -64,9 +64,19 @@ export class McpManager {
         const serverDir = path.join(this.mcpserversDir, server.name)
         const directoryConfig = await loader.loadServerConfig(serverDir)
         
+        serverLogger.info(`[MCP] Loaded directory config for ${server.name}`, { 
+          directoryConfig,
+          serverDir 
+        })
+        
         const defaultConfig = this.buildDefaultConfig(server, directoryConfig)
         const explicitServerConfig = explicitConfig?.[server.name]
         const config = this.mergeConfig(defaultConfig, explicitServerConfig)
+
+        serverLogger.info(`[MCP] Final config for ${server.name}`, { 
+          environment: config.type === "local" ? config.environment : undefined,
+          command: config.type === "local" ? config.command : undefined
+        })
 
         // 检查是否启用
         if (config.enabled === false) {
