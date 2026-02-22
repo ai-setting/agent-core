@@ -76,7 +76,10 @@ export class McpServerLoader {
    * 查找入口脚本
    */
   private async findEntryScript(serverDir: string): Promise<string | null> {
-    const candidates = ["server.mjs", "server.ts", "index.mjs", "index.ts"]
+    const candidates = [
+      "server.mjs", "server.ts", "index.mjs", "index.ts", "index.js",
+      "src/server.mjs", "src/server.ts", "src/index.mjs", "src/index.ts", "src/index.js"
+    ]
 
     for (const candidate of candidates) {
       const entryPath = path.join(serverDir, candidate)
