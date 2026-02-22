@@ -155,6 +155,114 @@ describe("McpManager", () => {
     const manager = new McpManager();
     expect(manager.hasClient("unknown")).toBe(false);
   });
+
+  test("should build default config with directory config", async () => {
+    const manager = new McpManager();
+    const server: DiscoveredMcpServer = {
+      name: "test-server",
+      entryPath: "/path/to/server.mjs"
+    };
+    
+    const directoryConfig = {
+      enabled: true,
+      timeout: 60000,
+      environment: {
+        API_KEY: "test-key",
+        DEBUG: "true"
+      }
+    };
+    
+    // Access private method via type assertion
+    const config = (manager as any).buildDefaultConfig(server, directoryConfig);
+    
+    expect(config.type).toBe("local");
+    expect(config.enabled).toBe(true);
+    expect(config.timeout).toBe(60000);
+    expect(config.environment?.API_KEY).toBe("test-key");
+    expect(config.environment?.DEBUG).toBe("true");
+  });
+
+  test("should build default config with custom command from directory config", async () => {
+    const manager = new McpManager();
+    const server: DiscoveredMcpServer = {
+      name: "test-server",
+      entryPath: "/path/to/server.mjs"
+    };
+    
+    const directoryConfig = {
+      command: ["node", "--experimental-modules", "/custom/path/server.mjs"]
+    };
+    
+    const config = (manager as any).buildDefaultConfig(server, directoryConfig);
+    
+    expect(config.type).toBe("local");
+    expect(config.command).toEqual(["node", "--experimental-modules", "/custom/path/server.mjs"]);
+  });
+
+  test("should merge config with explicit config override", async () => {
+    const manager = new McpManager();
+    
+    const defaultConfig = {
+      type: "local" as const,
+      command: ["bun", "run", "/path/to/server.mjs"],
+      enabled: true,
+      timeout: 30000,
+      environment: {
+        API_KEY: "default-key",
+        DEBUG: "false"
+      }
+    };
+    
+    const explicitConfig = {
+      type: "local" as const,
+      environment: {
+        API_KEY: "override-key"
+      }
+    };
+    
+    const merged = (manager as any).mergeConfig(defaultConfig, explicitConfig);
+    
+    expect(merged.type).toBe("local");
+    expect(merged.enabled).toBe(true);
+    expect(merged.timeout).toBe(30000);
+    expect(merged.environment?.API_KEY).toBe("override-key");
+    expect(merged.environment?.DEBUG).toBe("false");
+  });
+
+  test("should return default config when no explicit config", async () => {
+    const manager = new McpManager();
+    
+    const defaultConfig = {
+      type: "local" as const,
+      command: ["bun", "run", "/path/to/server.mjs"],
+      enabled: true,
+      environment: {
+        API_KEY: "test-key"
+      }
+    };
+    
+    const merged = (manager as any).mergeConfig(defaultConfig, undefined);
+    
+    expect(merged).toEqual(defaultConfig);
+  });
+
+  test("should handle disabled explicit config", async () => {
+    const manager = new McpManager();
+    
+    const defaultConfig = {
+      type: "local" as const,
+      command: ["bun", "run", "/path/to/server.mjs"],
+      enabled: true
+    };
+    
+    const explicitConfig = {
+      enabled: false
+    };
+    
+    const merged = (manager as any).mergeConfig(defaultConfig, explicitConfig);
+    
+    expect(merged.enabled).toBe(false);
+  });
 });
 
 describe("createMcpToolsDescription", () => {

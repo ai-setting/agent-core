@@ -126,13 +126,13 @@ export class McpServerLoader {
   }
 
   /**
-   * 简单的注释移除
+   * 简单的注释移除（避免移除字符串内的 //）
    */
   private stripComments(content: string): string {
-    // 移除单行注释
-    let result = content.replace(/\/\/.*$/gm, "")
-    // 移除多行注释
-    result = result.replace(/\/\*[\s\S]*?\*\//g, "")
+    // 先移除多行注释
+    let result = content.replace(/\/\*[\s\S]*?\*\//g, "")
+    // 移除单行注释（只移除行尾的 // 注释，避免误判 URL）
+    result = result.replace(/^\s*\/\/.*$/gm, "")
     return result
   }
 }
