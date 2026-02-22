@@ -307,6 +307,7 @@ export async function invokeLLM(
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         invokeLLMLogger.info("[invokeLLM] Stream aborted by user");
+        throw err;
       } else {
         throw err;
       }

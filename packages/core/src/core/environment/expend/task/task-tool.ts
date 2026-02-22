@@ -22,11 +22,16 @@ function buildTaskDescription(): string {
   return taskDescription.replace("{agents}", agentsList);
 }
 
-export function createTaskTool(env: ServerEnvironment): ToolInfo {
+export interface TaskToolResult {
+  tool: ToolInfo;
+  backgroundTaskManager: BackgroundTaskManager;
+}
+
+export function createTaskTool(env: ServerEnvironment): TaskToolResult {
   const subAgentManager = new SubAgentManager(env);
   const backgroundTaskManager = new BackgroundTaskManager(env);
 
-  return {
+  const tool: ToolInfo = {
     name: "task",
     description: buildTaskDescription(),
     parameters: TaskToolParameters,
@@ -72,6 +77,8 @@ export function createTaskTool(env: ServerEnvironment): ToolInfo {
       }
     },
   };
+
+  return { tool, backgroundTaskManager };
 }
 
 async function handleSyncTask(

@@ -51,6 +51,9 @@ class TestEnv extends BaseEnvironment {
   } {
     return { type: "error" };
   }
+  protected getSkillsDirectory(): string | undefined {
+    return undefined;
+  }
 }
 
 describe("base_env helpers", () => {
@@ -90,4 +93,3 @@ describe("base_env helpers", () => {
     expect(desc.profiles && desc.profiles.length).toBe(1);
   });
 });
-

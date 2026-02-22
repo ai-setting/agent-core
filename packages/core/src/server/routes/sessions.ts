@@ -199,8 +199,20 @@ app.post("/:id/interrupt", async (c) => {
   
   if (sessionAbortManager.has(id)) {
     sessionAbortManager.abort(id);
-    sessionLogger.info("Session interrupted", { sessionId: id });
-    return c.json({ success: true, interrupted: true });
+    
+    // Stop all background tasks for this session
+    const stoppedTasks = env.stopBackgroundTasksForSession(id);
+    
+    sessionLogger.info("Session interrupted", { 
+      sessionId: id,
+      stoppedBackgroundTasks: stoppedTasks
+    });
+    
+    return c.json({ 
+      success: true, 
+      interrupted: true,
+      stoppedBackgroundTasks: stoppedTasks
+    });
   }
   
   return c.json({ success: true, interrupted: false });

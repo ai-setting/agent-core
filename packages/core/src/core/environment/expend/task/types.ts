@@ -58,12 +58,15 @@ export interface BackgroundTask {
   parentSessionId: string;
   description: string;
   subagentType: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "timeout" | "stopped";
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
   result?: string;
   error?: string;
+  progress?: number;
+  progressMessage?: string;
+  abortController?: AbortController;
 }
 
 export interface SessionPermission {
