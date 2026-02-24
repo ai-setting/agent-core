@@ -333,7 +333,7 @@ Usage notes:
 
       return {
         success: result.success,
-        output: result.stdout || result.stderr,
+        output: result.stdout + (result.stderr ? "\n[stderr]\n" + result.stderr : ""),
         error: result.success ? undefined : `Exit ${result.exitCode}: ${result.stderr}`,
       };
     },
