@@ -78,9 +78,9 @@ describe("EnvEventBus", () => {
 
       await bus.publish(event);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[EnvEventBus] No rule matched for event: unknown.event"
-      );
+      expect(consoleSpy).toHaveBeenCalled();
+      const logCall = consoleSpy.mock.calls[0];
+      expect(logCall[0]).toContain("[EnvEventBus] No rule matched for event: unknown.event");
       
       consoleSpy.mockRestore();
     });

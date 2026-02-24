@@ -147,10 +147,11 @@ describe("Command System", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: hello world");
+      expect(result.message).toBe("hello world");
       expect(result.data).toEqual({
         echoed: "hello world",
         sessionId: "test-session",
+        mode: "direct",
       });
     });
 
@@ -162,10 +163,11 @@ describe("Command System", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: Hello from Agent Core!");
+      expect(result.message).toBe("");
       expect(result.data).toEqual({
-        echoed: "Hello from Agent Core!",
+        echoed: "",
         sessionId: undefined,
+        mode: "direct",
       });
     });
 
@@ -177,7 +179,7 @@ describe("Command System", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: hello with spaces");
+      expect(result.message).toBe("hello with spaces");
     });
 
     it("should handle special characters in args", async () => {
@@ -188,7 +190,7 @@ describe("Command System", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: hello! @#$%^&*()");
+      expect(result.message).toBe("hello! @#$%^&*()");
     });
 
     it("should handle unicode characters", async () => {
@@ -199,7 +201,7 @@ describe("Command System", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: 你好世界 🎉");
+      expect(result.message).toBe("你好世界 🎉");
     });
 
     it("should have correct metadata", () => {

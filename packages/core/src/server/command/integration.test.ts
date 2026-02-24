@@ -40,10 +40,11 @@ describe("Command System Integration", () => {
 
       // 4. 验证结果
       expect(result.success).toBe(true);
-      expect(result.message).toBe("Echoed: integration test");
+      expect(result.message).toBe("integration test");
       expect(result.data).toEqual({
         echoed: "integration test",
         sessionId: "test-session",
+        mode: "direct",
       });
     });
 

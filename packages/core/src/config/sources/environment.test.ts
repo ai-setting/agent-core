@@ -149,7 +149,7 @@ describe("Environment Source", () => {
       const jsoncContent = `{
         "id": "comma-env",
         "defaultModel": "gpt-4",
-        "provider": {
+        "providers": {
           "openai": {
             "baseURL": "https://api.openai.com",
             "defaultModel": "gpt-4"

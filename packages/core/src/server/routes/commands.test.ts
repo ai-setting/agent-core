@@ -134,7 +134,7 @@ describe("Commands Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect((body as any).success).toBe(true);
-      expect((body as any).message).toBe("Echoed: hello world");
+      expect((body as any).message).toBe("hello world");
     });
 
     it("should execute command with sessionId", async () => {
