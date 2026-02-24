@@ -295,7 +295,17 @@ export class Agent {
           args: toolArgs,
         },
         this.context
-      );
+      ).catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Tool "${toolCall.function.name}" threw error: ${errorMessage}`);
+        messages.push({
+          role: "tool",
+          content: `Error: ${errorMessage}`,
+          name: toolCall.function.name,
+          tool_call_id: toolCall.id,
+        });
+        throw error;
+      });
 
       if (!toolResult.success) {
         const error = toolResult.error || "Unknown tool error";
