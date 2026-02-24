@@ -19,19 +19,16 @@ let requestId = 1;
 
 /**
  * Check if a command exists, if not try to install it
+ * Uses bunx to run globally installed packages, avoiding PATH issues on Windows
  */
-export async function ensureCommandExists(command: string, installCommand?: string): Promise<{ exists: boolean; binPath?: string }> {
+export async function ensureCommandExists(command: string, installCommand?: string): Promise<{ exists: boolean; useBunx?: boolean }> {
   const { which } = await import("bun");
   const found = which(command);
   if (found) return { exists: true };
 
   lspLogger.info(`LSP server '${command}' not found, attempting to install...`);
 
-  let bunBinPath: string | undefined;
-
-  if (installCommand?.startsWith("bun add -g")) {
-    bunBinPath = process.env.BUN_INSTALL_BIN_DIR ?? join(process.env.BUN_PREFIX ?? "", "bin");
-  }
+  const useBunx = installCommand?.startsWith("bun add -g");
 
   if (installCommand) {
     try {
@@ -50,14 +47,19 @@ export async function ensureCommandExists(command: string, installCommand?: stri
       const installed = which(command);
       if (installed) {
         lspLogger.info(`LSP server '${command}' installed successfully`);
-        return { exists: true, binPath: bunBinPath };
+        return { exists: true, useBunx };
       }
     } catch (error) {
       lspLogger.error(`Failed to install LSP server '${command}'`, { error: (error as Error).message });
     }
   }
 
-  return { exists: false, binPath: bunBinPath };
+  // Even if installation failed, if it's a bun global install, we can still use bunx
+  if (useBunx) {
+    return { exists: true, useBunx: true };
+  }
+
+  return { exists: false };
 }
 
 /**
@@ -109,14 +111,14 @@ export class LSPClient extends EventEmitter {
         const command = this.server.command[0];
         const installCommand = getInstallCommand(this.serverID);
 
-        ensureCommandExists(command, installCommand).then(({ exists, binPath }) => {
+        ensureCommandExists(command, installCommand).then(({ exists, useBunx }) => {
           if (!exists) {
             lspLogger.warn(`LSP server '${command}' not available, LSP features disabled for this session`);
             resolve();
             return;
           }
 
-          this.doStart(resolve, reject, binPath);
+          this.doStart(resolve, reject, useBunx);
         });
       } catch (error) {
         lspLogger.error(`Failed to start LSP server: ${this.serverID}`, { error: (error as Error).message });
@@ -128,18 +130,27 @@ export class LSPClient extends EventEmitter {
   /**
    * Actually start the LSP server process
    */
-  private doStart(resolve: () => void, reject: (error: Error) => void, binPath?: string): void {
+  private doStart(resolve: () => void, reject: (error: Error) => void, useBunx?: boolean): void {
     lspLogger.info(`Starting LSP server: ${this.serverID}`, { root: this.root });
 
-    const env = { ...process.env };
-    if (binPath) {
-      env.PATH = binPath + (process.platform === "win32" ? ";" : ":") + env.PATH;
-      lspLogger.debug(`Added to PATH: ${binPath}`);
+    const command = this.server.command[0];
+    const args = this.server.command.slice(1);
+
+    let spawnCommand: string;
+    let spawnArgs: string[];
+
+    if (useBunx) {
+      spawnCommand = process.execPath;
+      spawnArgs = ["x", command, ...args];
+      lspLogger.debug(`Using bunx to run LSP server: ${spawnCommand} ${spawnArgs.join(" ")}`);
+    } else {
+      spawnCommand = command;
+      spawnArgs = args;
     }
 
-    this.process = spawn(this.server.command[0], this.server.command.slice(1), {
+    this.process = spawn(spawnCommand, spawnArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...env, ...this.server.env },
+      env: { ...process.env, ...this.server.env },
     });
 
     this.process.stdout.on("data", (data: Buffer) => this.handleData(data));

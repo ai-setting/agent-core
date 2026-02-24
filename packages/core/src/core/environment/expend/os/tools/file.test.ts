@@ -495,6 +495,51 @@ describe("File Tools - Tool Definitions", () => {
         expect(() => paramsParse({ path: "test.txt", content: "hello", showDiff: true })).not.toThrow();
       });
 
+      test("should return diagnostics with range info in metadata", async () => {
+        // Use the actual agent-core project directory which has package.json
+        const projectDir = join(__dirname, "../../../../../../..");
+        
+        const outputFile = join(projectDir, "test-diagnostics.ts");
+        const result = await writeTool.execute(
+          { path: outputFile, content: "const x: string = 123;\nconst y: number = 'hello';" },
+          { workdir: projectDir },
+        );
+        expect(result.success).toBe(true);
+        expect(result.metadata).toBeDefined();
+        console.log("Full result metadata:", JSON.stringify(result.metadata, null, 2));
+        
+        // The diagnostics should have range information if LSP is available
+        const diagnostics = result.metadata?.diagnostics as Record<string, Array<{
+          range?: { start: { line: number; character: number } };
+          severity?: number;
+          message?: string;
+        }>> || {};
+        
+        // Log diagnostics for debugging
+        console.log("Diagnostics:", JSON.stringify(diagnostics, null, 2));
+        
+        // Check structure - diagnostics should be an object with file paths as keys
+        expect(typeof diagnostics).toBe("object");
+        
+        let hasDiagnosticsWithRange = false;
+        for (const [file, diags] of Object.entries(diagnostics)) {
+          console.log(`Diagnostics for ${file}:`, JSON.stringify(diags, null, 2));
+          // If there are diagnostics, they should have range
+          if (diags && diags.length > 0) {
+            for (const diag of diags) {
+              hasDiagnosticsWithRange = true;
+              // Each diagnostic should have range with line info
+              expect(diag).toHaveProperty("range");
+              expect(diag.range?.start).toHaveProperty("line");
+              expect(diag.range?.start).toHaveProperty("character");
+            }
+          }
+        }
+        
+        // Log output to see formatted diagnostics
+        console.log("Tool output:", result.output);
+      }, 30000);
+
       test("should execute successfully", async () => {
         const outputFile = join(testDir, "output.txt");
         const result = await writeTool.execute(

@@ -655,8 +655,12 @@ export class ServerEnvironment extends BaseEnvironment {
         timeout: 30000,
       });
 
+      // Import and create LSP tool
+      const { createLSPTool } = await import("../core/environment/lsp/lsp-tool.js");
+      const lspTool = createLSPTool();
+
       // All tools are external - LLM capabilities are native to Environment
-      const allTools = [...osTools, ...todoTools, webFetchTool];
+      const allTools = [...osTools, ...todoTools, webFetchTool, lspTool];
 
       for (const tool of allTools) {
         this.registerTool(tool);
@@ -831,6 +835,7 @@ export class ServerEnvironment extends BaseEnvironment {
             toolName: event.tool_name || "",
             toolCallId: event.tool_call_id || "",
             result: event.tool_result,
+            metadata: event.metadata,
             success: true,
           },
           sessionId

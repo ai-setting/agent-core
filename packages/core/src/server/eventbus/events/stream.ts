@@ -68,6 +68,7 @@ export const StreamToolResultEvent = define(
     toolCallId: z.string(),
     result: z.unknown(),
     success: z.boolean(),
+    metadata: z.unknown().optional(),
   })
 );
 

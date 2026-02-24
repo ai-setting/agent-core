@@ -8,6 +8,9 @@ import type { ToolInfo, ToolResultMetadata } from "../../../../types/index.js";
 import { glob as globModule } from "glob";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { normalizePath, isAbsolute, resolvePath } from "./filesystem.js";
+import { createLogger } from "../../../../../utils/logger.js";
+
+const fileLogger = createLogger("file:tools", "server.log");
 
 const DEFAULT_READ_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -398,6 +401,12 @@ async function getLSPDiagnosticsForFile(
 
     await lspManager.touchFile(filePath, true);
     const allDiagnostics = await lspManager.getDiagnostics();
+    fileLogger.debug("LSP diagnostics received", { 
+      filePath, 
+      normalizedPath: normalizePath(filePath),
+      allDiagnosticsKeys: Object.keys(allDiagnostics),
+      allDiagnostics 
+    });
 
     const normalizedPath = normalizePath(filePath);
     const fileDiagnostics = allDiagnostics[normalizedPath] || [];
