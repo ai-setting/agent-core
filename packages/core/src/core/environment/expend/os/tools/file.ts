@@ -13,6 +13,9 @@ const DEFAULT_READ_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
 const MAX_BYTES = 50 * 1024;
 
+const MAX_DIAGNOSTICS_PER_FILE = 20;
+const MAX_OTHER_FILES_DIAGNOSTICS = 5;
+
 export interface ReadFileOptions {
   encoding?: BufferEncoding;
   maxSize?: number;
@@ -341,6 +344,97 @@ export async function grep(
   return results;
 }
 
+interface LSPDiagnostic {
+  range: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
+  severity: 1 | 2 | 3 | 4;
+  message: string;
+  source?: string;
+}
+
+const DiagnosticSeverityNames: Record<number, string> = {
+  1: "ERROR",
+  2: "WARNING",
+  3: "INFO",
+  4: "HINT",
+};
+
+function formatLSPDiagnostic(diagnostic: LSPDiagnostic): string {
+  const severity = DiagnosticSeverityNames[diagnostic.severity] || "ERROR";
+  const line = diagnostic.range.start.line + 1;
+  const col = diagnostic.range.start.character + 1;
+  return `${severity} [${line}:${col}] ${diagnostic.message}`;
+}
+
+let lspManagerInstance: unknown = null;
+let lspNeedsLSP: ((filePath: string) => boolean) | null = null;
+
+async function getLSPDiagnosticsForFile(
+  filePath: string
+): Promise<{ output: string; diagnostics: Record<string, LSPDiagnostic[]> }> {
+  const output = "";
+  const diagnostics: Record<string, LSPDiagnostic[]> = {};
+
+  try {
+    if (!lspManagerInstance) {
+      const { lspManager: manager, needsLSPDiagnostics } = await import(
+        "../../../lsp/index.js"
+      );
+      lspManagerInstance = manager;
+      lspNeedsLSP = needsLSPDiagnostics;
+    }
+
+    const needsLSP = lspNeedsLSP!;
+    if (!needsLSP(filePath)) {
+      return { output, diagnostics };
+    }
+
+    const lspManager = lspManagerInstance as {
+      touchFile: (filePath: string, wait: boolean) => Promise<void>;
+      getDiagnostics: () => Promise<Record<string, LSPDiagnostic[]>>;
+    };
+
+    await lspManager.touchFile(filePath, true);
+    const allDiagnostics = await lspManager.getDiagnostics();
+
+    const normalizedPath = normalizePath(filePath);
+    const fileDiagnostics = allDiagnostics[normalizedPath] || [];
+    const errors = fileDiagnostics.filter((d: LSPDiagnostic) => d.severity === 1);
+
+    let resultOutput = output;
+    if (errors.length > 0) {
+      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE);
+      const suffix =
+        errors.length > MAX_DIAGNOSTICS_PER_FILE
+          ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more`
+          : "";
+
+      resultOutput += `\n\nLSP errors detected, please fix:\n${limited.map(formatLSPDiagnostic).join("\n")}${suffix}`;
+    }
+
+    let otherFilesCount = 0;
+    for (const [path, diags] of Object.entries(allDiagnostics)) {
+      if (path === normalizedPath) continue;
+      if (otherFilesCount >= MAX_OTHER_FILES_DIAGNOSTICS) break;
+
+      const fileErrors = diags.filter((d: LSPDiagnostic) => d.severity === 1);
+      if (fileErrors.length > 0) {
+        otherFilesCount++;
+        resultOutput += `\n\nLSP errors in ${path}:\n${fileErrors
+          .slice(0, 5)
+          .map(formatLSPDiagnostic)
+          .join("\n")}`;
+      }
+    }
+
+    return { output: resultOutput, diagnostics: allDiagnostics };
+  } catch {
+    return { output: "", diagnostics: {} };
+  }
+}
+
 export function createFileTools(): ToolInfo[] {
   const createMetadata = (extra?: Record<string, unknown>): ToolResultMetadata => ({
     execution_time_ms: Date.now(),
@@ -530,12 +624,18 @@ Usage:
             output += `\n\n${result.diff}`;
           }
 
+          const lspResult = await getLSPDiagnosticsForFile(absolutePath);
+          if (lspResult.output) {
+            output += lspResult.output;
+          }
+
           return {
             success: true,
             output,
             metadata: createMetadata({
               output_size: content.length,
               file_path: absolutePath,
+              diagnostics: lspResult.diagnostics,
             }),
           };
         } catch (error) {

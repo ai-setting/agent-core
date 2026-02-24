@@ -40,18 +40,18 @@
 
 ## 2. 文件位置
 
-所有 zst 环境相关文件都在**用户配置路径**下：
+Skills 目录通过环境变量 `ZST_SKILLS_DIR` 配置，默认路径：
 
 ```
-~/.config/tong_work/agent-core/environments/zst/
-├── config.jsonc                              # 环境配置
-├── agents.jsonc                              # Agent 配置
-├── rules.md                                  # 环境规则（已更新）
-├── prompts/                                  # Agent prompts
-│   └── system.prompt
-└── skills/                                   # Skills 目录
-    └── affair-advancement/
-        └── skill.md                          # 事务推进 skill
+C:/Users/<username>/.config/tong_work/agent-core/environments/zst/skills/
+├── affair-advancement/
+│   └── skill.md        # 事务推进 skill
+└── ...                  # 其他 skills
+```
+
+可通过环境变量覆盖：
+```bash
+export ZST_SKILLS_DIR="/path/to/your/skills"
 ```
 
 ---
@@ -71,6 +71,74 @@ skill.md 聚焦于流程指导，不重复工具参数说明（工具参数 LLM 
 2. 事务创建（调用 MCP 工具）
 3. 启动后台任务（调用 task 工具）
 4. 向用户报告
+
+### 4.1 代码编写任务中的 LSP 使用
+
+当事务涉及代码编写时，Agent 应充分利用 **LSP 工具** 来提升代码质量和效率：
+
+#### 4.1.1 LSP 工具可用操作
+
+| 操作 | 功能 | 使用场景 |
+|------|------|----------|
+| `goToDefinition` | 跳转到符号定义位置 | 理解代码结构时 |
+| `findReferences` | 查找符号的所有引用 | 修改代码前了解影响范围 |
+| `hover` | 获取符号的悬停信息 | 快速查看类型、文档 |
+| `documentSymbol` | 获取文档中所有符号 | 了解文件结构 |
+| `workspaceSymbol` | 工作区全局搜索符号 | 跨文件查找 |
+| `goToImplementation` | 跳转到接口/抽象实现 | 理解实现关系 |
+
+#### 4.1.2 LSP 工具调用示例
+
+```json
+{
+  "name": "lsp",
+  "parameters": {
+    "operation": "goToDefinition",
+    "filePath": "src/utils/helper.ts",
+    "line": 10,
+    "character": 5
+  }
+}
+```
+
+#### 4.1.3 LSP 诊断自动获取
+
+当使用 `write_file` 工具写入代码文件后，系统会自动获取 LSP 诊断：
+
+- **仅代码文件触发**：`.ts`, `.py`, `.go`, `.rs`, `.java`, `.cpp`, `.vue`, `.svelte` 等
+- **非代码文件跳过**：`.md`, `.txt`, `.json`, `.yaml` 等不会调用 LSP
+
+诊断结果会附加在工具返回结果中，格式如下：
+
+```
+Wrote file successfully.
+
+LSP errors detected, please fix:
+ERROR [10:5] Cannot find name 'foo'
+ERROR [15:2] Property 'bar' does not exist on type 'Helper'
+```
+
+#### 4.1.4 代码编写最佳实践
+
+1. **编写前**：使用 `workspaceSymbol` 或 `documentSymbol` 了解目标文件的结构
+2. **编写中**：使用 `hover` 确认类型和 API
+3. **编写后**：查看返回的 LSP 诊断，及时修复错误
+4. **修改前**：使用 `findReferences` 了解修改的影响范围
+
+#### 4.1.5 LSP 工具使用判断
+
+```
+任务涉及代码编写?
+    │
+    ├── 是 → 使用 LSP 工具提升效率
+    │       ├── 不确定符号含义 → hover
+    │       ├── 需要跳转定义 → goToDefinition
+    │       ├── 需要查找引用 → findReferences
+    │       ├── 需要了解文件结构 → documentSymbol
+    │       └── 需要跨文件搜索 → workspaceSymbol
+    │
+    └── 否 → 正常使用工具
+```
 
 ---
 
@@ -105,6 +173,9 @@ skill.md 聚焦于流程指导，不重复工具参数说明（工具参数 LLM 
 | 更新 task-tool.ts | `packages/core/src/core/environment/expend/task/task-tool.ts` | ✅ |
 | 默认超时延长到15分钟 | `background-task-manager.ts` | ✅ |
 | 进度报告间隔2分钟 | `background-task-manager.ts` | ✅ |
+| LSP 模块实现 | `packages/core/src/core/environment/lsp/` | ✅ |
+| LSP Tool | `packages/core/src/core/environment/lsp/lsp-tool.ts` | ✅ |
+| write_file 集成 LSP 诊断 | `packages/core/src/core/environment/expend/os/tools/file.ts` | ✅ |
 
 ---
 
@@ -137,3 +208,4 @@ skill.md 聚焦于流程指导，不重复工具参数说明（工具参数 LLM 
 
 - [TaskTool 设计](./task-tool-subagent-design.md)
 - [Environment 设计理念](./environment-design-philosophy.md)
+- [LSP 实现设计](./lsp-implementation-design.md)
