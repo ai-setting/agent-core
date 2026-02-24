@@ -242,6 +242,7 @@ function convertToolMessage(msg: MessageWithParts): HistoryMessage | null {
     role: "tool",
     content,
     name: toolPart.tool,
+    tool_call_id: toolPart.callID,
   };
 }
 
