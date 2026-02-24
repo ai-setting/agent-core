@@ -136,7 +136,68 @@ describe("Background Task Progress Notification to Main Session", () => {
         expect(failedEvent.metadata.trigger_session_id).toBe("main-session-123");
         expect(failedEvent.payload.error).toContain("Task failed");
       });
-  });
+
+      test("rate limit error after retries should publish failure event", async () => {
+        const rateLimitError = new Error('API error: 429 - {"type":"error","error":{"type":"FreeUsageLimitError","message":"Rate limit exceeded. Please try again later."}}');
+        
+        let callCount = 0;
+        mockEnv.handle_query = vi.fn().mockImplementation(async () => {
+          callCount++;
+          throw rateLimitError;
+        });
+
+        await manager.createTask({
+          parentSessionId: "main-session-123",
+          description: "Rate limited task",
+          prompt: "Do work that triggers rate limit",
+          subagentType: "general",
+        });
+
+        await new Promise(r => setTimeout(r, 500));
+
+        const failedEvents = publishedEvents.filter(
+          e => e.type === EventTypes.BACKGROUND_TASK_FAILED
+        );
+
+        expect(failedEvents.length).toBeGreaterThan(0);
+        
+        const failedEvent = failedEvents[0];
+        expect(failedEvent.metadata.trigger_session_id).toBe("main-session-123");
+        expect(failedEvent.payload.description).toBe("Rate limited task");
+        expect(failedEvent.payload.error).toContain("429");
+        expect(failedEvent.payload.error).toContain("Rate limit");
+        expect(failedEvent.payload.subagentType).toBe("general");
+        expect(failedEvent.payload.execution_time_ms).toBeDefined();
+        
+        expect(callCount).toBeGreaterThanOrEqual(1);
+      });
+
+      test("max retries exceeded should publish failure event", async () => {
+        const maxRetriesError = new Error('Max error retries (3) exceeded. Last error: API error: 429 - Rate limit exceeded');
+        
+        mockEnv.handle_query = vi.fn().mockRejectedValue(maxRetriesError);
+
+        await manager.createTask({
+          parentSessionId: "main-session-123",
+          description: "Task with max retries exceeded",
+          prompt: "Do work",
+          subagentType: "general",
+        });
+
+        await new Promise(r => setTimeout(r, 200));
+
+        const failedEvents = publishedEvents.filter(
+          e => e.type === EventTypes.BACKGROUND_TASK_FAILED
+        );
+
+        expect(failedEvents.length).toBeGreaterThan(0);
+        
+        const failedEvent = failedEvents[0];
+        expect(failedEvent.metadata.trigger_session_id).toBe("main-session-123");
+        expect(failedEvent.payload.error).toContain("Max error retries");
+        expect(failedEvent.payload.error).toContain("429");
+      });
+   });
 
   describe("Event Payload Structure", () => {
     test("all event types should have consistent structure", async () => {

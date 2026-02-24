@@ -70,7 +70,13 @@ export class BackgroundTaskManager {
       subSessionId: subSession.id
     });
 
-    this.executeTask(taskId, prompt, timeout, cleanup);
+    this.executeTask(taskId, prompt, timeout, cleanup).catch((err) => {
+      logger.error(`[BackgroundTaskManager] executeTask unhandled rejection`, {
+        taskId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined
+      });
+    });
 
     return { taskId, subSessionId: subSession.id };
   }
