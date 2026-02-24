@@ -6,6 +6,7 @@
  */
 
 import type { Command, CommandContext, CommandResult } from "../types.js";
+import { serverLogger } from "../../logger.js";
 import { ModelStore } from "../../../config/state/model-store.js";
 import { 
   ModelsConfig_getAll, 
@@ -94,11 +95,12 @@ async function handleListAction(modelStore: ModelStore): Promise<CommandResult> 
   const recent = await modelStore.getRecent();
   const favorites = await modelStore.getFavorite();
 
-  console.log("[ModelsCommand] Loaded provider models:", providerModels.length);
-  console.log("[ModelsCommand] Provider models:", providerModels.map(p => ({ 
-    providerID: p.providerID, 
-    modelsCount: p.models.length 
-  })));
+  serverLogger.info("[ModelsCommand] Loaded provider models", { 
+    providerCount: providerModels.length 
+  });
+  serverLogger.info("[ModelsCommand] Recent models", { 
+    recent: recent.map(r => `${r.providerID}/${r.modelID}`).slice(0, 5)
+  });
 
   // Build response data
   const data = {
@@ -123,11 +125,12 @@ async function handleListAction(modelStore: ModelStore): Promise<CommandResult> 
       .filter(p => p.models.length > 0), // Only include providers with models
   };
 
-  console.log("[ModelsCommand] Returning data:", { 
+  serverLogger.info("[ModelsCommand] Returning data", { 
     providerCount: data.providers.length, 
     totalModels: data.providers.reduce((sum: number, p) => sum + p.models.length, 0),
     recentCount: data.recent.length,
-    favoritesCount: data.favorites.length
+    favoritesCount: data.favorites.length,
+    recentFirst: data.recent[0] ? `${data.recent[0].providerID}/${data.recent[0].modelID}` : null
   });
 
   return {
@@ -161,15 +164,38 @@ async function handleSelectAction(
 
   // If env supports switchModel, call it
   let switched = false;
+  serverLogger.info("[ModelsCommand] handleSelectAction", { 
+    hasEnv: !!context.env, 
+    hasSwitchModel: context.env ? "switchModel" in context.env : false,
+    providerID: action.providerID,
+    modelID: action.modelID
+  });
   if (context.env && "switchModel" in context.env) {
     try {
       switched = await (context.env as any).switchModel(
         action.providerID,
         action.modelID
       );
+      serverLogger.info("[ModelsCommand] switchModel result", { switched, providerID: action.providerID, modelID: action.modelID });
     } catch (error) {
-      console.error("[ModelsCommand] Failed to switch model:", error);
+      serverLogger.error("[ModelsCommand] Failed to switch model", { error: String(error) });
     }
+  } else {
+    serverLogger.warn("[ModelsCommand] switchModel not called - env doesn't support it");
+  }
+
+  // Return failure if model switch failed
+  if (!switched) {
+    return {
+      success: false,
+      message: `Failed to switch model: no API key or invalid model for ${action.providerID}/${action.modelID}`,
+      data: {
+        providerID: action.providerID,
+        modelID: action.modelID,
+        variant,
+        switched: false,
+      },
+    };
   }
 
   return {

@@ -38,6 +38,7 @@ export function ModelsDialog(props: ModelsDialogProps) {
   const [filter, setFilter] = createSignal("");
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [favorites, setFavorites] = createSignal<Set<string>>(new Set());
+  const [error, setError] = createSignal<string | null>(null);
   
   // Ref for input element
   let inputRef: any = null;
@@ -47,10 +48,16 @@ export function ModelsDialog(props: ModelsDialogProps) {
       props.data.favorites.map((f) => `${f.providerID}/${f.modelID}`)
     );
     setFavorites(favSet);
+    
     tuiLogger.info("[ModelsDialog] Mounted", {
       recentCount: props.data.recent.length,
       favoritesCount: props.data.favorites.length,
       providersCount: props.data.providers.length,
+      recentFirst: props.data.recent[0] ? `${props.data.recent[0].providerID}/${props.data.recent[0].modelID}` : null,
+      providers: props.data.providers.map(p => ({ 
+        id: p.providerID, 
+        models: p.models.slice(0, 3).map(m => m.modelID) 
+      }))
     });
   });
 
@@ -59,9 +66,36 @@ export function ModelsDialog(props: ModelsDialogProps) {
     const f = filter().toLowerCase().trim();
     const models: (ModelInfo & { group: string })[] = [];
 
-    // Add all models from all providers
+    // First add recent models (at the top)
+    if (!f && props.data.recent.length > 0) {
+      for (const recent of props.data.recent) {
+        // Find this model in providers
+        for (const provider of props.data.providers) {
+          if (provider.providerID !== recent.providerID) continue;
+          for (const model of provider.models) {
+            if (model.modelID !== recent.modelID) continue;
+            const key = `${provider.providerID}/${model.modelID}`;
+            const isFav = favorites().has(key);
+            models.push({
+              ...model,
+              providerID: provider.providerID,
+              providerName: provider.providerName,
+              isFavorite: isFav,
+              group: provider.providerName,
+            });
+          }
+        }
+      }
+    }
+    
+    // Then add all other models from all providers
     for (const provider of props.data.providers) {
       for (const model of provider.models) {
+        // Skip if already added (duplicate from recent)
+        if (!f && models.some(m => m.providerID === provider.providerID && m.modelID === model.modelID)) {
+          continue;
+        }
+        
         const key = `${provider.providerID}/${model.modelID}`;
         const isFav = favorites().has(key);
         
@@ -150,6 +184,7 @@ export function ModelsDialog(props: ModelsDialogProps) {
       tuiLogger.error("[ModelsDialog] Failed to select model", {
         message: result.message,
       });
+      setError(result.message || "Failed to switch model");
     }
   };
 
@@ -209,6 +244,13 @@ export function ModelsDialog(props: ModelsDialogProps) {
           }}
         />
       </box>
+
+      {/* Error message */}
+      <Show when={error()}>
+        <box height={1} marginBottom={1}>
+          <text fg={theme.theme().error}>{error()}</text>
+        </box>
+      </Show>
 
       <box height={1} borderStyle="single" borderColor={theme.theme().border} />
 
