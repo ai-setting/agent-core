@@ -41,7 +41,7 @@ export async function bash(
   const timeout = options?.timeout ?? 60000;
   const maxBuffer = options?.maxBuffer ?? 10 * 1024 * 1024;
 
-  const { shell, useBash } = getShellConfig(command);
+  const { shell, args: shellArgs, useBash } = getShellConfig(command);
   
   // Convert Windows paths to Unix-style when using bash on Windows
   const convertedCommand = useBash ? convertWindowsPathForBash(command) : command;
@@ -56,7 +56,7 @@ export async function bash(
       ? normalizeGitBashPath(cwd)
       : cwd;
 
-    const child = spawn(shell, ["-c", convertedCommand], {
+    const child = spawn(shell, [...shellArgs, convertedCommand], {
       cwd: normalizedCwd,
       env: { ...process.env, ...options?.env },
       stdio: ["ignore", "pipe", "pipe"],
@@ -166,15 +166,15 @@ function getShellConfig(command: string): { shell: string; args: string[]; useBa
   if (process.platform === "win32") {
     const gitPath = resolveGitBashPath();
     if (gitPath) {
-      return { shell: gitPath, args: ["-c", command], useBash: true };
+      return { shell: gitPath, args: ["-c"], useBash: true };
     }
     const comspec = process.env.COMSPEC || "cmd.exe";
-    return { shell: comspec, args: ["/c", command], useBash: false };
+    return { shell: comspec, args: ["/c"], useBash: false };
   }
 
   if (process.platform === "darwin") {
     const shell = process.env.SHELL || "/bin/zsh";
-    return { shell, args: ["-c", command], useBash: true };
+    return { shell, args: ["-c"], useBash: true };
   }
 
   const shell = process.env.SHELL || "sh";
@@ -183,11 +183,11 @@ function getShellConfig(command: string): { shell: string; args: string[]; useBa
   if (shellName === "fish") {
     const bash = resolveBashPath();
     if (bash) {
-      return { shell: bash, args: ["-c", command], useBash: true };
+      return { shell: bash, args: ["-c"], useBash: true };
     }
   }
 
-  return { shell, args: ["-c", command], useBash: shellName === "bash" };
+  return { shell, args: ["-c"], useBash: shellName === "bash" };
 }
 
 /**
