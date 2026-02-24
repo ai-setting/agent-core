@@ -592,7 +592,7 @@ describe("File Tools - Tool Definitions", () => {
       test("should return no matches result", async () => {
         const result = await grepTool.execute({ pattern: "nonexistentpattern123", path: testDir }, {});
         expect(result.success).toBe(true);
-        expect(result.output).toBe("");
+        expect(result.output).toContain("No files found");
       });
     });
   });
