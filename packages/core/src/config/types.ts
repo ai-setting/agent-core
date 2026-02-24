@@ -46,14 +46,6 @@ const EnvironmentRuntimeConfig = z.object({
   profiles: z.array(ProfileConfig).optional(),
 });
 
-// Model 配置
-const ModelConfig = z.object({
-  provider: z.string(),
-  modelId: z.string(),
-  displayName: z.string().optional(),
-  capabilities: z.array(z.string()).optional(),
-});
-
 // Auth Provider 配置（auth.json）
 const AuthProviderConfig = z.object({
   type: z.enum(["api", "oauth", "basic"]).describe("Authentication type"),
@@ -98,9 +90,6 @@ export const ConfigInfo = z.object({
   
   // === Agents 配置（从 environments/{env}/agents.jsonc 加载）===
   agents: z.array(AgentConfig).optional().describe("Agent specifications for this environment"),
-  
-  // === Models 配置（从 environments/{env}/models.jsonc 加载）===
-  models: z.record(ModelConfig).optional().describe("Model configurations for this environment"),
   
   // === Session 持久化配置 ===
   session: z.object({
