@@ -363,14 +363,14 @@ export class ServerEnvironment extends BaseEnvironment {
 
       // Validate model
       if (!(await this.isModelValid({ providerID, modelID }, providers))) {
-        console.error(`[ServerEnvironment] Invalid model: ${providerID}/${modelID}`);
+        serverLogger.error(`[ServerEnvironment] Invalid model: ${providerID}/${modelID}`);
         return false;
       }
 
       // Get API key
       const authInfo = await Auth_getProvider(providerID);
       if (!authInfo?.key) {
-        console.error(`[ServerEnvironment] No API key for provider: ${providerID}`);
+        serverLogger.error(`[ServerEnvironment] No API key for provider: ${providerID}`);
         return false;
       }
 
@@ -389,10 +389,10 @@ export class ServerEnvironment extends BaseEnvironment {
       // Add to recent
       await this.modelStore.addRecent(providerID, modelID);
 
-      console.log(`[ServerEnvironment] Switched to model: ${providerID}/${modelID}`);
+      serverLogger.info(`[ServerEnvironment] Switched to model: ${providerID}/${modelID}`);
       return true;
     } catch (error) {
-      console.error("[ServerEnvironment] Failed to switch model:", error);
+      serverLogger.error("[ServerEnvironment] Failed to switch model", { error: String(error) });
       return false;
     }
   }
