@@ -166,14 +166,9 @@ export class Agent {
   private async executeIteration(messages: Message[]): Promise<string | null> {
     console.log(`[Agent] executeIteration - Available tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
     
-    // Filter out "invalid" tool from tools passed to LLM (OpenCode pattern)
-    // The invalid tool exists for error reporting but should not be visible to the LLM
-    const activeTools = this.tools.filter(t => t.name !== "invalid");
-    
-    // Use native LLM capability instead of tool invocation
     const llmResult = await this.env.invokeLLM(
       messages,
-      activeTools.length > 0 ? activeTools : undefined,
+      this.tools.length > 0 ? this.tools : undefined,
       this.context
     );
 
@@ -243,27 +238,24 @@ export class Agent {
       try {
         toolArgs = JSON.parse(toolCall.function.arguments);
       } catch {
-        // Use invalid tool for JSON parse errors (OpenCode pattern)
-        // The assistant message already contains the original tool call
-        // We just need to return an error result as if from the "invalid" tool
+        // JSON parse error - return error result with actual tool name
         const errorMessage = `Invalid JSON in arguments: ${toolCall.function.arguments}`;
         messages.push({
           role: "tool",
-          content: `The arguments provided to the tool are invalid: ${errorMessage}`,
-          name: "invalid",
+          content: `Error: ${errorMessage}`,
+          name: toolCall.function.name,
           tool_call_id: toolCall.id,
         });
         continue;
       }
 
       if (this.isDoomLoop(toolCall.function.name, toolArgs)) {
-        // Use invalid tool for doom loop detection (OpenCode pattern)
-        // This allows the LLM to receive structured feedback and try a different approach
+        // Doom loop detected - return error result so LLM can try a different approach
         const errorMessage = `Doom loop detected: tool "${toolCall.function.name}" has been called ${this.config.doomLoopThreshold} times with the same arguments. Please try a different approach or use a different tool to achieve your goal.`;
         messages.push({
           role: "tool",
-          content: `The arguments provided to the tool are invalid: ${errorMessage}`,
-          name: "invalid",
+          content: `Error: ${errorMessage}`,
+          name: toolCall.function.name,
           tool_call_id: toolCall.id,
         });
         // Clear the doom loop cache so next attempt can proceed
@@ -277,12 +269,11 @@ export class Agent {
         console.log(`[Agent] Tool ${toolCall.function.name} allowed: ${isAllowed}`);
         if (!isAllowed) {
           console.log(`[Agent] Rejecting tool call for ${toolCall.function.name}`);
-          // Use invalid tool for unavailable tools (OpenCode pattern)
-          const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.filter(t => t.name !== "invalid").map(t => t.name).join(", ")}`;
+          const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`;
           messages.push({
             role: "tool",
-            content: `The arguments provided to the tool are invalid: ${errorMessage}`,
-            name: "invalid",
+            content: `Error: ${errorMessage}`,
+            name: toolCall.function.name,
             tool_call_id: toolCall.id,
           });
           continue;
