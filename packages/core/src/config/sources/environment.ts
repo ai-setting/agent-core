@@ -7,7 +7,6 @@ import type { Config } from "../types.js";
 
 const ENV_CONFIG_FILENAME = "config.jsonc";
 const ENV_AGENTS_FILENAME = "agents.jsonc";
-const ENV_MODELS_FILENAME = "models.jsonc";
 
 function parseJsoncFile(content: string, filepath: string): unknown {
   const errors: jsonc.ParseError[] = [];
@@ -53,18 +52,6 @@ export async function loadEnvironmentConfig(
       }
     } catch {
       // agents.jsonc 可选
-    }
-    
-    // 3. 加载 Models 配置（可选）
-    const modelsPath = path.join(envDir, ENV_MODELS_FILENAME);
-    try {
-      const modelsContent = await fs.readFile(modelsPath, "utf-8");
-      const models = parseJsoncFile(modelsContent, modelsPath);
-      if (typeof models === "object" && models !== null) {
-        config.models = models as Config.Info["models"];
-      }
-    } catch {
-      // models.jsonc 可选
     }
     
     return config;

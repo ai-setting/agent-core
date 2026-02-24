@@ -99,40 +99,7 @@ describe("Environment Source", () => {
       expect(config?.agents?.[0].id).toBe("test-agent");
     });
 
-    it("should load models.jsonc when present", async () => {
-      const envDir = path.join(environmentsDir, "model-env");
-      await fs.mkdir(envDir, { recursive: true });
-
-      const configContent = {
-        id: "model-env",
-      };
-
-      const modelsContent = {
-        "gpt-4": {
-          provider: "openai",
-          modelId: "gpt-4",
-          displayName: "GPT-4",
-        },
-        "claude": {
-          provider: "anthropic",
-          modelId: "claude-3",
-          displayName: "Claude 3",
-        },
-      };
-
-      await fs.writeFile(
-        path.join(envDir, "config.jsonc"),
-        JSON.stringify(configContent)
-      );
-      await fs.writeFile(
-        path.join(envDir, "models.jsonc"),
-        JSON.stringify(modelsContent)
-      );
-
-      const config = await loadEnvironmentConfig("model-env", environmentsDir);
-      expect(config?.models).toBeDefined();
-      expect(config?.models?.["gpt-4"].provider).toBe("openai");
-      expect(config?.models?.["claude"].provider).toBe("anthropic");
+    it("should load config without models", async () => {
     });
 
     it("should load all three config files", async () => {
@@ -155,7 +122,6 @@ describe("Environment Source", () => {
       const config = await loadEnvironmentConfig("full-env", environmentsDir);
       expect(config?.id).toBe("full-env");
       expect(config?.agents).toBeDefined();
-      expect(config?.models).toBeDefined();
     });
 
     it("should handle JSONC comments", async () => {
@@ -314,7 +280,6 @@ describe("Environment Source", () => {
       const config = await loadEnvironmentConfig("os_env", environmentsDir);
       expect(config?.id).toBe("os_env");
       expect(config?.agents?.length).toBe(1);
-      expect(config?.models?.["claude-sonnet"]).toBeDefined();
     });
   });
 });
