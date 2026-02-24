@@ -963,10 +963,9 @@ export class ServerEnvironment extends BaseEnvironment {
               
               // Add user interrupt notice message
               session?.addUserMessage("[Session interrupted by user]");
-            } else {
-              // Re-throw other errors after sending error event
-              throw error;
             }
+            // Don't re-throw - error has already been sent to frontend via StreamErrorEvent
+            // The "Failed to publish event" log entry is now benign
           }
         }
       },
