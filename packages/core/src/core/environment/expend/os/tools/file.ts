@@ -487,10 +487,12 @@ Usage:
   const editFileDescription = `Edit an existing file by applying a patch.
 
 Usage:
-- This tool applies a unified diff patch to a file
 - You MUST use the Read tool first to read the file's contents before editing
-- The patch should be a valid unified diff format
-- After editing, LSP diagnostics will be automatically checked and errors will be returned in the output
+- The oldString parameter specifies the text to replace
+- The newString parameter specifies the replacement text
+- The oldString and newString must be different
+- Use replaceAll option to replace all occurrences
+- After editing, LSP diagnostics will be automatically checked and errors will be returned
 - If there are LSP errors, please fix them before continuing`;
 
   const readEditFileDescription = `Read an existing file and then edit it in one operation.
@@ -498,9 +500,8 @@ Usage:
 Usage:
 - Combines read_file and write_file into a single operation
 - First reads the file, then applies the edit
-- The edit parameter should be a valid unified diff patch
 - More efficient than calling read_file and write_file separately
-- After editing, LSP diagnostics will be automatically checked and errors will be returned in the output`;
+- After editing, LSP diagnostics will be automatically checked`;
 
   return [
     {
@@ -666,6 +667,128 @@ Usage:
             success: false,
             output: "",
             error: `Failed to write file: ${(error as Error).message}`,
+            metadata: createMetadata({ error: (error as Error).message }),
+          };
+        }
+      },
+    },
+    {
+      name: "edit_file",
+      description: editFileDescription,
+      parameters: z.object({
+        path: z.string().describe("The path to the file to edit"),
+        oldString: z.string().describe("The text to replace"),
+        newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+        replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+      }),
+      execute: async (args) => {
+        try {
+          const path = args.path;
+          const oldString = args.oldString;
+          const newString = args.newString;
+          const replaceAll = args.replaceAll ?? false;
+
+          if (!path || typeof path !== "string" || !path.trim()) {
+            return {
+              success: false,
+              output: "",
+              error: "Missing required parameter: 'path'",
+              metadata: createMetadata(),
+            };
+          }
+
+          if (!oldString || typeof oldString !== "string") {
+            return {
+              success: false,
+              output: "",
+              error: "Missing required parameter: 'oldString'",
+              metadata: createMetadata(),
+            };
+          }
+
+          if (!newString || typeof newString !== "string") {
+            return {
+              success: false,
+              output: "",
+              error: "Missing required parameter: 'newString'",
+              metadata: createMetadata(),
+            };
+          }
+
+          if (oldString === newString) {
+            return {
+              success: false,
+              output: "",
+              error: "No changes to apply: oldString and newString are identical",
+              metadata: createMetadata(),
+            };
+          }
+
+          const absolutePath = isAbsolute(path) ? path : resolvePath(path);
+
+          let contentOld = "";
+          try {
+            contentOld = await readFile(absolutePath, { encoding: "utf-8" });
+          } catch (error) {
+            return {
+              success: false,
+              output: "",
+              error: `File not found: ${path}`,
+              metadata: createMetadata({ error: (error as Error).message }),
+            };
+          }
+
+          let contentNew: string;
+          if (replaceAll) {
+            contentNew = contentOld.split(oldString).join(newString);
+          } else {
+            const index = contentOld.indexOf(oldString);
+            if (index === -1) {
+              return {
+                success: false,
+                output: "",
+                error: `oldString not found in file. Make sure you provide the exact text to replace.`,
+                metadata: createMetadata(),
+              };
+            }
+            contentNew = contentOld.slice(0, index) + newString + contentOld.slice(index + oldString.length);
+          }
+
+          if (contentOld === contentNew) {
+            return {
+              success: false,
+              output: "",
+              error: "No changes to apply: oldString and newString produce the same content",
+              metadata: createMetadata(),
+            };
+          }
+
+          const diff = computeDiff(contentOld, contentNew);
+
+          await writeFile(absolutePath, contentNew, { diff: false });
+
+          const lspResult = await getLSPDiagnosticsForFile(absolutePath);
+
+          let output = "Edit applied successfully.";
+          if (lspResult.output) {
+            output += lspResult.output;
+          }
+
+          return {
+            success: true,
+            output,
+            metadata: createMetadata({
+              output_size: contentNew.length,
+              file_path: absolutePath,
+              diff,
+              diagnostics: lspResult.diagnostics,
+            }),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            output: "",
+            error: `Failed to edit file: ${(error as Error).message}`,
             metadata: createMetadata({ error: (error as Error).message }),
           };
         }

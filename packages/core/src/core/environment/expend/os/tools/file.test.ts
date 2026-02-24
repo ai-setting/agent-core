@@ -416,9 +416,10 @@ describe("File Tools - Tool Definitions", () => {
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain("read_file");
       expect(toolNames).toContain("write_file");
+      expect(toolNames).toContain("edit_file");
       expect(toolNames).toContain("glob");
       expect(toolNames).toContain("grep");
-      expect(toolNames.length).toBe(4);
+      expect(toolNames.length).toBe(5);
     });
 
     describe("read_file tool", () => {
