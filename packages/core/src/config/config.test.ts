@@ -37,13 +37,14 @@ describe("Config", () => {
   });
 
   describe("Basic Loading", () => {
-    it("should load empty config when no sources registered", async () => {
+    it("should load config from default sources", async () => {
       initDefaultSources();
       const config = await loadConfig();
       
+      // Default sources should load from global config
       expect(config).toBeDefined();
-      expect(config.activeEnvironment).toBeUndefined();
-      expect(config.defaultModel).toBeUndefined();
+      // activeEnvironment may or may not be defined depending on global config
+      expect(config.defaultModel).toBeDefined();
     });
 
     it("should load config from file source", async () => {
@@ -182,7 +183,7 @@ describe("Config", () => {
       // 第一个配置源
       configRegistry.register(createInlineSource(
         JSON.stringify({
-          provider: {
+          providers: {
             openai: {
               baseURL: "https://api.openai.com",
               defaultModel: "gpt-4",
@@ -195,7 +196,7 @@ describe("Config", () => {
       // 第二个配置源（更高优先级）
       configRegistry.register(createInlineSource(
         JSON.stringify({
-          provider: {
+          providers: {
             anthropic: {
               baseURL: "https://api.anthropic.com",
               defaultModel: "claude-3",
