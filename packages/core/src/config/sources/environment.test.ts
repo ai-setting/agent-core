@@ -195,7 +195,7 @@ describe("Environment Source", () => {
 
       const config = await loadEnvironmentConfig("comma-env", environmentsDir);
       expect(config?.id).toBe("comma-env");
-      expect(config?.provider?.openai?.baseURL).toBe("https://api.openai.com");
+      expect(config?.providers?.openai?.baseURL).toBe("https://api.openai.com");
     });
   });
 

@@ -208,10 +208,10 @@ describe("Config", () => {
       const config = await loadConfig();
       
       // 两个 provider 都应该存在
-      expect(config.provider?.openai).toBeDefined();
-      expect(config.provider?.anthropic).toBeDefined();
-      expect(config.provider?.openai?.baseURL).toBe("https://api.openai.com");
-      expect(config.provider?.anthropic?.baseURL).toBe("https://api.anthropic.com");
+      expect(config.providers?.openai).toBeDefined();
+      expect(config.providers?.anthropic).toBeDefined();
+      expect(config.providers?.openai?.baseURL).toBe("https://api.openai.com");
+      expect(config.providers?.anthropic?.baseURL).toBe("https://api.anthropic.com");
     });
 
     it("should override nested properties", async () => {
@@ -220,8 +220,9 @@ describe("Config", () => {
       // 第一个配置源
       configRegistry.register(createInlineSource(
         JSON.stringify({
-          provider: {
+          providers: {
             openai: {
+              name: "OpenAI",
               baseURL: "https://api.openai.com",
               defaultModel: "gpt-4",
             },
@@ -233,7 +234,7 @@ describe("Config", () => {
       // 第二个配置源覆盖嵌套属性
       configRegistry.register(createInlineSource(
         JSON.stringify({
-          provider: {
+          providers: {
             openai: {
               defaultModel: "gpt-5",
             },
@@ -244,9 +245,9 @@ describe("Config", () => {
       
       const config = await loadConfig();
       
-      expect(config.provider?.openai?.defaultModel).toBe("gpt-5");
+      expect(config.providers?.openai?.defaultModel).toBe("gpt-5");
       // baseURL 应该保留
-      expect(config.provider?.openai?.baseURL).toBe("https://api.openai.com");
+      expect(config.providers?.openai?.baseURL).toBe("https://api.openai.com");
     });
   });
 });

@@ -10,17 +10,16 @@ import { ConfigPaths } from "./paths.js";
 import type { Config } from "./types.js";
 
 // Provider 到环境变量名的映射
+// 主要用于 auth.json 加载环境变量
 const PROVIDER_ENV_MAP: Record<string, string> = {
-  "anthropic": "ANTHROPIC_API_KEY",
-  "anthropic-claude": "ANTHROPIC_API_KEY",
   "openai": "OPENAI_API_KEY",
-  "openai-gpt": "OPENAI_API_KEY",
+  "anthropic": "ANTHROPIC_API_KEY",
+  "google": "GOOGLE_API_KEY",
+  "zhipuai": "ZHIPUAI_API_KEY",
   "moonshot": "MOONSHOT_API_KEY",
   "kimi": "MOONSHOT_API_KEY",
-  "kimi-for-coding": "MOONSHOT_API_KEY",
-  "zhipuai": "ZHIPUAI_API_KEY",
-  "zhipuai-coding-plan": "ZHIPUAI_API_KEY",
   "deepseek": "DEEPSEEK_API_KEY",
+  "minimax": "MINIMAX_API_KEY",
   "ollama": "OLLAMA_API_KEY",
 };
 
