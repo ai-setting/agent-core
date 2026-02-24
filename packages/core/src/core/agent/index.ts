@@ -245,9 +245,18 @@ export class Agent {
       }
 
       if (this.isDoomLoop(toolCall.function.name, toolArgs)) {
-        throw new Error(
-          `Doom loop detected: tool "${toolCall.function.name}" called ${this.config.doomLoopThreshold} times with same arguments`
-        );
+        // Instead of throwing, return an error message to LLM
+        // This allows the LLM to try a different approach instead of repeating the same call
+        const errorMessage = `Doom loop detected: tool "${toolCall.function.name}" has been called ${this.config.doomLoopThreshold} times with the same arguments. Please try a different approach or use a different tool to achieve your goal.`;
+        messages.push({
+          role: "tool",
+          content: `Error: ${errorMessage}`,
+          name: toolCall.function.name,
+          tool_call_id: toolCall.id,
+        });
+        // Clear the doom loop cache so next attempt can proceed
+        this.doomLoopCache.clear();
+        continue;
       }
 
       // Check if tool is allowed (if tools list is provided)
