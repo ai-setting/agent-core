@@ -441,18 +441,21 @@ export function createFileTools(): ToolInfo[] {
     ...extra,
   });
 
-  const readFileDescription = `Reads a file from the local filesystem. You can access any file directly by using this tool.
-Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+  const readFileDescription = `Read a file from the local filesystem. You can access any file directly by using this tool.
+If the path does not exist, an error is returned.
 
 Usage:
 - The filePath parameter must be an absolute path, not a relative path
-- By default, it reads up to 2000 lines starting from the beginning of the file
-- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
-- Any lines longer than 2000 characters will be truncated
+- By default, this tool returns up to 2000 lines from the start of the file
+- The offset parameter is the line number to start from (0-indexed)
+- To read later sections, call this tool again with a larger offset
+- Use the grep tool to find specific content in large files or files with long lines
+- If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern
 - Results are returned using cat -n format, with line numbers starting at 1
-- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
-- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
-- You can read image files using this tool.`;
+- Call this tool in parallel when you know there are multiple files you want to read
+- AVOID tiny repeated slices (30 line chunks). If you need more context, read a larger window
+- This tool can read image files and return them as file attachments
+- If a file was not found but has similar names, suggestions will be provided in the error message`;
 
   const grepDescription = `- Fast content search tool that works with any codebase size
 - Searches file contents using regular expressions
@@ -470,14 +473,34 @@ Usage:
 - When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
 - You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.`;
 
-  const writeFileDescription = `Writes a file to the local filesystem.
+  const writeFileDescription = `Write a file to the local filesystem.
 
 Usage:
-- This tool will overwrite the existing file if there is one at the provided path.
-- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.`;
+- This tool will overwrite the existing file if there is one at the provided path
+- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required
+- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User
+- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked
+- After writing, LSP diagnostics will be automatically checked and errors will be returned in the output
+- If there are LSP errors, please fix them before continuing`;
+
+  const editFileDescription = `Edit an existing file by applying a patch.
+
+Usage:
+- This tool applies a unified diff patch to a file
+- You MUST use the Read tool first to read the file's contents before editing
+- The patch should be a valid unified diff format
+- After editing, LSP diagnostics will be automatically checked and errors will be returned in the output
+- If there are LSP errors, please fix them before continuing`;
+
+  const readEditFileDescription = `Read an existing file and then edit it in one operation.
+
+Usage:
+- Combines read_file and write_file into a single operation
+- First reads the file, then applies the edit
+- The edit parameter should be a valid unified diff patch
+- More efficient than calling read_file and write_file separately
+- After editing, LSP diagnostics will be automatically checked and errors will be returned in the output`;
 
   return [
     {
