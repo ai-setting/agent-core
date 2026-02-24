@@ -425,9 +425,10 @@ describe("File Tools - Tool Definitions", () => {
       const readTool = tools.find((t) => t.name === "read_file")!;
 
       test("should have detailed description", () => {
-        expect(readTool.description).toContain("Reads a file from the local filesystem");
+        expect(readTool.description).toContain("Read a file from the local filesystem");
         expect(readTool.description).toContain("cat -n format");
         expect(readTool.description).toContain("2000 lines");
+        expect(readTool.description).toContain("AVOID tiny repeated slices");
       });
 
       test("should have correct parameters", async () => {
@@ -477,10 +478,11 @@ describe("File Tools - Tool Definitions", () => {
       const writeTool = tools.find((t) => t.name === "write_file")!;
 
       test("should have detailed description with usage guidelines", () => {
-        expect(writeTool.description).toContain("Writes a file to the local filesystem");
+        expect(writeTool.description).toContain("Write a file to the local filesystem");
         expect(writeTool.description).toContain("overwrite");
         expect(writeTool.description).toContain("Read tool first");
         expect(writeTool.description).toContain("NEVER proactively create documentation");
+        expect(writeTool.description).toContain("LSP diagnostics");
       });
 
       test("should have correct parameters", async () => {
