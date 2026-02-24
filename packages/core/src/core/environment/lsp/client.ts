@@ -6,6 +6,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { pathToFileURL } from "url";
 import { EventEmitter } from "events";
+import { existsSync } from "fs";
+import { dirname } from "path";
 import type { LSPServerInfo, LSPServerHandle } from "./server.js";
 import type { LSPDiagnostic } from "./diagnostics.js";
 import { getLanguageId } from "./language.js";
@@ -14,6 +16,58 @@ import { createLogger } from "../../../utils/logger.js";
 const lspLogger = createLogger("lsp:client", "server.log");
 
 let requestId = 1;
+
+/**
+ * Check if a command exists, if not try to install it
+ */
+async function ensureCommandExists(command: string, installCommand?: string): Promise<boolean> {
+  const { which } = await import("bun");
+  const found = which(command);
+  if (found) return true;
+
+  lspLogger.info(`LSP server '${command}' not found, attempting to install...`);
+
+  if (installCommand) {
+    try {
+      const installProcess = spawn(installCommand, [], {
+        stdio: "inherit",
+        shell: true,
+      });
+      await new Promise<void>((resolve, reject) => {
+        installProcess.on("close", (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`Install failed with code ${code}`));
+        });
+        installProcess.on("error", reject);
+      });
+
+      // Check again after install
+      const installed = which(command);
+      if (installed) {
+        lspLogger.info(`LSP server '${command}' installed successfully`);
+        return true;
+      }
+    } catch (error) {
+      lspLogger.error(`Failed to install LSP server '${command}'`, { error: (error as Error).message });
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get install command for LSP server
+ */
+function getInstallCommand(serverID: string): string | undefined {
+  const installCommands: Record<string, string> = {
+    typescript: "bun add -g typescript-language-server",
+    pyright: "pip install pyright",
+    gopls: "go install golang.org/x/tools/gopls@latest",
+    rustAnalyzer: "rustup component add rust-analyzer",
+    vueLanguageServer: "bun add -g @vue/language-server",
+  };
+  return installCommands[serverID];
+}
 
 interface LSPClientOptions {
   serverID: string;
@@ -45,43 +99,63 @@ export class LSPClient extends EventEmitter {
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        lspLogger.info(`Starting LSP server: ${this.serverID}`, { root: this.root });
+        const command = this.server.command[0];
+        const installCommand = getInstallCommand(this.serverID);
 
-        this.process = spawn(this.server.command[0], this.server.command.slice(1), {
-          stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, ...this.server.env },
-        });
-
-        this.process.stdout.on("data", (data: Buffer) => this.handleData(data));
-        this.process.stderr.on("data", (data: Buffer) => {
-          lspLogger.debug(`[${this.serverID}] stderr: ${data.toString()}`);
-        });
-
-        this.process.on("error", (error) => {
-          lspLogger.error(`LSP server process error: ${this.serverID}`, { error: error.message });
-          this.emit("error", error);
-        });
-
-        this.process.on("exit", (code) => {
-          lspLogger.info(`LSP server exited: ${this.serverID}`, { code });
-          this.emit("exit", code);
-        });
-
-        // Wait for process to be ready
-        this.process.stdout.once("data", () => {
-          resolve();
-        });
-
-        // Timeout fallback
-        setTimeout(() => {
-          if (!this.initialized) {
-            resolve(); // Resolve anyway to allow fallback
+        // Check if command exists, try to install if not
+        ensureCommandExists(command, installCommand).then((exists) => {
+          if (!exists) {
+            lspLogger.warn(`LSP server '${command}' not available, LSP features disabled for this session`);
+            resolve(); // Resolve gracefully instead of rejecting
+            return;
           }
-        }, 5000);
+
+          this.doStart(resolve, reject);
+        });
       } catch (error) {
-        reject(error);
+        lspLogger.error(`Failed to start LSP server: ${this.serverID}`, { error: (error as Error).message });
+        resolve(); // Resolve gracefully
       }
     });
+  }
+
+  /**
+   * Actually start the LSP server process
+   */
+  private doStart(resolve: () => void, reject: (error: Error) => void): void {
+    lspLogger.info(`Starting LSP server: ${this.serverID}`, { root: this.root });
+
+    this.process = spawn(this.server.command[0], this.server.command.slice(1), {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...this.server.env },
+    });
+
+    this.process.stdout.on("data", (data: Buffer) => this.handleData(data));
+    this.process.stderr.on("data", (data: Buffer) => {
+      lspLogger.debug(`[${this.serverID}] stderr: ${data.toString()}`);
+    });
+
+    this.process.on("error", (error) => {
+      lspLogger.error(`LSP server process error: ${this.serverID}`, { error: error.message });
+      this.emit("error", error);
+    });
+
+    this.process.on("exit", (code) => {
+      lspLogger.info(`LSP server exited: ${this.serverID}`, { code });
+      this.emit("exit", code);
+    });
+
+    // Wait for process to be ready
+    this.process.stdout.once("data", () => {
+      resolve();
+    });
+
+    // Timeout fallback
+    setTimeout(() => {
+      if (!this.initialized) {
+        resolve(); // Resolve anyway to allow fallback
+      }
+    }, 5000);
   }
 
   /**
