@@ -6,16 +6,48 @@ import { describe, it, expect, vi, beforeEach } from "bun:test";
 import { LSPClient } from "./client.js";
 
 describe("client.ts", () => {
-  describe("ensureCommandExists", () => {
-    it("should return true if command exists", async () => {
-      // This test would require mocking bun.which
-      // For now, just test that the function exists
-      expect(true).toBe(true);
+    describe("ensureCommandExists", () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
     });
 
-    it("should attempt to install if command not found", async () => {
-      // This test would require mocking the spawn and bun.which
-      expect(true).toBe(true);
+    it("should return exists=true if command exists", async () => {
+      const { ensureCommandExists } = await import("./client.js");
+      const result = await ensureCommandExists("node", undefined);
+      expect(result.exists).toBe(true);
+    });
+
+    it("should return binPath for bun global install", async () => {
+      process.env.BUN_INSTALL_BIN_DIR = "C:\\Users\\test\\.bun\\bin";
+      
+      const { ensureCommandExists } = await import("./client.js");
+      const result = await ensureCommandExists("node-that-does-not-exist-xyz", "bun add -g some-package");
+      
+      expect(result.exists).toBe(false);
+      expect(result.binPath).toBe("C:\\Users\\test\\.bun\\bin");
+    });
+
+    it("should use BUN_PREFIX as fallback for binPath", async () => {
+      delete process.env.BUN_INSTALL_BIN_DIR;
+      process.env.BUN_PREFIX = "C:\\Users\\test\\.bun";
+      
+      const { ensureCommandExists } = await import("./client.js");
+      const result = await ensureCommandExists("node-that-does-not-exist-xyz", "bun add -g some-package");
+      
+      expect(result.binPath).toBe("C:\\Users\\test\\.bun\\bin");
+    });
+
+    it("should not return binPath for non-bun install commands", async () => {
+      delete process.env.BUN_INSTALL_BIN_DIR;
+      delete process.env.BUN_PREFIX;
+      
+      const { ensureCommandExists } = await import("./client.js");
+      const result = await ensureCommandExists("node-that-does-not-exist-xyz", "pip install pyright");
+      
+      expect(result.exists).toBe(false);
+      expect(result.binPath).toBeUndefined();
     });
   });
 
