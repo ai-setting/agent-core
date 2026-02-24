@@ -463,15 +463,15 @@ Usage:
 - Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
 - Returns file paths and line numbers with at least one match sorted by modification time
 - Use this tool when you need to find files containing specific patterns
-- If you need to identify/count the number of matches within files, use the Bash tool with \`rg\` (ripgrep) directly. Do NOT use \`grep\`.
+- If you need to identify/count the number of matches within files, use the Bash tool with \`rg\` (ripgrep) directly. Do NOT use \`grep\`
 - When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead`;
 
   const globDescription = `- Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
-- Returns matching file paths sorted by modification time
+- Returns matching file paths sorted by modification time (most recent first)
 - Use this tool when you need to find files by name patterns
 - When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.`;
+- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful`;
 
   const writeFileDescription = `Write a file to the local filesystem.
 
@@ -851,15 +851,45 @@ Usage:
             includePatterns: args.include ? [args.include] : undefined,
           });
 
-          const output = results
-            .map((r) => `${r.file}:${r.line}: ${r.content}`)
-            .join("\n");
+          if (results.length === 0) {
+            return {
+              success: true,
+              output: "No files found",
+              metadata: createMetadata({
+                match_count: 0,
+              }),
+            };
+          }
+
+          const limit = args.maxMatches ?? 100;
+          const truncated = results.length > limit;
+          const finalResults = truncated ? results.slice(0, limit) : results;
+
+          const outputLines: string[] = [`Found ${results.length} matches${truncated ? ` (showing first ${limit})` : ""}`];
+
+          let currentFile = "";
+          for (const result of finalResults) {
+            if (currentFile !== result.file) {
+              if (currentFile !== "") {
+                outputLines.push("");
+              }
+              currentFile = result.file;
+              outputLines.push(`${result.file}:`);
+            }
+            outputLines.push(`  Line ${result.line}: ${result.content}`);
+          }
+
+          if (truncated) {
+            outputLines.push("");
+            outputLines.push(`(Results truncated: showing ${limit} of ${results.length} matches. Consider using a more specific path or pattern.)`);
+          }
 
           return {
             success: true,
-            output,
+            output: outputLines.join("\n"),
             metadata: createMetadata({
               match_count: results.length,
+              truncated,
             }),
           };
         } catch (error) {
