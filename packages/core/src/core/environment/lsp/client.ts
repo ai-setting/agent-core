@@ -58,13 +58,15 @@ async function ensureCommandExists(command: string, installCommand?: string): Pr
 /**
  * Get install command for LSP server
  */
-function getInstallCommand(serverID: string): string | undefined {
+export function getInstallCommand(serverID: string): string | undefined {
   const installCommands: Record<string, string> = {
     typescript: "bun add -g typescript-language-server",
     pyright: "pip install pyright",
     gopls: "go install golang.org/x/tools/gopls@latest",
     rustAnalyzer: "rustup component add rust-analyzer",
+    rust: "rustup component add rust-analyzer",
     vueLanguageServer: "bun add -g @vue/language-server",
+    vue: "bun add -g @vue/language-server",
   };
   return installCommands[serverID];
 }
