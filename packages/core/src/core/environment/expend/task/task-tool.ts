@@ -13,7 +13,11 @@ function loadTaskDescription(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const taskTxtPath = join(__dirname, "task.txt");
-  return readFileSync(taskTxtPath, "utf-8");
+  try {
+    return readFileSync(taskTxtPath, "utf-8");
+  } catch {
+    return "Task tool for managing background tasks and sub-agents.";
+  }
 }
 
 function buildTaskDescription(): string {

@@ -4,7 +4,9 @@ import * as jsonc from "jsonc-parser";
 import { ConfigPaths } from "../paths.js";
 import type { ConfigSource } from "../source.js";
 
-const PROVIDERS_CONFIG_FILE = path.join(ConfigPaths.config, "providers.jsonc");
+function getProvidersConfigPath(): string {
+  return path.join(ConfigPaths.config, "providers.jsonc");
+}
 
 export interface ProviderConfig {
   id?: string;
@@ -23,7 +25,7 @@ export interface ProvidersConfig {
 
 export async function loadProvidersConfig(): Promise<ProvidersConfig | null> {
   try {
-    const content = await fs.readFile(PROVIDERS_CONFIG_FILE, "utf-8");
+    const content = await fs.readFile(getProvidersConfigPath(), "utf-8");
     
     if (!content.trim()) {
       return null;

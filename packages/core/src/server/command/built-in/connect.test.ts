@@ -31,6 +31,7 @@ describe("Connect Command", () => {
   let authGetProviderSpy: any;
   let providersLoadSpy: any;
   let providersSaveSpy: any;
+  let providersGetAllSpy: any;
 
   beforeEach(() => {
     // Reset mock storage
@@ -52,6 +53,20 @@ describe("Connect Command", () => {
     providersSaveSpy = spyOn(ProvidersModule, "Providers_save").mockImplementation(async (providers: any) => {
       mockProvidersConfig = { ...providers };
     });
+    providersGetAllSpy = spyOn(ProvidersModule, "Providers_getAll").mockImplementation(async () => {
+      const builtIn = [
+        { id: "anthropic", name: "Anthropic", baseURL: "https://api.anthropic.com" },
+        { id: "openai", name: "OpenAI", baseURL: "https://api.openai.com" },
+        { id: "custom", name: "Custom Provider", baseURL: "" },
+      ];
+      const custom = Object.entries(mockProvidersConfig).map(([id, config]: [string, any]) => ({
+        id,
+        name: config.name || id,
+        baseURL: config.baseURL || "",
+        description: config.description,
+      }));
+      return [...builtIn, ...custom];
+    });
   });
 
   afterEach(() => {
@@ -62,6 +77,7 @@ describe("Connect Command", () => {
     authGetProviderSpy?.mockRestore();
     providersLoadSpy?.mockRestore();
     providersSaveSpy?.mockRestore();
+    providersGetAllSpy?.mockRestore();
   });
 
   describe("list action", () => {
