@@ -1,21 +1,17 @@
 /**
- * @fileoverview Provider Management - Provider configuration persistence
+ * @fileoverview Provider Management
  * 
- * Manages provider configurations in config.jsonc, including:
- * - baseURL
- * - models list
- * - description
- * 
- * API keys are still stored in auth.json
+ * Manages provider configurations:
+ * - Built-in defaults (openai, anthropic, google)
+ * - providers.jsonc (primary source)
  */
 
 import fs from "fs/promises";
 import path from "path";
 import { ConfigPaths } from "./paths.js";
-import { Config_get, Config_reload, Config_notifyChange } from "./config.js";
-import type { Config } from "./types.js";
+import { Config_reload } from "./config.js";
+import { loadProvidersConfig } from "./sources/providers.js";
 
-// Provider configuration file path
 const PROVIDERS_CONFIG_FILE = path.join(ConfigPaths.config, "providers.jsonc");
 
 /**
@@ -26,6 +22,7 @@ export interface ProviderInfo {
   name: string;
   description?: string;
   baseURL?: string;
+  apiKey?: string;
   models?: string[];
   defaultModel?: string;
 }
@@ -34,23 +31,24 @@ export interface ProviderInfo {
  * Load providers configuration from providers.jsonc
  */
 export async function Providers_load(): Promise<Record<string, ProviderInfo>> {
-  try {
-    const content = await fs.readFile(PROVIDERS_CONFIG_FILE, "utf-8");
-    // Remove comments (JSONC format)
-    const jsonContent = content.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-    if (!jsonContent.trim()) {
-      return {};
-    }
-    const parsed = JSON.parse(jsonContent);
-    return parsed.providers || {};
-  } catch (error) {
-    if (error instanceof Error && "code" in error && (error as { code: string }).code === "ENOENT") {
-      // File doesn't exist, return empty object
-      return {};
-    }
-    console.warn("[Providers] Failed to load providers config:", error);
+  const config = await loadProvidersConfig();
+  if (!config?.providers) {
     return {};
   }
+  
+  const result: Record<string, ProviderInfo> = {};
+  for (const [id, p] of Object.entries(config.providers)) {
+    result[id] = {
+      id,
+      name: p.name,
+      description: p.description,
+      baseURL: p.baseURL,
+      apiKey: p.apiKey,
+      models: p.models,
+      defaultModel: p.defaultModel,
+    };
+  }
+  return result;
 }
 
 /**
@@ -58,7 +56,6 @@ export async function Providers_load(): Promise<Record<string, ProviderInfo>> {
  */
 export async function Providers_save(providers: Record<string, ProviderInfo>): Promise<void> {
   try {
-    // Ensure config directory exists
     await fs.mkdir(ConfigPaths.config, { recursive: true });
     
     const config = {
@@ -67,16 +64,13 @@ export async function Providers_save(providers: Record<string, ProviderInfo>): P
     };
     
     const content = `// Provider configurations
-// This file stores provider metadata (baseURL, models, etc.)
-// API keys are stored separately in auth.json
+// This file stores provider metadata (baseURL, models, apiKey, etc.)
 
 ${JSON.stringify(config, null, 2)}`;
     
     await fs.writeFile(PROVIDERS_CONFIG_FILE, content, "utf-8");
     
-    // Notify config change
-    const currentConfig = await Config_get();
-    Config_notifyChange(currentConfig);
+    Config_reload();
   } catch (error) {
     console.error("[Providers] Failed to save providers config:", error);
     throw error;
@@ -87,8 +81,8 @@ ${JSON.stringify(config, null, 2)}`;
  * Get a single provider by ID
  */
 export async function Providers_get(id: string): Promise<ProviderInfo | undefined> {
-  const providers = await Providers_load();
-  return providers[id];
+  const all = await Providers_getAll();
+  return all.find(p => p.id === id);
 }
 
 /**
@@ -113,128 +107,80 @@ export async function Providers_remove(id: string): Promise<void> {
  * List all provider IDs
  */
 export async function Providers_list(): Promise<string[]> {
-  const providers = await Providers_load();
-  return Object.keys(providers);
+  const providers = await Providers_getAll();
+  return providers.map(p => p.id);
 }
 
 /**
- * Merge providers from config.jsonc (legacy) into providers.jsonc
- * This is used for migration or when providers are defined in the main config
+ * Built-in providers with default models (minimal set)
+ * Primary sources: providers.jsonc (recommended) > built-in
  */
-export async function Providers_mergeFromConfig(): Promise<void> {
-  const config = await Config_get();
-  if (!config.provider) {
-    return;
-  }
-  
-  const existing = await Providers_load();
-  let updated = false;
-  
-  for (const [id, providerConfig] of Object.entries(config.provider)) {
-    if (!existing[id]) {
-      existing[id] = {
-        id,
-        name: id,
-        baseURL: providerConfig.baseURL,
-        models: providerConfig.models,
-        defaultModel: providerConfig.defaultModel,
-      };
-      updated = true;
-    }
-  }
-  
-  if (updated) {
-    await Providers_save(existing);
-  }
-}
+const builtinProviders: ProviderInfo[] = [
+  { 
+    id: "openai", 
+    name: "OpenAI", 
+    description: "GPT models by OpenAI", 
+    baseURL: "https://api.openai.com/v1",
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+    defaultModel: "gpt-4o"
+  },
+  { 
+    id: "anthropic", 
+    name: "Anthropic", 
+    description: "Claude models by Anthropic", 
+    baseURL: "https://api.anthropic.com/v1",
+    models: ["claude-sonnet-4-5", "claude-sonnet-4-20250514", "claude-haiku-3-5"],
+    defaultModel: "claude-sonnet-4-5"
+  },
+  { 
+    id: "google", 
+    name: "Google", 
+    description: "Gemini models by Google", 
+    baseURL: "https://generativelanguage.googleapis.com/v1",
+    models: ["gemini-2.0-flash-exp", "gemini-2.0-pro-exp", "gemini-1.5-pro"],
+    defaultModel: "gemini-2.0-flash-exp"
+  },
+];
 
 /**
  * Get full provider list including built-in and custom providers
- * Merges data from providers.jsonc and auth.json
+ * Merges data from built-in and providers.jsonc
+ * Priority: providers.jsonc > built-in
  */
 export async function Providers_getAll(): Promise<ProviderInfo[]> {
-  const [customProviders, config] = await Promise.all([
-    Providers_load(),
-    Config_get(),
-  ]);
+  const providersConfig = await loadProvidersConfig();
   
-  // Built-in providers with default models
-  const builtinProviders: ProviderInfo[] = [
-    { 
-      id: "anthropic", 
-      name: "Anthropic", 
-      description: "Claude models by Anthropic", 
-      baseURL: "https://api.anthropic.com/v1",
-      models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3-5-sonnet"]
-    },
-    { 
-      id: "openai", 
-      name: "OpenAI", 
-      description: "GPT models by OpenAI", 
-      baseURL: "https://api.openai.com/v1",
-      models: ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
-    },
-    { 
-      id: "google", 
-      name: "Google", 
-      description: "Gemini models by Google", 
-      baseURL: "https://generativelanguage.googleapis.com/v1",
-      models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
-    },
-    { 
-      id: "deepseek", 
-      name: "DeepSeek", 
-      description: "DeepSeek models", 
-      baseURL: "https://api.deepseek.com/v1",
-      models: ["deepseek-chat", "deepseek-coder"]
-    },
-    { 
-      id: "zhipuai", 
-      name: "ZhipuAI", 
-      description: "GLM models by ZhipuAI", 
-      baseURL: "https://open.bigmodel.cn/api/paas/v4",
-      models: ["glm-5", "glm-4", "glm-4-plus", "glm-3-turbo"]
-    },
-    { 
-      id: "kimi", 
-      name: "Kimi", 
-      description: "Moonshot AI Kimi models", 
-      baseURL: "https://api.moonshot.cn/v1",
-      models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
-    },
-  ];
+  const merged: Record<string, ProviderInfo> = {};
   
-  // Merge custom providers from providers.jsonc
-  const allProviders: ProviderInfo[] = [];
+  // 1. Add built-in providers first (lowest priority)
+  for (const p of builtinProviders) {
+    merged[p.id] = { ...p };
+  }
   
-  // Add custom providers first
-  for (const [id, info] of Object.entries(customProviders)) {
-    if (!builtinProviders.find(p => p.id === id)) {
-      allProviders.push(info);
+  // 2. Add providers from providers.jsonc (higher priority)
+  if (providersConfig?.providers) {
+    for (const [id, p] of Object.entries(providersConfig.providers)) {
+      merged[id] = {
+        ...merged[id],
+        id,
+        name: p.name,
+        description: p.description,
+        baseURL: p.baseURL,
+        apiKey: p.apiKey,
+        models: p.models,
+        defaultModel: p.defaultModel,
+      };
     }
   }
   
-  // Add built-in providers (with config from providers.jsonc if available)
-  for (const builtin of builtinProviders) {
-    const custom = customProviders[builtin.id];
-    if (custom) {
-      // Merge custom config with builtin
-      allProviders.push({
-        ...builtin,
-        ...custom,
-        id: builtin.id, // Ensure ID is correct
-      });
-    } else {
-      allProviders.push(builtin);
-    }
-  }
+  const result = Object.values(merged);
   
   // Add "Custom Provider" option at the end
-  allProviders.push({
+  result.push({
     id: "custom",
     name: "Custom Provider",
     description: "Add a custom LLM provider",
   });
   
-  return allProviders;
+  return result;
 }

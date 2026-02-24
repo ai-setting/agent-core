@@ -1,12 +1,14 @@
 import { z } from "zod";
 
-// Provider 配置
+// Provider 配置 (providers.jsonc)
 const ProviderConfig = z.object({
-  baseURL: z.string().optional().describe("Provider base URL"),
-  apiKey: z.string().optional().describe("API key"),
-  defaultModel: z.string().optional().describe("Default model for this provider"),
-  models: z.array(z.string()).optional().describe("Available models for this provider"),
+  id: z.string().optional().describe("Provider ID (key from providers object)"),
+  name: z.string().describe("Provider display name"),
   description: z.string().optional().describe("Provider description"),
+  baseURL: z.string().describe("Provider API base URL"),
+  apiKey: z.string().optional().describe("API key (supports ${ENV_VAR} syntax)"),
+  models: z.array(z.string()).optional().describe("Available models"),
+  defaultModel: z.string().optional().describe("Default model for this provider"),
 });
 
 // Agent 配置（基于 env_spec/types.ts AgentSpec）
@@ -88,8 +90,8 @@ export const ConfigInfo = z.object({
   baseURL: z.string().optional().describe("Default LLM provider base URL"),
   apiKey: z.string().optional().describe("Default LLM API key"),
   
-  // === Provider 配置 ===
-  provider: z.record(ProviderConfig).optional().describe("Provider-specific configurations"),
+  // === Provider 配置 (providers.jsonc) ===
+  providers: z.record(ProviderConfig).optional().describe("Provider configurations from providers.jsonc"),
   
   // === Environment 运行时配置（从 environments/{env}/config.jsonc 加载）===
   environment: EnvironmentRuntimeConfig.optional().describe("Agent runtime environment configuration"),

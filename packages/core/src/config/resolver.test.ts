@@ -228,12 +228,14 @@ describe("Resolver", () => {
       });
 
       const input: Config.Info = {
-        provider: {
+        providers: {
           openai: {
+            name: "OpenAI",
             baseURL: "https://api.openai.com",
             apiKey: "${auth:openai-auth}",
           },
           anthropic: {
+            name: "Anthropic",
             baseURL: "https://api.anthropic.com",
             apiKey: "${auth:anthropic-auth}",
           },
@@ -241,9 +243,9 @@ describe("Resolver", () => {
       };
 
       const result = await resolveConfig(input);
-      expect(result.provider?.openai?.apiKey).toBe("openai-key");
-      expect(result.provider?.anthropic?.apiKey).toBe("anthropic-key");
-      expect(result.provider?.openai?.baseURL).toBe("https://api.openai.com"); // 未改变
+      expect(result.providers?.openai?.apiKey).toBe("openai-key");
+      expect(result.providers?.anthropic?.apiKey).toBe("anthropic-key");
+      expect(result.providers?.openai?.baseURL).toBe("https://api.openai.com"); // 未改变
     });
 
     it("should handle missing apiKey gracefully", async () => {
@@ -265,7 +267,7 @@ describe("Resolver", () => {
 
       const result = await resolveConfig(input);
       expect(result.activeEnvironment).toBe("test");
-      expect(result.provider).toBeUndefined();
+      expect(result.providers).toBeUndefined();
     });
 
     it("should handle complex real-world config", async () => {
@@ -287,13 +289,15 @@ describe("Resolver", () => {
         defaultModel: "anthropic/claude-sonnet-4-5",
         apiKey: "${auth:kimi-prod}",
         baseURL: "https://api.moonshot.cn/v1",
-        provider: {
+        providers: {
           zhipuai: {
+            name: "ZhipuAI",
             baseURL: "https://open.bigmodel.cn/api/paas/v4",
             apiKey: "${auth:zhipuai-coding}",
             defaultModel: "glm-4",
           },
           moonshot: {
+            name: "Moonshot",
             baseURL: "${auth:kimi-prod}",
             apiKey: "${auth:kimi-prod}",
             defaultModel: "moonshot-v1-128k",
@@ -305,9 +309,9 @@ describe("Resolver", () => {
       
       // 验证所有引用都被解析
       expect(result.apiKey).toBe("kimi-real-key");
-      expect(result.provider?.zhipuai?.apiKey).toBe("zhipuai-real-key");
-      expect(result.provider?.moonshot?.apiKey).toBe("kimi-real-key");
-      expect(result.provider?.moonshot?.baseURL).toBe("kimi-real-key"); // 注意：这里会从 auth 读取 key，而不是 baseURL
+      expect(result.providers?.zhipuai?.apiKey).toBe("zhipuai-real-key");
+      expect(result.providers?.moonshot?.apiKey).toBe("kimi-real-key");
+      expect(result.providers?.moonshot?.baseURL).toBe("kimi-real-key"); // 注意：这里会从 auth 读取 key，而不是 baseURL
     });
   });
 

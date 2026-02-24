@@ -1,5 +1,6 @@
 import { configRegistry } from "./registry.js";
 import { globalSource } from "./sources/global.js";
+import { providersSource } from "./sources/providers.js";
 import { createFileSource } from "./sources/file.js";
 import { createInlineSource } from "./sources/inline.js";
 import { createEnvironmentSource } from "./sources/environment.js";
@@ -8,6 +9,7 @@ import { Auth_loadToEnv } from "./auth.js";
 export function initDefaultSources(): void {
   configRegistry.clear();
   configRegistry.register(globalSource);
+  configRegistry.register(providersSource);
 }
 
 export async function initWithEnvOverrides(): Promise<void> {

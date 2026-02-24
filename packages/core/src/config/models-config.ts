@@ -87,9 +87,9 @@ export async function ModelsConfig_getFromProviders(): Promise<ProviderModels[]>
   const config = await Config_get();
   const providers: ProviderModels[] = [];
 
-  // Get models from provider configs
-  if (config.provider) {
-    for (const [providerId, providerConfig] of Object.entries(config.provider)) {
+  // Get models from providers configs
+  if (config.providers) {
+    for (const [providerId, providerConfig] of Object.entries(config.providers)) {
       if (providerConfig.models && providerConfig.models.length > 0) {
         providers.push({
           providerID: providerId,

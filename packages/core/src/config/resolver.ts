@@ -102,7 +102,7 @@ export async function resolveObject<T extends Record<string, unknown>>(obj: T): 
 
 /**
  * Resolve variable references in Config.Info
- * Specifically handles apiKey, baseURL, and provider configurations
+ * Specifically handles apiKey, baseURL, and providers configurations
  */
 export async function resolveConfig(config: Config.Info): Promise<Config.Info> {
   const resolved = { ...config };
@@ -115,9 +115,9 @@ export async function resolveConfig(config: Config.Info): Promise<Config.Info> {
     resolved.baseURL = await resolveValue(resolved.baseURL);
   }
 
-  // Resolve provider configurations
-  if (resolved.provider) {
-    for (const [name, provider] of Object.entries(resolved.provider)) {
+  // Resolve providers configurations (providers.jsonc)
+  if (resolved.providers) {
+    for (const [name, provider] of Object.entries(resolved.providers)) {
       if (provider.apiKey) {
         provider.apiKey = await resolveValue(provider.apiKey);
       }
