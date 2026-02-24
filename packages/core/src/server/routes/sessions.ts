@@ -150,6 +150,8 @@ app.get("/:id/messages", async (c) => {
  * POST /sessions/:id/prompt - Send prompt to AI
  *
  * Produces user_query event, let EventBus handle it.
+ * Note: This endpoint returns immediately without waiting for the full agent execution.
+ * The agent runs asynchronously in the background and sends events via SSE.
  */
 app.post("/:id/prompt", async (c) => {
   const env = await ensureSessionEnv(c);
@@ -179,7 +181,11 @@ app.post("/:id/prompt", async (c) => {
     }
   };
 
-  await env.publishEvent(event);
+  // Fire and forget - don't await, let the agent run asynchronously
+  // Events will be streamed back via SSE connection
+  env.publishEvent(event).catch((err) => {
+    sessionLogger.error("Failed to publish event", { sessionId: id, error: err.message });
+  });
 
   return c.json({
     success: true,
