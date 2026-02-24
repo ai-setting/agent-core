@@ -675,7 +675,11 @@ export class ServerEnvironment extends BaseEnvironment {
       this.registerTool(taskTool);
       this.registerTool(stopTaskTool);
 
-      console.log(`[ServerEnvironment] Registered ${allTools.length + 3} tools (including skill tool, task tool, and stop_task tool):`, allTools.map((t: any) => t.name));
+      // Register InvalidTool for reporting invalid tool calls
+      const { createInvalidTool } = await import("../core/environment/expend/invalid-tool.js");
+      this.registerTool(createInvalidTool());
+
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 4} tools (including skill tool, task tool, stop_task tool, and invalid tool):`, allTools.map((t: any) => t.name));
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");
