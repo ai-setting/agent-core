@@ -7,7 +7,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { pathToFileURL } from "url";
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import type { LSPServerInfo, LSPServerHandle } from "./server.js";
 import type { LSPDiagnostic } from "./diagnostics.js";
 import { getLanguageId } from "./language.js";
@@ -20,12 +20,18 @@ let requestId = 1;
 /**
  * Check if a command exists, if not try to install it
  */
-async function ensureCommandExists(command: string, installCommand?: string): Promise<boolean> {
+export async function ensureCommandExists(command: string, installCommand?: string): Promise<{ exists: boolean; binPath?: string }> {
   const { which } = await import("bun");
   const found = which(command);
-  if (found) return true;
+  if (found) return { exists: true };
 
   lspLogger.info(`LSP server '${command}' not found, attempting to install...`);
+
+  let bunBinPath: string | undefined;
+
+  if (installCommand?.startsWith("bun add -g")) {
+    bunBinPath = process.env.BUN_INSTALL_BIN_DIR ?? join(process.env.BUN_PREFIX ?? "", "bin");
+  }
 
   if (installCommand) {
     try {
@@ -41,18 +47,17 @@ async function ensureCommandExists(command: string, installCommand?: string): Pr
         installProcess.on("error", reject);
       });
 
-      // Check again after install
       const installed = which(command);
       if (installed) {
         lspLogger.info(`LSP server '${command}' installed successfully`);
-        return true;
+        return { exists: true, binPath: bunBinPath };
       }
     } catch (error) {
       lspLogger.error(`Failed to install LSP server '${command}'`, { error: (error as Error).message });
     }
   }
 
-  return false;
+  return { exists: false, binPath: bunBinPath };
 }
 
 /**
@@ -104,19 +109,18 @@ export class LSPClient extends EventEmitter {
         const command = this.server.command[0];
         const installCommand = getInstallCommand(this.serverID);
 
-        // Check if command exists, try to install if not
-        ensureCommandExists(command, installCommand).then((exists) => {
+        ensureCommandExists(command, installCommand).then(({ exists, binPath }) => {
           if (!exists) {
             lspLogger.warn(`LSP server '${command}' not available, LSP features disabled for this session`);
-            resolve(); // Resolve gracefully instead of rejecting
+            resolve();
             return;
           }
 
-          this.doStart(resolve, reject);
+          this.doStart(resolve, reject, binPath);
         });
       } catch (error) {
         lspLogger.error(`Failed to start LSP server: ${this.serverID}`, { error: (error as Error).message });
-        resolve(); // Resolve gracefully
+        resolve();
       }
     });
   }
@@ -124,12 +128,18 @@ export class LSPClient extends EventEmitter {
   /**
    * Actually start the LSP server process
    */
-  private doStart(resolve: () => void, reject: (error: Error) => void): void {
+  private doStart(resolve: () => void, reject: (error: Error) => void, binPath?: string): void {
     lspLogger.info(`Starting LSP server: ${this.serverID}`, { root: this.root });
+
+    const env = { ...process.env };
+    if (binPath) {
+      env.PATH = binPath + (process.platform === "win32" ? ";" : ":") + env.PATH;
+      lspLogger.debug(`Added to PATH: ${binPath}`);
+    }
 
     this.process = spawn(this.server.command[0], this.server.command.slice(1), {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...this.server.env },
+      env: { ...env, ...this.server.env },
     });
 
     this.process.stdout.on("data", (data: Buffer) => this.handleData(data));
