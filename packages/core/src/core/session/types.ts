@@ -234,6 +234,7 @@ export interface HistoryMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: MessageContent | MessageContent[];
   name?: string;
+  tool_call_id?: string;
 }
 
 /**
