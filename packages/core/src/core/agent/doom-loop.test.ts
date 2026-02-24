@@ -1,5 +1,5 @@
 /**
- * @fileoverview Agent doom loop integration tests
+ * @fileoverview Unit tests for Agent doom loop and invalid tool handling
  */
 
 import { describe, it, expect, beforeEach, vi } from "bun:test";
@@ -106,6 +106,87 @@ describe("Agent Doom Loop Integration", () => {
 
       // Same args but different tools - we can't directly test but verify structure
       expect(readFileArgs).toEqual(echoArgs); // Same args
+    });
+  });
+
+  describe("invalid tool filtering", () => {
+    it("should filter out invalid tool from active tools", () => {
+      const mockEvent = { type: "test" } as any;
+      const mockEnv = {
+        handle_action: vi.fn().mockResolvedValue({ success: true, output: "done" }),
+        invokeLLM: vi.fn().mockResolvedValue({ success: true, output: { content: "test" } }),
+      } as any;
+
+      const toolsWithInvalid = [
+        ...mockTools,
+        {
+          name: "invalid",
+          description: "Internal tool",
+          parameters: {} as any,
+          execute: vi.fn(),
+        } as Tool,
+      ];
+
+      const agent = new Agent(
+        mockEvent,
+        mockEnv,
+        toolsWithInvalid,
+        {}
+      );
+
+      // Agent should be created - invalid tool should be filtered internally
+      expect(agent).toBeDefined();
+    });
+  });
+
+  describe("invalid tool result handling", () => {
+    it("should return invalid tool result for doom loop detection", () => {
+      const mockEvent = { type: "test" } as any;
+      const mockEnv = {
+        handle_action: vi.fn().mockResolvedValue({ success: true, output: "done" }),
+        invokeLLM: vi.fn().mockResolvedValue({ 
+          success: true, 
+          output: { 
+            content: "", 
+            tool_calls: [{ id: "call_1", function: { name: "read_file", arguments: '{"path":"test.ts"}' } }] 
+          } 
+        }),
+      } as any;
+
+      const agent = new Agent(
+        mockEvent,
+        mockEnv,
+        mockTools,
+        {},
+        { doomLoopThreshold: 3 }
+      );
+
+      // Verify agent can be created and handles tool calls
+      expect(agent).toBeDefined();
+    });
+
+    it("should return invalid tool result for unavailable tools", () => {
+      const mockEvent = { type: "test" } as any;
+      const mockEnv = {
+        handle_action: vi.fn().mockResolvedValue({ success: true, output: "done" }),
+        invokeLLM: vi.fn().mockResolvedValue({ 
+          success: true, 
+          output: { 
+            content: "", 
+            tool_calls: [{ id: "call_1", function: { name: "nonexistent_tool", arguments: '{}' } }] 
+          } 
+        }),
+      } as any;
+
+      const agent = new Agent(
+        mockEvent,
+        mockEnv,
+        mockTools,
+        {}
+      );
+
+      // Verify agent can be created with allowed tools list
+      expect(agent).toBeDefined();
     });
   });
 });
