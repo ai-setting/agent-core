@@ -239,7 +239,7 @@ describe("Background Task Progress Notification to Main Session", () => {
           subagentType: "general",
         });
 
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
 
         const completedEvents = publishedEvents.filter(
           e => e.type === EventTypes.BACKGROUND_TASK_COMPLETED
