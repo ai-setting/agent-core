@@ -41,6 +41,9 @@ import { ConfigPaths } from "../config/paths.js";
 import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
 import { serverLogger } from "./logger.js";
 import type { BackgroundTaskManager } from "../core/environment/expend/task/background-task-manager.js";
+import { EventMcpManager } from "./env_spec/mcp/event-source/manager.js";
+import type { EventSourceMcpConfig } from "./env_spec/mcp/event-source/types.js";
+import type { McpConfig } from "../env_spec/mcp/types.js";
 
 export interface ServerEnvironmentConfig extends BaseEnvironmentConfig {
   sessionId?: string;
@@ -66,6 +69,8 @@ export class ServerEnvironment extends BaseEnvironment {
   private rulesDirectory: string | undefined;
   private promptsDirectory: string | undefined;
   private backgroundTaskManager: BackgroundTaskManager | undefined;
+  private eventMcpManager: EventMcpManager | undefined;
+  private eventSourceConfig: EventSourceMcpConfig | undefined;
   
   // Track streaming content for interrupt handling
   private currentStreamingContent: {
@@ -89,6 +94,7 @@ export class ServerEnvironment extends BaseEnvironment {
     this.sessionId = config?.sessionId || "default";
     this.modelStore = new ModelStore();
     this.eventBus = new EnvEventBus(this);
+    this.eventMcpManager = new EventMcpManager(this);
 
     // Initialize event rules
     this.initEventRules();
@@ -163,6 +169,12 @@ export class ServerEnvironment extends BaseEnvironment {
           "mcpservers"
         );
         await this.initializeMcp(config.mcp);
+
+        // 1.6.1 Initialize EventSource MCP clients
+        this.eventSourceConfig = (config.mcp as any)?.eventSources;
+        if (this.eventSourceConfig?.enabled) {
+          await this.initEventSources(config.mcp?.clients);
+        }
 
         // 1.7. Load prompts from environment config
         serverLogger.info(`[ServerEnvironment] activeEnvironment: ${config.activeEnvironment}`);
@@ -692,6 +704,53 @@ export class ServerEnvironment extends BaseEnvironment {
 
   protected getMcpserversDirectory(): string | undefined {
     return this.mcpserversDirectory;
+  }
+
+  /**
+   * 初始化 EventSource MCP Clients
+   */
+  private async initEventSources(mcpClientsConfig?: Record<string, any>): Promise<void> {
+    if (!mcpClientsConfig) {
+      serverLogger.info("[ServerEnvironment] No MCP clients config for EventSources");
+      return;
+    }
+
+    if (!this.eventMcpManager) {
+      serverLogger.warn("[ServerEnvironment] EventMcpManager not initialized");
+      return;
+    }
+
+    try {
+      await this.eventMcpManager.loadClients(
+        mcpClientsConfig,
+        this.eventSourceConfig?.sources as any
+      );
+      serverLogger.info("[ServerEnvironment] EventSources initialized", {
+        sources: this.eventMcpManager.getEventSourceNames()
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      serverLogger.error("[ServerEnvironment] Failed to initialize EventSources", { error: errorMsg });
+    }
+  }
+
+  /**
+   * 获取 EventSource 管理器
+   */
+  getEventMcpManager(): EventMcpManager | undefined {
+    return this.eventMcpManager;
+  }
+
+  /**
+   * 手动添加 EventSource
+   */
+  async addEventSource(name: string, config: any): Promise<void> {
+    if (!this.eventMcpManager) {
+      this.eventMcpManager = new EventMcpManager(this);
+    }
+    await this.eventMcpManager.loadClients({ [name]: config }, {
+      [name]: { name, client: config, enabled: true }
+    });
   }
 
   protected override getRulesFilePath(): string | undefined {
