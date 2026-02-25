@@ -97,7 +97,7 @@ export const TuiCommand: CommandModule<object, TuiOptions> = {
     console.log("🚀 启动 tong_work...");
 
     // 初始化 Server（注册命令、加载配置、创建 Environment）
-    const { port: actualPort } = await initServer({
+    const { server, port: actualPort } = await initServer({
       port: args.port || 4096,
       hostname: "localhost",
       model: args.model,
@@ -122,15 +122,21 @@ export const TuiCommand: CommandModule<object, TuiOptions> = {
       }
     }
 
+    const stopServer = async () => {
+      console.log("\n🛑 正在停止服务器...");
+      await server.stop();
+    };
+
     await startTUI({
       url: serverUrl,
       sessionID: args.session,
-      onExit: () => {
+      onExit: async () => {
+        await stopServer();
         console.log("\n👋 再见!");
         process.exit(0);
       },
     });
 
     await new Promise(() => {});
-  },
+  }
 };
