@@ -9,6 +9,7 @@
 import path from "path";
 import fs from "fs";
 import { $ } from "bun";
+import solidPlugin from "@opentui/solid/bun-plugin";
 
 const ROOT = path.resolve(".");
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
@@ -19,6 +20,13 @@ const RELEASE = process.env.RELEASE === "1";
 
 const SINGLE_FLAG = process.argv.includes("--single");
 const BASELINE_FLAG = process.argv.includes("--baseline");
+const SKIP_INSTALL = process.argv.includes("--skip-install");
+
+const OPENTUI_SOLID_VERSION = PKG.dependencies["@opentui/solid"];
+
+if (!SKIP_INSTALL && OPENTUI_SOLID_VERSION) {
+  await $`bun install --os="*" --cpu="*" @opentui/core@${OPENTUI_SOLID_VERSION}`;
+}
 
 const TARGETS = [
   { os: "linux", arch: "arm64" },
@@ -38,8 +46,37 @@ async function build() {
   console.log(`Building tong_work ${VERSION} (${CHANNEL})`);
   console.log("");
 
-  // Clean dist
-  await $`rm -rf ${path.join(ROOT, "dist")}`;
+  // Clean dist (skip if another instance is running)
+  const distPath = path.join(ROOT, "dist");
+  let cleaned = false;
+  if (process.platform === "win32") {
+    try {
+      await $`powershell -Command "Remove-Item -Recurse -Force '${distPath}' -ErrorAction Stop"`;
+      cleaned = true;
+    } catch {
+      console.log("Warning: Could not clean dist (file may be locked), continuing...");
+    }
+  } else {
+    try {
+      await $`rm -rf ${distPath}`;
+      cleaned = true;
+    } catch {
+      console.log("Warning: Could not clean dist, continuing...");
+    }
+  }
+
+  // If we couldn't clean, rename the old binary to avoid conflict
+  const targetDir = path.join(distPath, "tong_work-windows-x64", "bin");
+  const targetExe = path.join(targetDir, "tong_work.exe");
+  if (!cleaned && fs.existsSync(targetExe)) {
+    const backupPath = path.join(targetDir, "tong_work_old.exe");
+    try {
+      fs.renameSync(targetExe, backupPath);
+      console.log("Moved old executable to tong_work_old.exe");
+    } catch {
+      // Ignore - will try to overwrite anyway
+    }
+  }
 
   // Filter targets
   const targets = SINGLE_FLAG
@@ -86,6 +123,10 @@ async function build() {
     try {
       // Build with bun compile
       await Bun.build({
+        conditions: ["browser"],
+        tsconfig: "./tsconfig.json",
+        plugins: [solidPlugin],
+        sourcemap: "external",
         entrypoints: [path.join(ROOT, "src", "cli", "index.ts")],
         compile: {
           target: targetTriple,

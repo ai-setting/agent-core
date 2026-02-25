@@ -22,6 +22,7 @@ export interface ServerConfig {
   hostname?: string;
   cors?: string[];
   env?: ServerEnvironment;
+  enableLogger?: boolean;
 }
 
 export class AgentServer {
@@ -34,6 +35,7 @@ export class AgentServer {
       port: config.port || 3000,
       hostname: config.hostname || "0.0.0.0",
       cors: config.cors || ["*"],
+      enableLogger: config.enableLogger,
     };
     this.env = config.env;
 
@@ -50,8 +52,10 @@ export class AgentServer {
       allowHeaders: ["Content-Type", "Authorization"],
     }));
 
-    // Logger
-    this.app.use(logger());
+    // Logger - can be disabled (e.g., when running in TUI mode to avoid console output)
+    if (this.config.enableLogger !== false) {
+      this.app.use(logger());
+    }
 
     // Set environment in context for routes that need it
     this.app.use("/sessions/*", async (c, next) => {
@@ -111,18 +115,40 @@ export class AgentServer {
     return this.app;
   }
 
-  async start(): Promise<void> {
-    const { port, hostname } = this.config;
-    
-    Bun.serve({
-      port,
-      hostname,
-      fetch: this.app.fetch,
-    });
+  async start(): Promise<number> {
+    const port = this.config.port ?? 4096;
+    const hostname = this.config.hostname ?? "0.0.0.0";
+
+    const tryServe = (listenPort: number) => {
+      try {
+        return Bun.serve({
+          port: listenPort,
+          hostname,
+          fetch: this.app.fetch,
+        });
+      } catch {
+        return undefined;
+      }
+    };
+
+    const server = tryServe(port);
+    if (!server) {
+      console.error(`❌ 端口 ${port} 被占用，尝试其他端口...`);
+      const fallbackServer = tryServe(0);
+      if (!fallbackServer || !fallbackServer.port) {
+        throw new Error(`无法启动服务器，所有端口都不可用`);
+      }
+      const actualPort = fallbackServer.port;
+      console.log(`✅ 服务器已启动: http://${hostname}:${actualPort}`);
+      console.log(`📡 SSE endpoint: http://${hostname}:${actualPort}/events`);
+      console.log(`❤️  Health check: http://${hostname}:${actualPort}/health`);
+      return actualPort;
+    }
 
     console.log(`🚀 Server running at http://${hostname}:${port}`);
     console.log(`📡 SSE endpoint: http://${hostname}:${port}/events`);
     console.log(`❤️  Health check: http://${hostname}:${port}/health`);
+    return port;
   }
 }
 

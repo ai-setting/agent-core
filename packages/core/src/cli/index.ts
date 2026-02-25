@@ -12,6 +12,7 @@ import { VersionCommand } from "./commands/version.js";
 import { ServeCommand } from "./commands/serve.js";
 import { RunCommand } from "./commands/run.js";
 import { AttachCommand } from "./commands/attach.js";
+import { TuiCommand } from "./commands/tui.js";
 
 async function main() {
   const pkg = await import("../../package.json", { with: { type: "json" } });
@@ -20,6 +21,7 @@ async function main() {
     .scriptName("tong_work")
     .version(pkg.default.version)
     .usage("$0 <command> [args]")
+    .command(TuiCommand)
     .command(VersionCommand)
     .command(ServeCommand)
     .command(RunCommand)
