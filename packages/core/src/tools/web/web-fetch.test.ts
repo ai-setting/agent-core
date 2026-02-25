@@ -39,8 +39,8 @@ describe("WebFetch Tool - Parameter Validation", () => {
       {}
     );
 
-    // Should not have URL validation error
-    if (result.error) {
+    // Should not have URL validation error - result.error may be undefined
+    if (typeof result.error === "string") {
       expect(result.error.includes("must start with")).toBe(false);
     }
   });
@@ -91,9 +91,9 @@ describe("WebFetch Tool - Format Options", () => {
     );
 
     // Result should either succeed or fail with network error
-    // URL validation should pass
-    if (!result.success) {
-      expect(result.error).not.toContain("must start with");
+    // URL validation should pass - result.error may be undefined
+    if (typeof result.error === "string") {
+      expect(result.error.includes("must start with")).toBe(false);
     }
   });
 
@@ -105,8 +105,8 @@ describe("WebFetch Tool - Format Options", () => {
       {}
     );
 
-    if (!result.success) {
-      expect(result.error).not.toContain("must start with");
+    if (typeof result.error === "string") {
+      expect(result.error.includes("must start with")).toBe(false);
     }
   });
 
@@ -118,8 +118,8 @@ describe("WebFetch Tool - Format Options", () => {
       {}
     );
 
-    if (!result.success) {
-      expect(result.error).not.toContain("must start with");
+    if (typeof result.error === "string") {
+      expect(result.error.includes("must start with")).toBe(false);
     }
   });
 });
@@ -141,7 +141,7 @@ describe("WebFetch Tool - Max Chars", () => {
       expect(result.output.length).toBeLessThanOrEqual(60); // 50 + room for header
     }
     // If failed (network error), that's OK in CI - just verify no validation error
-    if (result.error) {
+    if (typeof result.error === "string") {
       expect(result.error.includes("must start with")).toBe(false);
     }
   });
