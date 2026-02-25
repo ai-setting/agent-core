@@ -32,10 +32,19 @@ export async function ensureCommandExists(command: string, installCommand?: stri
 
   if (installCommand) {
     try {
+      lspLogger.info(`Installing LSP server: ${installCommand}`);
       const installProcess = spawn(installCommand, [], {
-        stdio: "inherit",
+        stdio: ["pipe", "pipe", "pipe"],
         shell: true,
       });
+      
+      installProcess.stdout.on("data", (data) => {
+        lspLogger.debug(`[install] stdout: ${data.toString()}`);
+      });
+      installProcess.stderr.on("data", (data) => {
+        lspLogger.debug(`[install] stderr: ${data.toString()}`);
+      });
+      
       await new Promise<void>((resolve, reject) => {
         installProcess.on("close", (code) => {
           if (code === 0) resolve();
@@ -140,7 +149,7 @@ export class LSPClient extends EventEmitter {
     let spawnArgs: string[];
 
     if (useBunx) {
-      spawnCommand = process.execPath;
+      spawnCommand = "bun";
       spawnArgs = ["x", command, ...args];
       lspLogger.debug(`Using bunx to run LSP server: ${spawnCommand} ${spawnArgs.join(" ")}`);
     } else {
@@ -151,6 +160,7 @@ export class LSPClient extends EventEmitter {
     this.process = spawn(spawnCommand, spawnArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...this.server.env },
+      shell: true,
     });
 
     this.process.stdout.on("data", (data: Buffer) => this.handleData(data));
@@ -172,6 +182,14 @@ export class LSPClient extends EventEmitter {
     this.process.stdout.once("data", () => {
       resolve();
     });
+
+    // Timeout fallback - resolve after 5 seconds even if no response
+    setTimeout(() => {
+      if (!this.initialized) {
+        lspLogger.debug(`LSP server startup timeout, resolving anyway: ${this.serverID}`);
+        resolve();
+      }
+    }, 5000);
 
     // Timeout fallback
     setTimeout(() => {
