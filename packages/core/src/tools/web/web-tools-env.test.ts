@@ -266,7 +266,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      expect(result.error).not.toContain("must start with");
+      // Should not have URL validation error - result.error may be string or undefined
+      if (typeof result.error === "string") {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
 
     it("should accept text format parameter", async () => {
@@ -276,7 +279,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      expect(result.error).not.toContain("must start with");
+      // Should not have URL validation error - result.error may be string or undefined
+      if (typeof result.error === "string") {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
 
     it("should accept html format parameter", async () => {
@@ -286,7 +292,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      expect(result.error).not.toContain("must start with");
+      // Should not have URL validation error - result.error may be string or undefined
+      if (typeof result.error === "string") {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
   });
 });

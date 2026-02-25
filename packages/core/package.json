@@ -52,7 +52,8 @@
     "@ai-sdk/xai": "^3.0.47",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@mozilla/readability": "^0.6.0",
-    "@opentui/solid": "^0.1.79",
+    "@opentui/core": "0.1.79",
+    "@opentui/solid": "0.1.79",
     "@types/eventsource": "^3.0.0",
     "@types/node": "^25.2.1",
     "@vue/language-core": "^3.0.0",
@@ -74,5 +75,8 @@
     "@types/bun": "^1.0.8",
     "@types/yargs": "^17.0.35",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "@opentui/core": "0.1.79"
   }
 }
