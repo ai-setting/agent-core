@@ -16,6 +16,92 @@ import { agentEnvCommand } from "./command/built-in/agent-env.js";
 import { exitCommand } from "./command/built-in/exit.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
+export interface ServerInitOptions {
+  port?: number;
+  hostname?: string;
+  model?: string;
+  apiKey?: string;
+  baseURL?: string;
+  enableLogger?: boolean;
+}
+
+export interface ServerInitResult {
+  server: AgentServer;
+  env: ServerEnvironment | undefined;
+  port: number;
+}
+
+/**
+ * 初始化 Server（注册命令、加载配置、创建 Environment）
+ * 供 CLI 命令和 server/index.ts 共同使用
+ */
+export async function initServer(options: ServerInitOptions = {}): Promise<ServerInitResult> {
+  const port = options.port ?? (parseInt(process.env.PORT || "3000"));
+  const hostname = options.hostname ?? (process.env.HOSTNAME || "0.0.0.0");
+
+  // 注册内置 Commands（如果尚未注册）
+  const commandRegistry = CommandRegistry.getInstance();
+  if (commandRegistry.list().length === 0) {
+    console.log("📝 注册 Commands...");
+    commandRegistry.register(echoCommand);
+    commandRegistry.register(connectCommand);
+    commandRegistry.register(modelsCommand);
+    commandRegistry.register(agentEnvCommand);
+    commandRegistry.register(exitCommand);
+    console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
+  }
+
+  // 加载配置
+  let model = options.model;
+  let apiKey = options.apiKey;
+  let baseURL = options.baseURL;
+  
+  try {
+    const rawConfig = await Config_get();
+    const config = await resolveConfig(rawConfig);
+    
+    if (!model && config.defaultModel) model = config.defaultModel;
+    if (!apiKey && config.apiKey) apiKey = config.apiKey;
+    if (!baseURL && config.baseURL) baseURL = config.baseURL;
+    
+    if (model && apiKey) {
+      console.log(`✅ 配置加载成功: ${model}`);
+    }
+  } catch (error) {
+    console.log("⚠️  配置加载失败:", error instanceof Error ? error.message : String(error));
+  }
+
+  // 创建 ServerEnvironment
+  let env: ServerEnvironment | undefined;
+  if (model && apiKey) {
+    try {
+      env = new ServerEnvironment({
+        model,
+        apiKey,
+        baseURL,
+      });
+      await env.waitForReady();
+      console.log(`✅ Environment 已创建 (Model: ${model})`);
+    } catch (error) {
+      console.error("❌ 创建 Environment 失败:", error instanceof Error ? error.message : String(error));
+    }
+  } else {
+    console.log("⚠️  未配置 LLM，将以简化模式运行");
+  }
+
+  // 创建并启动 Server
+  const server = new AgentServer({
+    port,
+    hostname,
+    env,
+    enableLogger: options.enableLogger,
+  });
+
+  const actualPort = await server.start();
+
+  return { server, env, port: actualPort };
+}
+
 async function main() {
   // 打印日志目录
   console.log("[DEBUG] LOG_DIR:", LOG_DIR);
@@ -31,86 +117,12 @@ async function main() {
   sseLogger.info("TEST ENTRY - sseLogger working");
   console.log("[DEBUG] Logger test END");
 
-  const port = parseInt(process.env.PORT || "3000");
-  const hostname = process.env.HOSTNAME || "0.0.0.0";
-
   console.log("╔════════════════════════════════════════════════════════════╗");
   console.log("║     Agent Core Server                                      ║");
   console.log("╚════════════════════════════════════════════════════════════╝");
   console.log();
 
-  // 注册内置 Commands
-  console.log("📝 注册 Commands...");
-  const commandRegistry = CommandRegistry.getInstance();
-  commandRegistry.register(echoCommand);
-  commandRegistry.register(connectCommand);
-  commandRegistry.register(modelsCommand);
-  commandRegistry.register(agentEnvCommand);
-  commandRegistry.register(exitCommand);
-  console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
-  console.log();
-
-  // 加载配置
-  console.log("🔄 加载配置...");
-  let configLoaded = false;
-  let model: string | undefined;
-  let env: ServerEnvironment | undefined;
-  
-  try {
-    const rawConfig = await Config_get();
-    const config = await resolveConfig(rawConfig);
-    
-    if (config.defaultModel && config.apiKey) {
-      model = config.defaultModel;
-      console.log(`✅ 配置加载成功`);
-      console.log(`   Model: ${config.defaultModel}`);
-      console.log(`   Provider: ${config.defaultModel.split("/")[0]}`);
-      console.log(`   Base URL: ${config.baseURL}`);
-      configLoaded = true;
-    } else {
-      console.log("⚠️  配置不完整，检查 auth.json 或环境变量");
-    }
-  } catch (error) {
-    console.log("⚠️  配置加载失败:", error instanceof Error ? error.message : String(error));
-  }
-  console.log();
-
-  // 创建 ServerEnvironment（优先从配置文件加载，支持环境变量覆盖）
-  if (configLoaded || process.env.LLM_MODEL || process.env.LLM_API_KEY) {
-    console.log("🔄 初始化 ServerEnvironment...");
-    try {
-      env = new ServerEnvironment({
-        model: process.env.LLM_MODEL || model,
-        apiKey: process.env.LLM_API_KEY,
-        baseURL: process.env.LLM_BASE_URL,
-      });
-      await env.waitForReady();
-      
-      if ((env as any).llmConfig) {
-        console.log(`✅ Environment 已创建 (LLM 已配置)`);
-        console.log(`   Model: ${(env as any).llmConfig?.model || model}`);
-      } else {
-        console.log(`⚠️  Environment 已创建 (LLM 未配置)`);
-        console.log("   配置 LLM 以启用 AI 功能");
-      }
-    } catch (error) {
-      console.log("⚠️  ServerEnvironment 初始化失败:", error instanceof Error ? error.message : String(error));
-      console.log("   Server 将以简化模式运行");
-    }
-    console.log();
-  } else {
-    console.log("⚠️  LLM 未配置，Server 将以简化模式运行");
-    console.log("   配置 auth.json 或设置 LLM_MODEL/LLM_API_KEY 启用完整功能");
-    console.log();
-  }
-
-  const server = new AgentServer({
-    port,
-    hostname,
-    env,
-  });
-
-  await server.start();
+  const { port } = await initServer();
 
   console.log();
   console.log("按 Ctrl+C 停止服务");

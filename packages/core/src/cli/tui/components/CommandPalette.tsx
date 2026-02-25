@@ -266,6 +266,19 @@ export function CommandPalette(props: CommandPaletteProps) {
     
     // 去掉开头的换行符和空格后再检查
     const trimmedValue = value.replace(/^[\n\s]+/, "");
+    
+    // 特殊处理：如果 trimmedValue 正好是 "/" 或 "/<单字符>"，直接显示 palette
+    // 这是为了处理 OpenTUI 中 / 键先触发换行的问题
+    if (trimmedValue === "/" || (trimmedValue.startsWith("/") && trimmedValue.length === 2)) {
+      if (!state.visible) {
+        tuiLogger.info("[CommandPalette] Direct show for slash command");
+        show();
+        setState("index", 0);
+        setState("filter", trimmedValue.slice(1));
+      }
+      return;
+    }
+    
     const startsWithSlash = trimmedValue.startsWith("/");
     
     // 检查光标前是否有空白（考虑换行符的情况）

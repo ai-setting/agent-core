@@ -15,11 +15,28 @@ export interface TUIOptions {
   onExit?: () => void;
 }
 
+// 保存原始 console 方法
+let originalConsoleLog = console.log;
+let originalConsoleDebug = console.debug;
+let originalConsoleWarn = console.warn;
+
 /**
  * 启动 TUI 应用
  */
 export async function startTUI(options: TUIOptions): Promise<void> {
+  // 禁用 TUI 模式下的 console.log 输出，避免日志显示在 TUI 界面上
+  originalConsoleLog = console.log;
+  originalConsoleDebug = console.debug;
+  originalConsoleWarn = console.warn;
+  console.log = () => {};
+  console.debug = () => {};
+  console.warn = () => {};
+
   const handleExit = () => {
+    // 恢复 console
+    console.log = originalConsoleLog;
+    console.debug = originalConsoleDebug;
+    console.warn = originalConsoleWarn;
     options.onExit?.();
     process.exit(0);
   };
