@@ -227,8 +227,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      // URL validation should pass - either success or network error, but not validation error
-      expect(result.success === true || (result.error !== undefined && !result.error.includes("must start with")));
+      // Should not have URL validation error
+      if (result.error) {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
 
     it("should accept text format parameter", async () => {
@@ -238,8 +240,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      // URL validation should pass - either success or network error, but not validation error
-      expect(result.success === true || (result.error !== undefined && !result.error.includes("must start with")));
+      // Should not have URL validation error
+      if (result.error) {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
 
     it("should accept html format parameter", async () => {
@@ -249,8 +253,10 @@ describe("Web Tools Configuration", () => {
         {}
       );
 
-      // URL validation should pass - either success or network error, but not validation error
-      expect(result.success === true || (result.error !== undefined && !result.error.includes("must start with")));
+      // Should not have URL validation error
+      if (result.error) {
+        expect(result.error.includes("must start with")).toBe(false);
+      }
     });
 
     it("should accept markdown format parameter", async () => {
