@@ -130,6 +130,32 @@ describe("SubAgent - Permissions", () => {
   });
 });
 
+describe("SubAgent - Explore Agent Configuration", () => {
+  test("should have explore subagent with required tools", () => {
+    const explore = getSubAgentSpec("explore");
+    expect(explore).toBeDefined();
+    expect(explore?.allowedTools).toBeDefined();
+    expect(explore?.allowedTools?.length).toBeGreaterThan(0);
+  });
+
+  test("explore subagent should have read and search tools", () => {
+    const explore = getSubAgentSpec("explore");
+    expect(explore?.allowedTools).toContain("read");
+    expect(explore?.allowedTools).toContain("grep");
+    expect(explore?.allowedTools).toContain("glob");
+    expect(explore?.allowedTools).toContain("bash");
+  });
+
+  test("explore subagent should have read-only tools (no write)", () => {
+    const explore = getSubAgentSpec("explore");
+    expect(explore?.allowedTools).toContain("glob");
+    expect(explore?.allowedTools).toContain("grep");
+    expect(explore?.allowedTools).toContain("read");
+    expect(explore?.allowedTools).toContain("bash");
+    expect(explore?.allowedTools).not.toContain("write");
+  });
+});
+
 describe("SubAgent - System Prompt Replacement", () => {
   test("should replace task_description placeholder in general subagent", () => {
     const general = getSubAgentSpec("general");
