@@ -29,6 +29,7 @@ export class AgentServer {
   private app: Hono<{ Variables: Variables }>;
   private config: ServerConfig;
   private env?: ServerEnvironment;
+  private bunServer?: ReturnType<typeof Bun.serve>;
 
   constructor(config: ServerConfig = {}) {
     this.config = {
@@ -139,16 +140,26 @@ export class AgentServer {
         throw new Error(`无法启动服务器，所有端口都不可用`);
       }
       const actualPort = fallbackServer.port;
+      this.bunServer = fallbackServer;
       console.log(`✅ 服务器已启动: http://${hostname}:${actualPort}`);
       console.log(`📡 SSE endpoint: http://${hostname}:${actualPort}/events`);
       console.log(`❤️  Health check: http://${hostname}:${actualPort}/health`);
       return actualPort;
     }
 
+    this.bunServer = server;
     console.log(`🚀 Server running at http://${hostname}:${port}`);
     console.log(`📡 SSE endpoint: http://${hostname}:${port}/events`);
     console.log(`❤️  Health check: http://${hostname}:${port}/health`);
     return port;
+  }
+
+  async stop(): Promise<void> {
+    if (this.bunServer) {
+      this.bunServer.stop();
+      this.bunServer = undefined;
+      console.log("🛑 服务器已停止");
+    }
   }
 }
 
