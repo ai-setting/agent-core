@@ -39,6 +39,23 @@
       "apiKey": "${auth:kimi-for-coding}",
       "defaultModel": "moonshot-v1-128k"
     },
+    "kimi": {
+      "baseURL": "https://api.moonshot.cn/v1",
+      "apiKey": "${auth:kimi-for-coding}",
+      "defaultModel": "kimi-k2.5",
+      // 模型能力配置
+      // 详见 docs/llm-interleaved-reasoning.md
+      "capabilities": {
+        "reasoning": true,
+        "toolcall": true,
+        // interleaved 配置用于处理推理内容
+        // Kimi k2.5 等模型会在 assistant 消息中输出 reasoning 内容
+        // 需要提取到 providerOptions.reasoning_content
+        "interleaved": {
+          "field": "reasoning_content"
+        }
+      }
+    },
     "minimax": {
       "baseURL": "https://api.minimax.chat/v1",
       "apiKey": "${auth:minimax-cn}",

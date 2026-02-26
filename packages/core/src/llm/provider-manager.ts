@@ -251,26 +251,37 @@ class ProviderManager {
     const models = (config.models || []).map((modelId): ModelMetadata => {
       // Merge default capabilities with any custom capabilities
       const customCaps = config.capabilities || {};
+      const capabilities: ModelCapabilities = {
+        temperature: customCaps.temperature ?? DEFAULT_CAPABILITIES.temperature,
+        reasoning: customCaps.reasoning ?? DEFAULT_CAPABILITIES.reasoning,
+        toolcall: customCaps.toolcall ?? DEFAULT_CAPABILITIES.toolcall,
+        attachment: customCaps.attachment ?? DEFAULT_CAPABILITIES.attachment,
+        input: {
+          text: customCaps.input?.text ?? DEFAULT_CAPABILITIES.input.text,
+          image: customCaps.input?.image ?? DEFAULT_CAPABILITIES.input.image,
+          audio: customCaps.input?.audio ?? DEFAULT_CAPABILITIES.input.audio,
+          video: customCaps.input?.video ?? DEFAULT_CAPABILITIES.input.video,
+          pdf: customCaps.input?.pdf ?? DEFAULT_CAPABILITIES.input.pdf,
+        },
+        output: {
+          text: customCaps.output?.text ?? DEFAULT_CAPABILITIES.output.text,
+          image: customCaps.output?.image ?? DEFAULT_CAPABILITIES.output.image,
+          audio: customCaps.output?.audio ?? DEFAULT_CAPABILITIES.output.audio,
+        },
+      };
+
+      // Support interleaved reasoning configuration
+      // This is used for models like Kimi k2.5 that output reasoning content
+      // which needs to be extracted and placed in providerOptions
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const customInterleaved = (customCaps as any).interleaved;
+      if (customInterleaved) {
+        capabilities.interleaved = customInterleaved;
+      }
+
       return {
         id: modelId,
-        capabilities: {
-          temperature: customCaps.temperature ?? DEFAULT_CAPABILITIES.temperature,
-          reasoning: customCaps.reasoning ?? DEFAULT_CAPABILITIES.reasoning,
-          toolcall: customCaps.toolcall ?? DEFAULT_CAPABILITIES.toolcall,
-          attachment: customCaps.attachment ?? DEFAULT_CAPABILITIES.attachment,
-          input: {
-            text: customCaps.input?.text ?? DEFAULT_CAPABILITIES.input.text,
-            image: customCaps.input?.image ?? DEFAULT_CAPABILITIES.input.image,
-            audio: customCaps.input?.audio ?? DEFAULT_CAPABILITIES.input.audio,
-            video: customCaps.input?.video ?? DEFAULT_CAPABILITIES.input.video,
-            pdf: customCaps.input?.pdf ?? DEFAULT_CAPABILITIES.input.pdf,
-          },
-          output: {
-            text: customCaps.output?.text ?? DEFAULT_CAPABILITIES.output.text,
-            image: customCaps.output?.image ?? DEFAULT_CAPABILITIES.output.image,
-            audio: customCaps.output?.audio ?? DEFAULT_CAPABILITIES.output.audio,
-          },
-        },
+        capabilities,
         limits: {
           contextWindow: 8192, // Default value
         },

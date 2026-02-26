@@ -6,6 +6,16 @@
  */
 
 /**
+ * Interleaved reasoning configuration
+ * For models that output reasoning/thinking content interleaved with regular content
+ * (e.g., Kimi k2.5, DeepSeek R1, etc.)
+ */
+export interface InterleavedReasoning {
+  /** Field name for reasoning content in provider options */
+  field: "reasoning_content" | "reasoning_details";
+}
+
+/**
  * Model capability metadata
  * Describes what a model can do
  */
@@ -32,6 +42,12 @@ export interface ModelCapabilities {
     image: boolean;
     audio: boolean;
   };
+  /** 
+   * Interleaved reasoning configuration
+   * When present, reasoning content will be extracted from messages and placed
+   * in the specified field of providerOptions
+   */
+  interleaved?: InterleavedReasoning;
 }
 
 /**
