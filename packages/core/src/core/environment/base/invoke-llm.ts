@@ -246,14 +246,29 @@ export async function invokeLLM(
     }
 
     // 7. Generate provider-specific options
+    const modelForOptions = modelMetadata || provider.metadata.models[0] || { id: modelId, capabilities: { temperature: true, reasoning: false, toolcall: true, attachment: false, input: { text: true, image: false, audio: false, video: false, pdf: false }, output: { text: true, image: false, audio: false } }, limits: { contextWindow: 8192 } };
+    
+    invokeLLMLogger.info("[invokeLLM] Generating provider options", {
+      providerId: provider.metadata.id,
+      modelId: modelForOptions.id,
+      modelCapabilities: modelForOptions.capabilities,
+      optionsTemperature: options.temperature,
+    });
+    
     const providerOptions = LLMTransform.generateProviderOptions(
       provider.metadata,
-      modelMetadata || provider.metadata.models[0] || { id: modelId, capabilities: { temperature: true, reasoning: false, toolcall: true, attachment: false, input: { text: true, image: false, audio: false, video: false, pdf: false }, output: { text: true, image: false, audio: false } }, limits: { contextWindow: 8192 } },
+      modelForOptions,
       {
         temperature: options.temperature,
         maxTokens: options.maxTokens,
       }
     );
+    
+    invokeLLMLogger.info("[invokeLLM] Provider options generated", {
+      providerOptions,
+      hasTemperature: providerOptions.temperature !== undefined,
+      temperatureValue: providerOptions.temperature,
+    });
 
     // 8. Convert tools
     const tools = options.tools && options.tools.length > 0 
@@ -274,7 +289,7 @@ export async function invokeLLM(
     
     let result;
     try {
-      result = await streamText({
+      const streamTextOptions = {
         model: provider.sdk.languageModel(modelId),
         messages,
         tools,
@@ -283,12 +298,25 @@ export async function invokeLLM(
         ...providerOptions.providerOptions,
         abortSignal: ctx.abort,
         maxRetries: 2,
+      };
+      
+      invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
+        modelId,
+        providerId: provider.metadata.id,
+        temperature: streamTextOptions.temperature,
+        maxTokens: streamTextOptions.maxTokens,
+        hasTools: !!tools,
       });
+      
+      result = await streamText(streamTextOptions);
       invokeLLMLogger.info("[invokeLLM] streamText completed");
     } catch (streamError) {
       invokeLLMLogger.error("[invokeLLM] streamText failed", { 
         error: streamError instanceof Error ? streamError.message : String(streamError),
-        stack: streamError instanceof Error ? streamError.stack : undefined
+        stack: streamError instanceof Error ? streamError.stack : undefined,
+        providerOptions,
+        modelId,
+        providerId: provider.metadata.id,
       });
       throw streamError;
     }
@@ -384,11 +412,21 @@ export async function invokeLLM(
     };
 
   } catch (error) {
+    // Use the model that was actually used for the call (options.model or config.model)
+    const modelForErrorLog = options.model || config.model;
+    const errorProviderInfo = (() => { 
+      try { 
+        return parseModelString(modelForErrorLog); 
+      } catch { 
+        return { providerId: 'unknown', modelId: 'unknown' }; 
+      } 
+    })();
+    
     invokeLLMLogger.error("[invokeLLM] Error during invocation", { 
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      providerId: (() => { try { return parseModelString(options.model).providerId; } catch { return 'unknown'; } })(),
-      modelId: (() => { try { return parseModelString(options.model).modelId; } catch { return 'unknown'; } })(),
+      providerId: errorProviderInfo.providerId,
+      modelId: errorProviderInfo.modelId,
       messageCount: options.messages.length
     });
     return {
@@ -447,11 +485,10 @@ export function createLLMConfig(
   baseURL: string,
   apiKey: string
 ): InvokeLLMConfig {
-  const parts = model.split("/");
-  const modelId = parts.slice(1).join("/") || model;
-
+  // Store the full model format (providerId/modelId) to preserve provider information
+  // This ensures parseModelString can correctly identify the provider later
   return {
-    model: modelId,
+    model: model, // Keep full format like "kimi/kimi-k2.5"
     baseURL: baseURL || "",
     apiKey,
   };

@@ -61,7 +61,7 @@ export const AuthConfig = z.record(AuthProviderConfig).describe(
 
 // Session 持久化配置
 const SessionPersistenceConfig = z.object({
-  mode: z.enum(["memory", "file"]).default("file").describe("Session storage mode: 'memory' for in-memory only, 'file' for persistent file storage"),
+  mode: z.enum(["memory", "file", "sqlite"]).default("sqlite").describe("Session storage mode: 'memory' for in-memory only, 'file' for persistent file storage, 'sqlite' for SQLite database (default)"),
   path: z.string().optional().describe("Custom storage path (defaults to XDG data directory)"),
   autoSave: z.boolean().default(true).describe("Auto-save session changes to disk"),
 });

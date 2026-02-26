@@ -121,7 +121,7 @@ export class ServerEnvironment extends BaseEnvironment {
    */
   async loadFromConfig(): Promise<void> {
     try {
-      console.log("[ServerEnvironment] Loading configuration...");
+      serverLogger.info("[ServerEnvironment] Loading configuration...");
 
       // 0. Initialize ProviderManager for AI SDK integration
       const { providerManager } = await import("../llm/provider-manager.js");
@@ -135,7 +135,7 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1.1. Initialize session storage with persistence config
       const { Storage } = await import("../core/session/storage.js");
       await Storage.initialize({
-        mode: config.session?.persistence?.mode ?? "file",
+        mode: config.session?.persistence?.mode, // Use undefined to let Storage use its default (sqlite)
         path: config.session?.persistence?.path,
         autoSave: config.session?.persistence?.autoSave ?? true,
       });
@@ -267,14 +267,14 @@ export class ServerEnvironment extends BaseEnvironment {
         // 9. Update current selection (in-memory only)
         this.currentModelSelection = selectedModel;
 
-        console.log("[ServerEnvironment] LLM initialized successfully");
+        serverLogger.info("[ServerEnvironment] LLM initialized successfully");
       } else {
-        console.log(
+        serverLogger.info(
           "[ServerEnvironment] No valid model configuration found, skipping LLM initialization"
         );
       }
     } catch (error) {
-      console.error(
+      serverLogger.error(
         "[ServerEnvironment] Failed to load configuration:",
         error
       );
@@ -298,14 +298,14 @@ export class ServerEnvironment extends BaseEnvironment {
     // 1. Check ModelStore recent list (highest priority - user's last selection)
     for (const entry of recent) {
       if (await this.isModelValid(entry, providers)) {
-        console.log(`[ServerEnvironment] Using recent model: ${entry.providerID}/${entry.modelID}`);
+        serverLogger.info(`[ServerEnvironment] Using recent model: ${entry.providerID}/${entry.modelID}`);
         return entry;
       }
     }
 
     // 2. Check config default model
     if (configModel && (await this.isModelValid(configModel, providers))) {
-      console.log(`[ServerEnvironment] Using config default model: ${configModel.providerID}/${configModel.modelID}`);
+      serverLogger.info(`[ServerEnvironment] Using config default model: ${configModel.providerID}/${configModel.modelID}`);
       return configModel;
     }
 
@@ -314,7 +314,7 @@ export class ServerEnvironment extends BaseEnvironment {
       if (provider.models && provider.models.length > 0) {
         // Use defaultModel or first model
         const defaultModel = provider.defaultModel || provider.models[0];
-        console.log(`[ServerEnvironment] Using provider default model: ${provider.id}/${defaultModel}`);
+        serverLogger.info(`[ServerEnvironment] Using provider default model: ${provider.id}/${defaultModel}`);
         return {
           providerID: provider.id,
           modelID: defaultModel,
