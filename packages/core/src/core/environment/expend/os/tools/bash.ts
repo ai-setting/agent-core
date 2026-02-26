@@ -309,7 +309,7 @@ Usage notes:
       command: z.string().describe("The bash command to execute"),
       timeout: z.number().optional().describe("Optional timeout in milliseconds (default: 60000)"),
       workdir: z.string().optional().describe("Working directory"),
-      description: z.string().optional().describe("Clear, concise description of what this command does in 5-10 words"),
+      description: z.string().describe("Clear, concise description of what this command does in 5-10 words"),
     }),
     execute: async (args) => {
       const { shell, useBash } = getShellConfig(args.command);
