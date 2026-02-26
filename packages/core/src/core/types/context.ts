@@ -9,4 +9,10 @@ export interface Context {
   abort?: AbortSignal;
   metadata?: Record<string, unknown>;
   env?: BaseEnvironment;
+  /**
+   * Callback for storing intermediate messages during agent execution.
+   * Called whenever the agent adds an assistant or tool message.
+   * Useful for persisting messages to session history in real-time.
+   */
+  onMessageAdded?: (message: { role: string; content: string; name?: string; tool_call_id?: string }) => void;
 }
