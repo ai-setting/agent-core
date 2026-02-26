@@ -990,7 +990,21 @@ export class ServerEnvironment extends BaseEnvironment {
           await this.configLoaded;
           
           try {
-            const response = await this.handle_query(content, { session_id: sessionId }, history);
+            const response = await this.handle_query(content, { 
+              session_id: sessionId,
+              onMessageAdded: (msg) => {
+                if (msg.role === "assistant" && msg.content) {
+                  session?.addAssistantMessage(msg.content);
+                } else if (msg.role === "tool" && msg.name) {
+                  session?.addToolMessage(
+                    msg.name,
+                    msg.tool_call_id || `call_${Date.now()}`,
+                    msg.content,
+                    {}
+                  );
+                }
+              }
+            }, history);
             
             // Save assistant message with reasoning if available
             if (this.currentStreamingContent.reasoning) {

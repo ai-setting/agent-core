@@ -90,6 +90,12 @@ export class Agent {
   private tools: import("../types").Tool[];
   private agentId: string;
 
+  private notifyMessageAdded(message: { role: string; content: string; name?: string; tool_call_id?: string }): void {
+    if (this.context.onMessageAdded) {
+      this.context.onMessageAdded(message);
+    }
+  }
+
   constructor(
     private event: Event,
     private env: Environment,
@@ -228,6 +234,9 @@ export class Agent {
       })),
     } as Message);
 
+    // Notify about assistant message
+    this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
+
     console.log(`[Agent] Processing ${toolCalls.length} tool_calls from LLM`);
     
     for (const toolCall of toolCalls) {
@@ -246,6 +255,7 @@ export class Agent {
           name: toolCall.function.name,
           tool_call_id: toolCall.id,
         });
+        this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, name: toolCall.function.name, tool_call_id: toolCall.id });
         continue;
       }
 
@@ -258,6 +268,7 @@ export class Agent {
           name: toolCall.function.name,
           tool_call_id: toolCall.id,
         });
+        this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, name: toolCall.function.name, tool_call_id: toolCall.id });
         // Clear the doom loop cache so next attempt can proceed
         this.doomLoopCache.clear();
         continue;
@@ -276,6 +287,7 @@ export class Agent {
             name: toolCall.function.name,
             tool_call_id: toolCall.id,
           });
+          this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, name: toolCall.function.name, tool_call_id: toolCall.id });
           continue;
         }
       }
@@ -307,6 +319,7 @@ export class Agent {
           name: toolCall.function.name,
           tool_call_id: toolCall.id,
         });
+        this.notifyMessageAdded({ role: "tool", content: `Error: ${error}`, name: toolCall.function.name, tool_call_id: toolCall.id });
         
         continue;
       }
@@ -319,6 +332,12 @@ export class Agent {
             : JSON.stringify(toolResult.output),
         name: toolCall.function.name,
         tool_call_id: toolCall.id,
+      });
+      this.notifyMessageAdded({ 
+        role: "tool", 
+        content: typeof toolResult.output === "string" ? toolResult.output : JSON.stringify(toolResult.output), 
+        name: toolCall.function.name, 
+        tool_call_id: toolCall.id 
       });
 
       this.updateDoomLoopCache(toolCall.function.name, toolArgs);
