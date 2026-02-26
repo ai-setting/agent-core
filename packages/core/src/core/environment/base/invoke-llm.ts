@@ -107,6 +107,7 @@ function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
   return messages.map((msg) => {
     // Handle tool role messages
     if (msg.role === "tool") {
+      // For tool messages, content must be an array of text parts
       const toolContent = typeof msg.content === "string" 
         ? [{ type: "text" as const, text: msg.content }]
         : [{ type: "text" as const, text: JSON.stringify(msg.content) }];
@@ -122,12 +123,19 @@ function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
     if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
       const content: any[] = [];
       
-      // Add text content if present
+      // Add text content if present (filter out think tags for compatibility)
       if (msg.content && typeof msg.content === "string" && msg.content.trim()) {
-        content.push({ type: "text", text: msg.content });
+        // Remove <think>...</think> tags which are not standard
+        const cleanedContent = msg.content
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .trim();
+        
+        if (cleanedContent) {
+          content.push({ type: "text", text: cleanedContent });
+        }
       }
       
-      // Add tool calls
+      // Add tool calls - use standard format that OpenAI-compatible providers expect
       for (const tc of msg.tool_calls) {
         try {
           content.push({
@@ -154,6 +162,38 @@ function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
         role: "assistant" as const,
         content,
       } as ModelMessage;
+    }
+
+    // Handle assistant messages with content array (from previous conversions)
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      // Filter out think tags and tool-calls that might be in content array
+      const filteredContent = msg.content
+        .filter((part: any) => {
+          if (part.type === "text") {
+            // Remove think tags
+            part.text = part.text?.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+            return part.text;
+          }
+          return part.type === "tool-call";
+        })
+        .map((part: any) => {
+          if (part.type === "tool-call") {
+            return {
+              type: "tool-call",
+              toolCallId: part.toolCallId || part.id || "",
+              toolName: part.toolName || part.tool || "",
+              args: part.args || part.input || {},
+            };
+          }
+          return part;
+        });
+      
+      if (filteredContent.length > 0) {
+        return {
+          role: "assistant" as const,
+          content: filteredContent,
+        } as ModelMessage;
+      }
     }
 
     // Handle regular messages
