@@ -212,6 +212,7 @@ export class Agent {
 
     if (!hasToolCalls) {
       console.log(`[Agent] No tool calls, returning content: "${output.content}"`);
+      this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
       return output.content || "(no response)";
     }
 
