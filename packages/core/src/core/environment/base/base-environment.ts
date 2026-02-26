@@ -1238,6 +1238,13 @@ export abstract class BaseEnvironment implements Environment {
   onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
   protected emitStreamEvent(event: StreamEvent, context: Context): void | Promise<void> {
+    BaseEnvironment.baseLogger.info("[BaseEnvironment.emitStreamEvent]", { 
+      eventType: event.type, 
+      toolName: (event as any).tool_name,
+      toolArgs: (event as any).tool_args ? JSON.stringify((event as any).tool_args).substring(0, 100) : undefined,
+      toolCallId: (event as any).tool_call_id,
+      sessionId: context.session_id 
+    });
     if (this.onStreamEvent) {
       return this.onStreamEvent(event, context);
     }

@@ -4,7 +4,7 @@
 
 import type { Context, Action, ToolResult, Tool, LLMStream, StreamHandler, LLMStreamEvent, ToolInfo } from "../types";
 import type { LLMMessage, LLMOptions } from "./base/invoke-llm.js";
-import type { Session, SessionCreateOptions } from "../session/index.js";
+import type { Session, SessionCreateOptions, HistoryMessage } from "../session/index.js";
 import type { SkillInfo } from "./skills/types.js";
 
 export type StreamEventType = "text" | "reasoning" | "tool_call" | "tool_result" | "completed" | "error" | "start";
@@ -72,13 +72,6 @@ export interface FileContent {
   url: string;
   mimeType: string;
   filename?: string;
-}
-
-export interface HistoryMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: MessageContent | MessageContent[];
-  name?: string;
-  tool_call_id?: string;
 }
 
 /**
@@ -272,5 +265,6 @@ export {
   DefaultMetricsCollector,
 } from "./base/index.js";
 export { BaseEnvironment } from "./base/base-environment.js";
+export { HistoryMessage } from "../session/index.js";
 export * from "./expend/os/index.js";
 export * from "./skills/index.js";

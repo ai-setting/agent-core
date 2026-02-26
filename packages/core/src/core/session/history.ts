@@ -9,6 +9,9 @@
 
 import type { Session } from "./session";
 import type { MessageWithParts, TextPart, ToolPart, ReasoningPart, FilePart, HistoryMessage, MessageContent, TextContent, ImageContent } from "./types";
+import { createLogger } from "../../utils/logger.js";
+
+const historyLogger = createLogger("history", "server.log");
 
 /**
  * Convert a session's messages to Agent Core history format.
@@ -29,6 +32,12 @@ export function sessionToHistory(session: Session): HistoryMessage[] {
       history.push(converted);
     }
   }
+
+  historyLogger.debug("[sessionToHistory] Converted session to history", {
+    sessionId: session.id,
+    inputMessageCount: messages.length,
+    outputHistoryCount: history.length,
+  });
 
   return history;
 }
@@ -189,6 +198,18 @@ function convertAssistantMessage(msg: MessageWithParts): HistoryMessage {
     });
   }
 
+  // Build tool_calls array for assistant messages with tool parts
+  const toolCalls = toolParts
+    .filter((p) => p.state === "pending" || p.state === "running")
+    .map((p) => ({
+      id: p.callID,
+      type: "function",
+      function: {
+        name: p.tool,
+        arguments: JSON.stringify(p.input),
+      },
+    }));
+
   // Ensure we have at least some meaningful content
   const onlyContentIsEmptyText = 
     contents.length === 1 && 
@@ -203,10 +224,16 @@ function convertAssistantMessage(msg: MessageWithParts): HistoryMessage {
     });
   }
 
-  return {
+  const result: HistoryMessage = {
     role: "assistant",
     content: contents.length === 1 ? contents[0] : contents,
   };
+
+  if (toolCalls.length > 0) {
+    result.tool_calls = toolCalls;
+  }
+
+  return result;
 }
 
 /**
@@ -216,7 +243,21 @@ function convertToolMessage(msg: MessageWithParts): HistoryMessage | null {
   const toolPart = msg.parts.find((p): p is ToolPart => p.type === "tool");
 
   if (!toolPart) {
+    historyLogger.warn("[convertToolMessage] No tool part found in tool message", { 
+      messageId: msg.info.id,
+      role: msg.info.role,
+      partsCount: msg.parts.length,
+      partsTypes: msg.parts.map(p => p.type),
+    });
     return null;
+  }
+
+  if (!toolPart.callID) {
+    historyLogger.warn("[convertToolMessage] Tool part missing callID", { 
+      messageId: msg.info.id,
+      toolName: toolPart.tool,
+      state: toolPart.state,
+    });
   }
 
   let content: MessageContent;

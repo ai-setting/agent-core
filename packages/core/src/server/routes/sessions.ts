@@ -160,10 +160,10 @@ app.post("/:id/prompt", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ content: string }>();
 
-  sessionLogger.info("Received prompt request", { sessionId: id, contentLength: body?.content?.length });
+  sessionLogger.info("[Server] POST /prompt received", { sessionId: id, contentLength: body?.content?.length, contentPreview: body?.content?.substring(0, 30) });
 
   if (!body?.content) {
-    sessionLogger.warn("Prompt request missing content", { sessionId: id });
+    sessionLogger.warn("[Server] Prompt request missing content", { sessionId: id });
     return c.json({ error: "Content is required" }, 400);
   }
 
@@ -181,12 +181,17 @@ app.post("/:id/prompt", async (c) => {
     }
   };
 
+  sessionLogger.info("[Server] Publishing USER_QUERY event", { sessionId: id, eventId: event.id, content: body.content.substring(0, 30) });
+
   // Fire and forget - don't await, let the agent run asynchronously
   // Events will be streamed back via SSE connection
-  env.publishEvent(event).catch((err) => {
-    sessionLogger.error("Failed to publish event", { sessionId: id, error: err.message });
+  env.publishEvent(event).then(() => {
+    sessionLogger.info("[Server] publishEvent completed successfully", { sessionId: id, eventId: event.id });
+  }).catch((err) => {
+    sessionLogger.error("[Server] Failed to publish event", { sessionId: id, error: err.message });
   });
 
+  sessionLogger.info("[Server] Returning response to client", { sessionId: id });
   return c.json({
     success: true,
     sessionId: id,
