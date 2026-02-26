@@ -50,10 +50,18 @@ export class SqlitePersistence implements SessionPersistence {
         summary_files INTEGER,
         time_created INTEGER NOT NULL,
         time_updated INTEGER NOT NULL,
+        message_count INTEGER DEFAULT 0,
         metadata TEXT
       )
     `);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_session_parent ON session(parent_id)`);
+    
+    // Try to add message_count column (will fail if already exists, which is fine)
+    try {
+      this.db.run(`ALTER TABLE session ADD COLUMN message_count INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Column already exists, ignore error
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS message (
@@ -87,9 +95,10 @@ export class SqlitePersistence implements SessionPersistence {
   async saveSession(info: SessionInfo): Promise<void> {
     if (!this.db) throw new Error("Not initialized");
 
+    const messageCount = info.messageCount ?? 0;
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO session (id, parent_id, title, directory, summary_additions, summary_deletions, summary_files, time_created, time_updated, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO session (id, parent_id, title, directory, summary_additions, summary_deletions, summary_files, time_created, time_updated, message_count, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       info.id,
@@ -101,8 +110,15 @@ export class SqlitePersistence implements SessionPersistence {
       info.summary?.files ?? null,
       info.time.created,
       info.time.updated,
+      messageCount,
       info.metadata ? JSON.stringify(info.metadata) : null
     );
+  }
+
+  async updateMessageCount(sessionId: string, count: number): Promise<void> {
+    if (!this.db) throw new Error("Not initialized");
+    const stmt = this.db.prepare(`UPDATE session SET message_count = ? WHERE id = ?`);
+    stmt.run(count, sessionId);
   }
 
   async getSession(id: string): Promise<SessionInfo | undefined> {
@@ -152,6 +168,7 @@ export class SqlitePersistence implements SessionPersistence {
       parentID: row.parent_id,
       title: row.title,
       directory: row.directory,
+      messageCount: row.message_count ?? 0,
       summary: row.summary_additions
         ? {
             additions: row.summary_additions,

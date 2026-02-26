@@ -22,6 +22,8 @@ export interface SessionInfo {
   title: string;
   /** Working directory */
   directory: string;
+  /** Message count (for list views, actual messages loaded on demand) */
+  messageCount?: number;
   /** File change summary */
   summary?: {
     additions: number;
@@ -240,8 +242,17 @@ export interface SessionCreateOptions {
   title?: string;
   /** Working directory */
   directory?: string;
+  /** Initial message count (for loading persisted sessions) */
+  messageCount?: number;
+  /** Timestamps (for loading persisted sessions) */
+  time?: {
+    created: number;
+    updated: number;
+  };
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Whether this is loading from storage (don't save again) */
+  _isLoading?: boolean;
 }
 
 /**

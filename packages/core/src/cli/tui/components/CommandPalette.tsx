@@ -14,6 +14,7 @@ import { ConnectDialog } from "./ConnectDialog.js";
 import { EchoDialog } from "./EchoDialog.js";
 import { ModelsDialog } from "./ModelsDialog.js";
 import { AgentEnvDialog } from "./AgentEnvDialog.js";
+import { SessionsDialog } from "./SessionsDialog.js";
 
 export interface CommandPaletteRef {
   onInput: (value: string, textarea: TextareaRenderable) => void;
@@ -125,7 +126,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     hide();
     
     // 检查是否有特殊 dialog 的命令（即使 hasArgs 为 true，也应该直接打开 dialog）
-    const commandsWithDialog = ["connect", "echo", "models", "agent-env"];
+    const commandsWithDialog = ["connect", "echo", "models", "agent-env", "sessions"];
     if (commandsWithDialog.includes(cmd.name)) {
       tuiLogger.info("[CommandPalette] Command has special dialog, opening directly", { name: cmd.name });
       executeCommand(cmd.name, "");
@@ -214,6 +215,34 @@ export function CommandPalette(props: CommandPaletteProps) {
           id: `cmd-error-${Date.now()}`,
           role: "system",
           content: `✗ /${name} failed: ${result.message || "Failed to load environments"}`,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+    
+    // 特殊处理 sessions 命令 - 先执行获取数据，然后打开 SessionsDialog
+    if (name === "sessions") {
+      tuiLogger.info("[CommandPalette] Executing sessions command to get data");
+      const result = await command.executeCommand(name, args);
+      
+      if (result.success && result.data && (result.data as any).mode === "dialog") {
+        tuiLogger.info("[CommandPalette] Opening SessionsDialog with data", { 
+          sessionCount: (result.data as any).sessions?.length || 0 
+        });
+        dialog.push(
+          () => <SessionsDialog data={(result.data as any)} />,
+          { title: "Sessions" }
+        );
+      } else {
+        tuiLogger.error("[CommandPalette] Sessions command failed or returned invalid data", { 
+          success: result.success, 
+          hasData: !!result.data 
+        });
+        store.addMessage({
+          id: `cmd-error-${Date.now()}`,
+          role: "system",
+          content: `✗ /${name} failed: ${result.message || "Failed to load sessions"}`,
           timestamp: Date.now(),
         });
       }
@@ -400,7 +429,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         bottom={5}
         left={1}
         right={1}
-        maxHeight={15}
+        maxHeight={40}
         flexDirection="column"
         borderStyle="single"
         borderColor={theme.theme().primary}

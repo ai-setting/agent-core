@@ -60,7 +60,7 @@ export class Session {
       parentID: options.parentID,
       title: options.title ?? (isChild ? "Child session" : "Session") + " - " + new Date().toISOString(),
       directory: options.directory ?? process.cwd(),
-      time: {
+      time: options.time ?? {
         created: now,
         updated: now,
       },
@@ -72,7 +72,18 @@ export class Session {
       }
     }
 
-    Storage.saveSession(this);
+    // Set initial message count for persisted sessions
+    if (options.messageCount && options.messageCount > 0) {
+      // Create placeholder entries for message count
+      for (let i = 0; i < options.messageCount; i++) {
+        this._messageOrder.push(`placeholder_${i}`);
+      }
+    }
+
+    // Only save if not loading from storage
+    if (!options._isLoading) {
+      Storage.saveSession(this);
+    }
   }
 
   /**
@@ -482,6 +493,16 @@ export class Session {
 
   get messageCount(): number {
     return this._messageOrder.length;
+  }
+
+  /**
+   * Load messages from storage (used during Storage initialization)
+   */
+  loadMessages(messages: MessageWithParts[]): void {
+    for (const msg of messages) {
+      this._messages.set(msg.info.id, msg);
+      this._messageOrder.push(msg.info.id);
+    }
   }
 
   /**

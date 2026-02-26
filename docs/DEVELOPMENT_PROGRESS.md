@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-22（新增 Session 持久化能力 - 支持 memory/file 两种存储模式）
+最后更新：2026-02-26（新增 Sessions Command - 支持查看和管理历史会话列表）
 
 ---
 
@@ -57,6 +57,7 @@
 | 认证管理 | auth.json 自动加载到环境变量 | [DONE] | Auth_loadToEnv() 自动从 auth.json 加载 API key 到对应环境变量，支持 Provider 映射 | `packages/core/src/config/auth.ts` |
 | Command 系统 | 命令注册、执行、Dialog 集成 | [DONE] | Command Registry + 内置命令（echo/connect/models）+ TUI Dialog 集成 | `packages/core/src/server/command/**`、`packages/core/src/cli/tui/components/*Dialog.tsx` |
 | Models Command | 模型选择与管理 | [DONE] | 支持 list/select/toggle_favorite，集成 ModelStore 和 ServerEnvironment | `packages/core/src/server/command/built-in/models.ts`、`packages/core/src/cli/tui/components/ModelsDialog.tsx` |
+| Sessions Command | 会话列表与管理 | [DONE] | 支持 list/select/delete，展示历史会话列表，支持搜索过滤和删除，参考 OpenCode list session 体验 | `packages/core/src/server/command/built-in/sessions.ts`、`packages/core/src/cli/tui/components/SessionsDialog.tsx` |
 | Models 配置加载 | 从配置文件加载模型列表 | [DONE] | 支持从 environments/{env}/models.jsonc 或 provider.*.models 加载模型配置，优先级：Environment > Provider > Built-in | `packages/core/src/config/models-config.ts` |
 | Environment 核心 | 统一运行时上下文（prompt/tools/事件/策略入口） | [DONE] | `Environment` + `BaseEnvironment` 已形成骨架；可选 getProfiles/queryLogs/session 五方法 | `packages/core/src/core/environment/index.ts`、`.../base/base-environment.ts` |
 | BehaviorSpec | 环境级规则 + agent 特定 prompt 分层注入 | [DONE] | 支持从 rules.md 加载环境级共享规则，从 prompts/*.prompt 加载 agent 特定 prompt，组合成完整 system prompt | `packages/core/src/core/environment/index.ts`（BehaviorSpec 类型）、`.../base/base-environment.ts`（getBehaviorSpec/filterToolsByPermission） |
@@ -181,3 +182,4 @@
 - 2026-02-13：新增 **Models 配置加载功能**：支持从 `environments/{env}/models.jsonc` 配置文件加载模型列表，优先级：Environment models > Provider config > Built-in defaults。创建 `models-config.ts` 模块提供 `ModelsConfig_getAll()`、`ModelsConfig_getFromEnvironment()` 等 API，models command 现在优先使用配置中的模型列表。
 - 2026-02-16：新增 **Environment 事件机制设计**（`docs/environment-event-mechanism.md`）：通过 EventBus 统一入口 + Rule 路由机制，让 Environment 产生的事件可被 Agent 感知并插入 LLM 消息上下文。核心组件：EnvEvent 类型定义、EventHandlerAgent 无状态处理、Session Route 事件化改造。支持场景：异步任务完成事件、环境变化观测、工具执行错误等。
 - 2026-02-22：新增 **Session 持久化能力**：支持 memory/file 两种存储模式，通过 `config.session.persistence` 配置切换。文件存储在 XDG data 目录（`~/.local/share/tong_work/agent-core/storage/`），参考 OpenCode 的存储结构。每个 session 有独立的 JSON 文件，messages 按 session 分目录存储。服务重启后自动加载历史会话，实现会话可回放。
+- 2026-02-26：新增 **Sessions Command**：实现 `/sessions` 命令，允许用户通过 TUI dialog 查看和管理历史会话列表。功能包括：会话列表展示（按更新时间倒序）、搜索过滤（按标题/目录）、选择切换会话、删除会话（带确认）。参考 OpenCode 的 `list session` 功能体验，支持键盘导航（↑↓/Enter/D/Esc）和相对时间显示（如 "2h ago"）。包含完整的后端 command 实现（`sessions.ts`）和前端 Dialog 组件（`SessionsDialog.tsx`），集成到 CommandDialog 和 CommandPalette。

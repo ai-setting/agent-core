@@ -243,7 +243,11 @@ class StorageImpl {
   }
 
   async initialize(config?: Partial<PersistenceConfig>): Promise<void> {
-    const cfg = { ...DEFAULT_CONFIG, ...config };
+    const cfg = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      mode: config?.mode ?? DEFAULT_CONFIG.mode,
+    };
     
     const needsReinit = !this.initialized || 
                         this.mode !== cfg.mode || 
@@ -271,18 +275,15 @@ class StorageImpl {
           parentID: info.parentID,
           title: info.title,
           directory: info.directory,
+          messageCount: info.messageCount,
+          time: info.time,
           metadata: info.metadata,
+          _isLoading: true,
         });
         this.sessions.set(info.id, session);
 
-        const savedMessages = await this.fileStorage.getMessages(info.id);
-        if (savedMessages.length > 0) {
-          const msgMap = new Map<string, MessageWithParts>();
-          for (const msg of savedMessages) {
-            msgMap.set(msg.info.id, msg);
-          }
-          this.messages.set(info.id, msgMap);
-        }
+        // Messages are NOT loaded during initialization
+        // They will be loaded on demand when a session is selected
       }
       storageLogger.info(`Loaded ${savedInfos.length} sessions from file storage`);
     } else if (this.mode === "sqlite") {
@@ -301,18 +302,15 @@ class StorageImpl {
           parentID: info.parentID,
           title: info.title,
           directory: info.directory,
+          messageCount: info.messageCount,
+          time: info.time,
           metadata: info.metadata,
+          _isLoading: true,
         });
         this.sessions.set(info.id, session);
 
-        const savedMessages = await this.sqliteStorage.getMessages(info.id);
-        if (savedMessages.length > 0) {
-          const msgMap = new Map<string, MessageWithParts>();
-          for (const msg of savedMessages) {
-            msgMap.set(msg.info.id, msg);
-          }
-          this.messages.set(info.id, msgMap);
-        }
+        // Messages are NOT loaded during initialization
+        // They will be loaded on demand when a session is selected
       }
       storageLogger.info(`Loaded ${savedInfos.length} sessions from SQLite storage`);
     } else {
@@ -329,6 +327,7 @@ class StorageImpl {
       parentID: session.parentID,
       title: session.title,
       directory: session.directory,
+      messageCount: session.messageCount,
       summary: session.summary,
       time: {
         created: session.createdAt,
@@ -410,6 +409,32 @@ class StorageImpl {
       }
     }
     return result;
+  }
+
+  async loadSessionMessages(sessionID: string): Promise<void> {
+    if (this.messages.has(sessionID)) {
+      return; // Already loaded
+    }
+
+    let messages: MessageWithParts[] = [];
+    
+    if (this.sqliteStorage) {
+      messages = await this.sqliteStorage.getMessages(sessionID);
+    } else if (this.fileStorage) {
+      messages = await this.fileStorage.getMessages(sessionID);
+    }
+
+    const msgMap = new Map<string, MessageWithParts>();
+    for (const msg of messages) {
+      msgMap.set(msg.info.id, msg);
+    }
+    this.messages.set(sessionID, msgMap);
+
+    // Load messages into Session object
+    const session = this.sessions.get(sessionID);
+    if (session && messages.length > 0) {
+      session.loadMessages(messages);
+    }
   }
 
   saveMessage(sessionID: string, message: MessageWithParts): void {
