@@ -35,7 +35,7 @@ const DEFAULT_CONFIG: PersistenceConfig = {
   autoSave: true,
 };
 
-class FileStorage {
+export class FileStorage {
   private baseDir: string;
   private sessionsDir: string;
   private messagesDir: string;
@@ -76,7 +76,10 @@ class FileStorage {
   async saveSessionInfo(info: SessionInfo): Promise<void> {
     await this.ensureInitialized();
     const filePath = this.sessionFilePath(info.id);
-    await fs.writeFile(filePath, JSON.stringify(info, null, 2));
+    const tempFilePath = `${filePath}.tmp`;
+    const content = JSON.stringify(info, null, 2);
+    await fs.writeFile(tempFilePath, content, "utf-8");
+    await fs.rename(tempFilePath, filePath);
     storageLogger.debug(`Session info saved to ${filePath}`);
   }
 
@@ -130,7 +133,10 @@ class FileStorage {
     const msgDir = this.messageDirPath(sessionID);
     await fs.mkdir(msgDir, { recursive: true });
     const filePath = this.messageFilePath(sessionID, message.info.id);
-    await fs.writeFile(filePath, JSON.stringify(message, null, 2));
+    const tempFilePath = `${filePath}.tmp`;
+    const content = JSON.stringify(message, null, 2);
+    await fs.writeFile(tempFilePath, content, "utf-8");
+    await fs.rename(tempFilePath, filePath);
     storageLogger.debug(`Message ${message.info.id} saved for session ${sessionID}`);
   }
 
