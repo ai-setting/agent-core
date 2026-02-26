@@ -3,8 +3,8 @@
  *
  * Supports:
  * - Memory storage (default, for testing/transient sessions)
- * - SQLite storage (persistent, for production use)
- * - Hybrid mode: sync in-memory cache + async persistence
+ * - File storage (persistent, for production use)
+ * - Hybrid mode: sync in-memory cache + async file persistence
  * - Session storage and retrieval
  * - Message storage
  * - Session listing and filtering
@@ -15,21 +15,221 @@
 
 import type { SessionInfo, MessageWithParts } from "./types";
 import type { Session } from "./session";
-import type { SessionPersistence, PersistenceConfig } from "./persistence.js";
-import { SqlitePersistence } from "./sqlite/index.js";
+import fs from "fs/promises";
+import path from "path";
+import { ConfigPaths } from "../../config/paths.js";
 import { createLogger } from "../../utils/logger.js";
 
 const storageLogger = createLogger("session:storage", "server.log");
 
+export type StorageMode = "memory" | "file";
+
+export interface PersistenceConfig {
+  mode: StorageMode;
+  path?: string;
+  autoSave: boolean;
+}
+
 const DEFAULT_CONFIG: PersistenceConfig = {
-  mode: "sqlite",
+  mode: "file",
   autoSave: true,
 };
 
+export class FileStorage {
+  private baseDir: string;
+  private sessionsDir: string;
+  private messagesDir: string;
+  private initialized = false;
+
+  constructor(baseDir?: string) {
+    this.baseDir = baseDir ?? ConfigPaths.storage;
+    this.sessionsDir = path.join(this.baseDir, "sessions");
+    this.messagesDir = path.join(this.baseDir, "messages");
+  }
+
+  async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    try {
+      await fs.mkdir(this.sessionsDir, { recursive: true });
+      await fs.mkdir(this.messagesDir, { recursive: true });
+      this.initialized = true;
+      storageLogger.info(`FileStorage initialized at ${this.baseDir}`);
+    } catch (error) {
+      storageLogger.error(`Failed to initialize FileStorage: ${error}`);
+      throw error;
+    }
+  }
+
+  private sessionFilePath(sessionID: string): string {
+    return path.join(this.sessionsDir, `${sessionID}.json`);
+  }
+
+  private messageDirPath(sessionID: string): string {
+    return path.join(this.messagesDir, sessionID);
+  }
+
+  private messageFilePath(sessionID: string, messageID: string): string {
+    return path.join(this.messageDirPath(sessionID), `${messageID}.json`);
+  }
+
+  async saveSessionInfo(info: SessionInfo): Promise<void> {
+    await this.ensureInitialized();
+    const filePath = this.sessionFilePath(info.id);
+    const tempFilePath = `${filePath}.tmp`;
+    const content = JSON.stringify(info, null, 2);
+    await fs.writeFile(tempFilePath, content, "utf-8");
+    await fs.rename(tempFilePath, filePath);
+    storageLogger.debug(`Session info saved to ${filePath}`);
+  }
+
+  async getSessionInfo(id: string): Promise<SessionInfo | undefined> {
+    await this.ensureInitialized();
+    const filePath = this.sessionFilePath(id);
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      return JSON.parse(content) as SessionInfo;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async deleteSessionInfo(id: string): Promise<void> {
+    await this.ensureInitialized();
+    const filePath = this.sessionFilePath(id);
+    await fs.unlink(filePath).catch(() => {});
+  }
+
+  async listSessionInfos(): Promise<SessionInfo[]> {
+    await this.ensureInitialized();
+    const infos: SessionInfo[] = [];
+
+    try {
+      const files = await fs.readdir(this.sessionsDir);
+      for (const file of files) {
+        if (!file.endsWith(".json")) continue;
+        const filePath = path.join(this.sessionsDir, file);
+        try {
+          const content = await fs.readFile(filePath, "utf-8");
+          infos.push(JSON.parse(content) as SessionInfo);
+        } catch (error) {
+          storageLogger.warn(`Failed to read session file ${file}: ${error}`);
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    return infos.sort((a, b) => b.time.updated - a.time.updated);
+  }
+
+  async saveMessage(sessionID: string, message: MessageWithParts): Promise<void> {
+    await this.ensureInitialized();
+    const msgDir = this.messageDirPath(sessionID);
+    await fs.mkdir(msgDir, { recursive: true });
+    const filePath = this.messageFilePath(sessionID, message.info.id);
+    const tempFilePath = `${filePath}.tmp`;
+    const content = JSON.stringify(message, null, 2);
+    await fs.writeFile(tempFilePath, content, "utf-8");
+    await fs.rename(tempFilePath, filePath);
+    storageLogger.debug(`Message ${message.info.id} saved for session ${sessionID}`);
+  }
+
+  async getMessage(sessionID: string, messageID: string): Promise<MessageWithParts | undefined> {
+    await this.ensureInitialized();
+    const filePath = this.messageFilePath(sessionID, messageID);
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      return JSON.parse(content) as MessageWithParts;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async getMessages(sessionID: string): Promise<MessageWithParts[]> {
+    await this.ensureInitialized();
+    const msgDir = this.messageDirPath(sessionID);
+    const messages: MessageWithParts[] = [];
+
+    try {
+      const files = await fs.readdir(msgDir);
+      for (const file of files) {
+        if (!file.endsWith(".json")) continue;
+        const filePath = path.join(msgDir, file);
+        try {
+          const content = await fs.readFile(filePath, "utf-8");
+          messages.push(JSON.parse(content) as MessageWithParts);
+        } catch (error) {
+          storageLogger.warn(`Failed to read message file ${file}: ${error}`);
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    return messages.sort((a, b) => a.info.timestamp - b.info.timestamp);
+  }
+
+  async deleteMessage(sessionID: string, messageID: string): Promise<void> {
+    await this.ensureInitialized();
+    const filePath = this.messageFilePath(sessionID, messageID);
+    await fs.unlink(filePath).catch(() => {});
+  }
+
+  async deleteMessages(sessionID: string): Promise<void> {
+    await this.ensureInitialized();
+    const msgDir = this.messageDirPath(sessionID);
+    await fs.rm(msgDir, { recursive: true, force: true });
+  }
+
+  async clear(): Promise<void> {
+    try {
+      await fs.rm(this.sessionsDir, { recursive: true, force: true });
+      await fs.rm(this.messagesDir, { recursive: true, force: true });
+      this.initialized = false;
+      await this.ensureInitialized();
+    } catch (error) {
+      storageLogger.error(`Failed to clear storage: ${error}`);
+    }
+  }
+
+  async getStats(): Promise<{ sessionCount: number; messageCount: number }> {
+    await this.ensureInitialized();
+    let sessionCount = 0;
+    let messageCount = 0;
+
+    try {
+      const sessionFiles = await fs.readdir(this.sessionsDir);
+      sessionCount = sessionFiles.filter(f => f.endsWith(".json")).length;
+
+      const sessionDirs = await fs.readdir(this.messagesDir);
+      for (const dir of sessionDirs) {
+        const msgDir = path.join(this.messagesDir, dir);
+        try {
+          const files = await fs.readdir(msgDir);
+          messageCount += files.filter(f => f.endsWith(".json")).length;
+        } catch {}
+      }
+    } catch {}
+
+    return { sessionCount, messageCount };
+  }
+}
+
 class StorageImpl {
-  private mode: "memory" | "sqlite" = "sqlite";
+  private mode: StorageMode = "file";
   private autoSave: boolean = true;
-  private persistence: SessionPersistence | null = null;
+  private fileStorage: FileStorage | null = null;
 
   private sessions: Map<string, Session> = new Map();
   private sessionInfos: Map<string, SessionInfo> = new Map();
@@ -37,15 +237,16 @@ class StorageImpl {
   private initialized = false;
   private pendingOps: Promise<void>[] = [];
 
-  get currentMode(): "memory" | "sqlite" {
+  get currentMode(): StorageMode {
     return this.mode;
   }
 
   async initialize(config?: Partial<PersistenceConfig>): Promise<void> {
     const cfg = { ...DEFAULT_CONFIG, ...config };
-
-    const needsReinit =
-      !this.initialized || this.mode !== cfg.mode || (cfg.path && this.persistence);
+    
+    const needsReinit = !this.initialized || 
+                        this.mode !== cfg.mode || 
+                        (cfg.path && this.fileStorage);
 
     if (!needsReinit) {
       return;
@@ -54,11 +255,11 @@ class StorageImpl {
     this.mode = cfg.mode;
     this.autoSave = cfg.autoSave;
 
-    if (this.mode === "sqlite") {
-      this.persistence = new SqlitePersistence(cfg.path);
-      await this.persistence.initialize(cfg);
+    if (this.mode === "file") {
+      this.fileStorage = new FileStorage(cfg.path);
+      await this.fileStorage.ensureInitialized();
 
-      const savedInfos = await this.persistence.listSessions();
+      const savedInfos = await this.fileStorage.listSessionInfos();
       for (const info of savedInfos) {
         this.sessionInfos.set(info.id, info);
 
@@ -72,19 +273,18 @@ class StorageImpl {
         });
         this.sessions.set(info.id, session);
 
-        const savedMessages = await this.persistence.getMessages(info.id);
+        const savedMessages = await this.fileStorage.getMessages(info.id);
         if (savedMessages.length > 0) {
           const msgMap = new Map<string, MessageWithParts>();
           for (const msg of savedMessages) {
-            session.addMessage(msg.info, msg.parts);
             msgMap.set(msg.info.id, msg);
           }
           this.messages.set(info.id, msgMap);
         }
       }
-      storageLogger.info(`Loaded ${savedInfos.length} sessions from SQLite storage`);
+      storageLogger.info(`Loaded ${savedInfos.length} sessions from file storage`);
     } else {
-      this.persistence = null;
+      this.fileStorage = null;
     }
 
     this.initialized = true;
@@ -107,8 +307,8 @@ class StorageImpl {
     this.sessions.set(session.id, session);
     this.sessionInfos.set(session.id, info);
 
-    if (this.autoSave && this.persistence) {
-      const op = this.persistence.saveSession(info).catch((err) => {
+    if (this.autoSave && this.fileStorage) {
+      const op = this.fileStorage.saveSessionInfo(info).catch(err => {
         storageLogger.error(`Failed to save session ${session.id}: ${err}`);
       });
       this.pendingOps.push(op);
@@ -136,11 +336,14 @@ class StorageImpl {
     this.sessionInfos.delete(id);
     this.messages.delete(id);
 
-    if (this.autoSave && this.persistence) {
-      const op1 = this.persistence.deleteSession(id).catch((err) => {
+    if (this.autoSave && this.fileStorage) {
+      const op1 = this.fileStorage.deleteSessionInfo(id).catch(err => {
         storageLogger.error(`Failed to delete session ${id}: ${err}`);
       });
-      this.pendingOps.push(op1);
+      const op2 = this.fileStorage.deleteMessages(id).catch(err => {
+        storageLogger.error(`Failed to delete messages for session ${id}: ${err}`);
+      });
+      this.pendingOps.push(op1, op2);
     }
   }
 
@@ -168,8 +371,8 @@ class StorageImpl {
     }
     this.messages.get(sessionID)!.set(message.info.id, message);
 
-    if (this.autoSave && this.persistence) {
-      const op = this.persistence.saveMessage(sessionID, message).catch((err) => {
+    if (this.autoSave && this.fileStorage) {
+      const op = this.fileStorage.saveMessage(sessionID, message).catch(err => {
         storageLogger.error(`Failed to save message ${message.info.id}: ${err}`);
       });
       this.pendingOps.push(op);
@@ -185,16 +388,14 @@ class StorageImpl {
     if (!sessionMessages) {
       return [];
     }
-    return Array.from(sessionMessages.values()).sort(
-      (a, b) => a.info.timestamp - b.info.timestamp
-    );
+    return Array.from(sessionMessages.values()).sort((a, b) => a.info.timestamp - b.info.timestamp);
   }
 
   deleteMessage(sessionID: string, messageID: string): void {
     this.messages.get(sessionID)?.delete(messageID);
 
-    if (this.autoSave && this.persistence) {
-      const op = this.persistence.deleteMessage(sessionID, messageID).catch((err) => {
+    if (this.autoSave && this.fileStorage) {
+      const op = this.fileStorage.deleteMessage(sessionID, messageID).catch(err => {
         storageLogger.error(`Failed to delete message ${messageID}: ${err}`);
       });
       this.pendingOps.push(op);
@@ -204,8 +405,8 @@ class StorageImpl {
   deleteMessages(sessionID: string): void {
     this.messages.delete(sessionID);
 
-    if (this.autoSave && this.persistence) {
-      const op = this.persistence.deleteMessages(sessionID).catch((err) => {
+    if (this.autoSave && this.fileStorage) {
+      const op = this.fileStorage.deleteMessages(sessionID).catch(err => {
         storageLogger.error(`Failed to delete messages for session ${sessionID}: ${err}`);
       });
       this.pendingOps.push(op);
@@ -219,8 +420,8 @@ class StorageImpl {
     this.initialized = false;
     this.pendingOps = [];
 
-    if (this.persistence) {
-      this.persistence.clear().catch((err) => {
+    if (this.fileStorage) {
+      this.fileStorage.clear().catch(err => {
         storageLogger.error(`Failed to clear storage: ${err}`);
       });
     }
@@ -241,8 +442,8 @@ class StorageImpl {
     this.initialized = false;
     this.pendingOps = [];
 
-    if (this.persistence) {
-      await this.persistence.clear();
+    if (this.fileStorage) {
+      await this.fileStorage.clear();
     }
   }
 
@@ -261,14 +462,11 @@ class StorageImpl {
     const ops = this.pendingOps;
     this.pendingOps = [];
     await Promise.all(ops);
-
-    if (this.persistence) {
-      await this.persistence.flush();
+    
+    if (this.fileStorage) {
+      await this.fileStorage.ensureInitialized();
     }
   }
 }
 
-const Storage = new StorageImpl();
-
-export { Storage };
-export type { SessionPersistence, PersistenceConfig };
+export const Storage = new StorageImpl();

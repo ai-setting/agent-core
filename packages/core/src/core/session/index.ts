@@ -30,7 +30,8 @@
  */
 
 export { Session } from "./session";
-export type { SessionInfo, MessageInfo, Part, MessageWithParts, HistoryMessage, SessionCreateOptions } from "./types";
+export type { SessionInfo, MessageInfo, Part, MessageWithParts, SessionCreateOptions } from "./types";
+// Note: HistoryMessage removed. Use ModelMessage from 'ai' SDK directly.
 export { ID } from "./id";
 export { Storage } from "./storage";
 export { SessionCompaction, type CompactionConfig, type CompactionStatus, type CompactionResult, type CompactionEnv, type CompactionCondition } from "./compaction";

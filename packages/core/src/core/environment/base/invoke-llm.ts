@@ -21,24 +21,10 @@ export interface InvokeLLMConfig {
   apiKey: string;
 }
 
-export interface LLMMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | Record<string, unknown>;
-  name?: string;
-  reasoning_content?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: string;
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
-  tool_call_id?: string;
-}
+// Note: ModelMessage interface removed. Use ModelMessage from 'ai' SDK directly.
 
 export interface LLMOptions {
-  messages: LLMMessage[];
+  messages: ModelMessage[];
   tools?: ToolInfo[];
   model?: string;
   temperature?: number;
@@ -101,91 +87,24 @@ function parseModelString(model?: string): { providerId: string; modelId: string
 }
 
 /**
- * Check if a message is already in AI SDK ModelMessage format
- * (content is an array with type/text or type/tool-call parts)
+ * Convert messages to ensure AI SDK compatibility
+ * Since we now use ModelMessage format throughout, this mainly validates and logs
  */
-function isAlreadyModelMessage(msg: LLMMessage): boolean {
-  if (Array.isArray(msg.content)) {
-    // Check if content array has AI SDK format parts
-    return msg.content.some((part: any) => 
-      part && typeof part === "object" && 
-      (part.type === "text" || part.type === "tool-call" || part.type === "tool-result")
-    );
-  }
-  return false;
-}
-
-/**
- * Convert internal LLMMessage to AI SDK ModelMessage format
- */
-function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
+function convertToSDKMessages(messages: ModelMessage[]): ModelMessage[] {
+  invokeLLMLogger.debug("[convertToSDKMessages] Processing messages", { count: messages.length });
+  
+  // Messages should already be in ModelMessage format from session history
+  // Just return them as-is, but log any potential issues
   return messages.map((msg) => {
-    // If message is already in ModelMessage format, return as-is
-    if (isAlreadyModelMessage(msg)) {
-      invokeLLMLogger.debug("[convertToSDKMessages] Message already in ModelMessage format, skipping conversion", {
-        role: msg.role,
-        contentTypes: (msg.content as unknown as any[]).map((p: any) => p?.type).join(", ")
-      });
-      return msg as unknown as ModelMessage;
-    }
-
-    // Handle tool role messages
+    // Validate that tool messages have proper format
     if (msg.role === "tool") {
-      // For tool messages, content must be an array of text parts
-      const toolContent = typeof msg.content === "string" 
-        ? [{ type: "text" as const, text: msg.content }]
-        : [{ type: "text" as const, text: JSON.stringify(msg.content) }];
-      
-      return {
-        role: "tool" as const,
-        content: toolContent,
-        toolCallId: msg.tool_call_id || "",
-      } as unknown as ModelMessage;
-    }
-
-    // Handle assistant role with tool_calls (OpenAI format from Agent)
-    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
-      const content: any[] = [];
-      
-      // Add text content if present
-      if (msg.content && typeof msg.content === "string" && msg.content.trim()) {
-        content.push({ type: "text", text: msg.content });
+      const toolMsg = msg as any;
+      if (!toolMsg.toolCallId && !toolMsg.tool_call_id) {
+        invokeLLMLogger.warn("[convertToSDKMessages] Tool message missing toolCallId", { msg });
       }
-      
-      // Add tool calls
-      for (const tc of msg.tool_calls) {
-        try {
-          content.push({
-            type: "tool-call",
-            toolCallId: tc.id,
-            toolName: tc.function.name,
-            args: JSON.parse(tc.function.arguments || "{}"),
-          });
-        } catch (e) {
-          invokeLLMLogger.warn("[convertToSDKMessages] Failed to parse tool arguments", {
-            toolName: tc.function.name,
-            arguments: tc.function.arguments,
-          });
-          content.push({
-            type: "tool-call",
-            toolCallId: tc.id,
-            toolName: tc.function.name,
-            args: {},
-          });
-        }
-      }
-      
-      return {
-        role: "assistant" as const,
-        content,
-      } as ModelMessage;
     }
-
-    // Handle regular messages (string content)
-    return {
-      role: msg.role,
-      content: msg.content,
-    } as ModelMessage;
+    
+    return msg;
   });
 }
 
@@ -543,7 +462,7 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
       return invokeLLM(
         config,
         {
-          messages: args.messages as LLMMessage[],
+          messages: args.messages as ModelMessage[],
           tools: args.tools as ToolInfo[] | undefined,
           model: args.model as string | undefined,
           temperature: args.temperature as number | undefined,
@@ -632,7 +551,7 @@ export function createSystem1IntuitiveReasoning(config: InvokeLLMConfig): ToolIn
       return intuitiveReasoning(
         config,
         {
-          messages: args.messages as LLMMessage[],
+          messages: args.messages as ModelMessage[],
           model: args.model as string | undefined,
           temperature: args.temperature as number | undefined,
           maxTokens: args.maxTokens as number | undefined,

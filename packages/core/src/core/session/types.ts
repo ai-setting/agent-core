@@ -225,34 +225,8 @@ export interface FileContent {
   filename?: string;
 }
 
-/**
- * History message format for Agent Core.
- * Supports multimodal content (text, images, audio, files).
- * Compatible with the handle_query history parameter.
- */
-export interface HistoryMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: MessageContent | MessageContent[];
-  name?: string;
-  tool_call_id?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: string;
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
-}
-
-/**
- * Simple text-only history message (backward compatible).
- */
-export interface SimpleHistoryMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  name?: string;
-}
+// Note: HistoryMessage and SimpleHistoryMessage are removed.
+// Use ModelMessage from 'ai' SDK directly for consistency.
 
 /**
  * Session creation options.

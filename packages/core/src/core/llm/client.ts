@@ -65,7 +65,7 @@ export class LLMClient {
   }
 
   async complete(
-    messages: Array<{ role: string; content: string; name?: string; tool_calls?: unknown[]; tool_call_id?: string }>,
+    messages: Array<{ role: string; content: string; name?: string }>,
     tools?: ToolInfo[],
   ): Promise<LLMResponse> {
     const startTime = Date.now();
