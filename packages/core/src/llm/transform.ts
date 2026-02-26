@@ -50,14 +50,16 @@ export namespace LLMTransform {
       result = handleMistralMessages(result);
     }
     
-    // OpenAI-compatible provider handling (MiniMax, Kimi, etc.)
-    // Handles reasoning_content extraction for models with reasoning capability
-    if (provider.sdkType === "openai" || provider.sdkType === "openai-compatible") {
-      transformLogger.info("[normalizeMessages] Applying OpenAI-compatible handler", {
+    // Handle interleaved reasoning for models with reasoning capability
+    // Extracts reasoning content from messages and places it in providerOptions
+    // This is required for models like Kimi k2.5, DeepSeek R1, etc.
+    if (model.capabilities.interleaved?.field) {
+      transformLogger.info("[normalizeMessages] Applying interleaved reasoning handler", {
         providerId: provider.id,
         modelId: model.id,
+        field: model.capabilities.interleaved.field,
       });
-      result = handleMiniMaxMessages(result, provider, model);
+      result = handleInterleavedReasoning(result, model);
     }
 
     transformLogger.info("[normalizeMessages] Messages before return", {
@@ -182,75 +184,74 @@ export namespace LLMTransform {
   }
 
   /**
-   * Handle messages for OpenAI-compatible providers (MiniMax, Kimi, etc.)
-   * - Extracts reasoning content from assistant messages and puts it in providerOptions
-   * - Required for models like Kimi k2.5 with reasoning capability
+   * Handle interleaved reasoning content
+   * Extracts reasoning/thinking parts from assistant messages and places them
+   * in providerOptions for models that require this format (e.g., Kimi k2.5, DeepSeek R1)
+   * 
+   * Inspired by opencode's provider transform patterns:
+   * https://github.com/opencode-ai/opencode/blob/main/packages/opencode/src/provider/transform.ts
    */
-  function handleMiniMaxMessages(
+  function handleInterleavedReasoning(
     msgs: ModelMessage[],
-    provider: ProviderMetadata,
     model: ModelMetadata
   ): ModelMessage[] {
-    transformLogger.info("[handleMiniMaxMessages] Starting conversion", {
-      messageCount: msgs.length,
-      providerId: provider.id,
-      modelId: model.id,
-    });
-
-    const isKimiK2 = provider.id === "kimi" && model.id.toLowerCase().includes("kimi-k2");
-    const hasReasoning = model.capabilities?.reasoning;
-
-    // For Kimi k2.5 or other reasoning models, extract reasoning from assistant messages
-    // Check for both "openai" and "openai-compatible" sdk types
-    if ((isKimiK2 || hasReasoning) && (provider.sdkType === "openai" || provider.sdkType === "openai-compatible")) {
-      return msgs.map((msg) => {
-        if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
-          return msg;
-        }
-
-        // Find reasoning parts
-        const reasoningParts: string[] = [];
-        const otherParts: any[] = [];
-
-        for (const part of msg.content as any[]) {
-          if (part.type === "reasoning") {
-            reasoningParts.push(part.text);
-          } else if (part.type === "text" && part.text?.startsWith("<think>") && part.text?.endsWith("</think>")) {
-            // Extract reasoning from <think> tags (added by agent/index.ts)
-            const reasoning = part.text.slice(7, -8); // Remove <think> and </think>
-            reasoningParts.push(reasoning);
-          } else {
-            otherParts.push(part);
-          }
-        }
-
-        // If we have reasoning and tool calls, add reasoning_content to providerOptions
-        const hasToolCalls = otherParts.some((p: any) => p.type === "tool-call");
-        if (reasoningParts.length > 0 && hasToolCalls) {
-          const reasoningText = reasoningParts.join("\n");
-          transformLogger.info("[handleMiniMaxMessages] Adding reasoning_content for tool-call message", {
-            reasoningLength: reasoningText.length,
-            toolCallCount: otherParts.filter((p: any) => p.type === "tool-call").length,
-          });
-
-          return {
-            ...msg,
-            content: otherParts,
-            providerOptions: {
-              ...msg.providerOptions,
-              openaiCompatible: {
-                ...(msg.providerOptions as any)?.openaiCompatible,
-                reasoning_content: reasoningText,
-              },
-            },
-          };
-        }
-
-        return msg;
-      });
+    const field = model.capabilities.interleaved?.field;
+    if (!field) {
+      return msgs;
     }
 
-    return msgs;
+    transformLogger.info("[handleInterleavedReasoning] Starting conversion", {
+      messageCount: msgs.length,
+      modelId: model.id,
+      field,
+    });
+
+    return msgs.map((msg) => {
+      // Only process assistant messages with array content
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+        return msg;
+      }
+
+      // Extract reasoning parts (both 'reasoning' type and <think> tags)
+      const reasoningParts: string[] = [];
+      const otherParts: any[] = [];
+
+      for (const part of msg.content as any[]) {
+        if (part.type === "reasoning") {
+          reasoningParts.push(part.text);
+        } else if (part.type === "text" && part.text?.startsWith("<think>") && part.text?.endsWith("</think>")) {
+          // Extract reasoning from <think> tags (added by agent/index.ts)
+          const reasoning = part.text.slice(7, -8); // Remove <think> and </think>
+          reasoningParts.push(reasoning);
+        } else {
+          otherParts.push(part);
+        }
+      }
+
+      // If we have reasoning content, add it to providerOptions
+      if (reasoningParts.length > 0) {
+        const reasoningText = reasoningParts.join("\n");
+        transformLogger.info("[handleInterleavedReasoning] Adding reasoning to providerOptions", {
+          field,
+          reasoningLength: reasoningText.length,
+          messageHasToolCalls: otherParts.some((p: any) => p.type === "tool-call"),
+        });
+
+        return {
+          ...msg,
+          content: otherParts,
+          providerOptions: {
+            ...msg.providerOptions,
+            openaiCompatible: {
+              ...(msg.providerOptions as any)?.openaiCompatible,
+              [field]: reasoningText,
+            },
+          },
+        };
+      }
+
+      return msg;
+    });
   }
 
   /**

@@ -14,6 +14,10 @@
 - [开发进度与路线图（Progress & Roadmap）](./DEVELOPMENT_PROGRESS.md)
 - [Env Spec 设计与实现（从 Environment 推导 MCP options、Stdio/HTTP 传输）](./env-spec-design-and-implementation.md)
 
+## LLM Provider 相关
+
+- [Interleaved Reasoning 处理机制](./llm-interleaved-reasoning.md) - 如何处理 Kimi k2.5、DeepSeek R1 等模型的 reasoning content
+
 ## 现阶段仍有效的历史设计稿（位于 `docs/old/`）
 
 - **应用架构总览（Server/CLI/Web/桌面 + SSE/EventBus）**：`old/architecture/overview.md`
