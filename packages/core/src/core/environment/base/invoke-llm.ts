@@ -101,10 +101,34 @@ function parseModelString(model?: string): { providerId: string; modelId: string
 }
 
 /**
+ * Check if a message is already in AI SDK ModelMessage format
+ * (content is an array with type/text or type/tool-call parts)
+ */
+function isAlreadyModelMessage(msg: LLMMessage): boolean {
+  if (Array.isArray(msg.content)) {
+    // Check if content array has AI SDK format parts
+    return msg.content.some((part: any) => 
+      part && typeof part === "object" && 
+      (part.type === "text" || part.type === "tool-call" || part.type === "tool-result")
+    );
+  }
+  return false;
+}
+
+/**
  * Convert internal LLMMessage to AI SDK ModelMessage format
  */
 function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
   return messages.map((msg) => {
+    // If message is already in ModelMessage format, return as-is
+    if (isAlreadyModelMessage(msg)) {
+      invokeLLMLogger.debug("[convertToSDKMessages] Message already in ModelMessage format, skipping conversion", {
+        role: msg.role,
+        contentTypes: (msg.content as unknown as any[]).map((p: any) => p?.type).join(", ")
+      });
+      return msg as unknown as ModelMessage;
+    }
+
     // Handle tool role messages
     if (msg.role === "tool") {
       // For tool messages, content must be an array of text parts
@@ -119,7 +143,7 @@ function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
       } as unknown as ModelMessage;
     }
 
-    // Handle assistant role with tool_calls
+    // Handle assistant role with tool_calls (OpenAI format from Agent)
     if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
       const content: any[] = [];
       
@@ -157,7 +181,7 @@ function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
       } as ModelMessage;
     }
 
-    // Handle regular messages
+    // Handle regular messages (string content)
     return {
       role: msg.role,
       content: msg.content,
