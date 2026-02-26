@@ -1,14 +1,17 @@
 /**
- * @fileoverview LLM invocation core implementation.
+ * @fileoverview LLM invocation with AI SDK integration.
  *
- * This module provides the core LLM invocation functionality that is used
- * by BaseEnvironment as a native capability, not as a tool.
+ * This module provides LLM invocation using AI SDK for better provider support.
+ * Maintains backward compatibility with existing StreamEventHandler interface.
  */
 
+import { streamText, type ModelMessage, type ToolSet } from "ai";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
 import { createLogger } from "../../../utils/logger.js";
+import { providerManager } from "../../../llm/provider-manager.js";
+import { LLMTransform } from "../../../llm/transform.js";
 
 const invokeLLMLogger = createLogger("invoke:llm", "server.log");
 
@@ -43,71 +46,6 @@ export interface LLMOptions {
   stream?: boolean;
 }
 
-interface StreamChunk {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    delta: {
-      role?: string;
-      content?: string;
-      reasoning_content?: string;
-      tool_calls?: Array<{
-        index: number;
-        id?: string;
-        type?: string;
-        function?: {
-          name?: string;
-          arguments?: string;
-        };
-      }>;
-    };
-    finish_reason?: string;
-  }>;
-}
-
-const BUILTIN_PROVIDERS: Record<string, { baseURL?: string; defaultModel: string }> = {
-  openai: { baseURL: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
-  moonshot: { baseURL: "https://api.moonshot.cn/v1", defaultModel: "kimi-k2.5" },
-  kimi: { baseURL: "https://api.moonshot.cn/v1", defaultModel: "kimi-k2.5" },
-  deepseek: { baseURL: "https://api.deepseek.com", defaultModel: "deepseek-chat" },
-};
-
-function getProviderConfig(provider: string): { baseURL?: string; defaultModel: string } {
-  return BUILTIN_PROVIDERS[provider] || { defaultModel: provider };
-}
-
-function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
-  const schema = zodToJsonSchema(parameters, "zod");
-  if ("$ref" in schema && schema.definitions) {
-    const def = (schema.definitions as Record<string, unknown>).zod as Record<string, unknown> | undefined;
-    if (def && def.type === "object" && def.properties) {
-      return {
-        type: "object",
-        properties: def.properties,
-        required: def.required,
-        additionalProperties: true,
-      };
-    }
-  }
-  return schema as Record<string, unknown>;
-}
-
-function convertTools(tools: ToolInfo[]): any[] {
-  const result = tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description ?? "",
-      parameters: extractToolSchema(t.parameters),
-    },
-  }));
-  invokeLLMLogger.debug("[convertTools] Converting tools", { input: tools.map(t => t.name), output: result.map(t => t.function.name) });
-  return result;
-}
-
 export interface LLMOutput extends Record<string, unknown> {
   content: string;
   reasoning?: string;
@@ -130,7 +68,116 @@ export interface StreamEventHandler {
 }
 
 /**
- * Core LLM invocation function - used by BaseEnvironment as a native capability
+ * Parse model string in format "providerId/modelId"
+ */
+function parseModelString(model?: string): { providerId: string; modelId: string } {
+  if (!model) {
+    // Use default from providers.jsonc
+    const providers = providerManager.listProviders();
+    if (providers.length === 0) {
+      throw new Error("No providers available. Please check providers.jsonc configuration.");
+    }
+    const defaultProvider = providers[0];
+    return { 
+      providerId: defaultProvider.id, 
+      modelId: defaultProvider.defaultModel 
+    };
+  }
+
+  const parts = model.split("/");
+  if (parts.length === 2) {
+    return { providerId: parts[0], modelId: parts[1] };
+  }
+
+  // If only modelId provided, try to find in providers
+  const providers = providerManager.listProviders();
+  for (const provider of providers) {
+    if (provider.models.some(m => m.id === model)) {
+      return { providerId: provider.id, modelId: model };
+    }
+  }
+
+  throw new Error(`Invalid model format: ${model}. Expected: providerId/modelId or model must exist in providers.jsonc`);
+}
+
+/**
+ * Convert internal LLMMessage to AI SDK ModelMessage format
+ */
+function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
+  return messages.map((msg) => {
+    const sdkMsg: any = {
+      role: msg.role,
+      content: msg.content,
+    };
+
+    if (msg.name) {
+      sdkMsg.name = msg.name;
+    }
+
+    if (msg.tool_call_id) {
+      sdkMsg.toolCallId = msg.tool_call_id;
+    }
+
+    if (msg.tool_calls && msg.role === "assistant") {
+      // Convert tool_calls to AI SDK format
+      sdkMsg.content = [
+        ...(typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : []),
+        ...msg.tool_calls.map((tc) => ({
+          type: "tool-call",
+          toolCallId: tc.id,
+          toolName: tc.function.name,
+          args: JSON.parse(tc.function.arguments || "{}"),
+        })),
+      ];
+    }
+
+    return sdkMsg;
+  }) as ModelMessage[];
+}
+
+/**
+ * Convert ToolInfo to AI SDK ToolSet format
+ */
+function convertToolsToSDK(tools: ToolInfo[]): ToolSet {
+  const result: ToolSet = {};
+  
+  for (const tool of tools) {
+    // Use type assertion to avoid strict type checking issues
+    (result as any)[tool.name] = {
+      description: tool.description || "",
+      parameters: extractToolSchema(tool.parameters),
+    };
+  }
+  
+  invokeLLMLogger.debug("[convertToolsToSDK] Converted tools", { 
+    input: tools.map(t => t.name), 
+    output: Object.keys(result) 
+  });
+  
+  return result;
+}
+
+/**
+ * Extract JSON schema from Zod type
+ */
+function extractToolSchema(parameters: z.ZodType): Record<string, unknown> {
+  const schema = zodToJsonSchema(parameters, "zod");
+  if ("$ref" in schema && schema.definitions) {
+    const def = (schema.definitions as Record<string, unknown>).zod as Record<string, unknown> | undefined;
+    if (def && def.type === "object" && def.properties) {
+      return {
+        type: "object",
+        properties: def.properties,
+        required: def.required,
+        additionalProperties: true,
+      };
+    }
+  }
+  return schema as Record<string, unknown>;
+}
+
+/**
+ * Core LLM invocation using AI SDK
  */
 export async function invokeLLM(
   config: InvokeLLMConfig,
@@ -139,252 +186,155 @@ export async function invokeLLM(
   eventHandler?: StreamEventHandler
 ): Promise<ToolResult> {
   const startTime = Date.now();
-  const messages = options.messages;
-  const tools = options.tools;
-  const stream = options.stream ?? true;
-
-  invokeLLMLogger.info("[invokeLLM] Function called", { toolCount: tools?.length || 0, stream });
-
-  const requestBody: any = {
-    model: options.model || config.model,
-    messages: messages.map((m) => {
-      const msg: any = {
-        role: m.role,
-        content: m.content,
-      };
-      if (m.name) {
-        msg.name = m.name;
-      }
-      if (m.reasoning_content) {
-        msg.reasoning_content = m.reasoning_content;
-      }
-      if (m.tool_calls && m.role === "assistant") {
-        msg.tool_calls = m.tool_calls;
-      }
-      if (m.tool_call_id && m.role === "tool") {
-        msg.tool_call_id = m.tool_call_id;
-      }
-      // Log if tool message is missing tool_call_id
-      if (m.role === "tool" && !m.tool_call_id) {
-        invokeLLMLogger.warn("[invokeLLM] Tool message missing tool_call_id", { 
-          role: m.role, 
-          name: m.name, 
-          contentPreview: typeof m.content === 'string' ? m.content.substring(0, 50) : '[multimodal]'
-        });
-      }
-      return msg;
-    }),
-    stream,
-    temperature: options.temperature,
-    max_tokens: options.maxTokens,
-  };
-
-  invokeLLMLogger.info("[invokeLLM] Request body prepared", {
-    messageCount: requestBody.messages.length,
-    messages: requestBody.messages.map((m: any) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content.substring(0, 100) : '[multimodal]',
-      tool_calls: m.tool_calls?.map((tc: any) => ({
-        id: tc.id,
-        function: tc.function?.name,
-        arguments: tc.function?.arguments,
-      })),
-    })),
-  });
-
-  if (tools && tools.length > 0) {
-    requestBody.tools = convertTools(tools);
-    requestBody.tool_choice = "auto";
-    invokeLLMLogger.info("[invokeLLM] Sending tools to LLM", { count: requestBody.tools.length });
-  } else {
-    invokeLLMLogger.info("[invokeLLM] Sending NO tools to LLM");
-  }
 
   try {
-    invokeLLMLogger.debug("[invokeLLM] About to fetch LLM API");
-    const response = await fetch(`${config.baseURL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-      signal: ctx.abort,
-    });
-    invokeLLMLogger.info("[invokeLLM] Fetch completed", { status: response.status });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API error: ${response.status} - ${error}`);
-    }
-
-    if (!stream) {
-      // Non-streaming response
-      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-      const content = data.choices?.[0]?.message?.content || "";
-      return {
-        success: true,
-        output: content,
-        metadata: {
-          execution_time_ms: Date.now() - startTime,
-        },
-      };
-    }
-
-    // Streaming response
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Failed to get response reader");
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let content = "";
-    let reasoningContent = "";
-    const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
-
-    // Emit start event
-    if (eventHandler?.onStart) {
-      eventHandler.onStart({ model: config.model });
-    }
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          invokeLLMLogger.info("[invokeLLM] Stream reading done");
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === "data: [DONE]") continue;
-          if (!trimmed.startsWith("data: ")) continue;
-
-          const data = trimmed.slice(6);
-          if (data === "[DONE]") continue;
-
-          try {
-            const chunk: StreamChunk = JSON.parse(data);
-            const delta = chunk.choices?.[0]?.delta;
-            if (!delta) continue;
-
-            if (delta.content) {
-              content += delta.content;
-              invokeLLMLogger.debug("[invokeLLM] onText called", { contentLength: content.length });
-              if (eventHandler?.onText) {
-                eventHandler.onText(content, delta.content);
-              }
-            }
-
-            if (delta.reasoning_content) {
-              reasoningContent += delta.reasoning_content;
-              invokeLLMLogger.debug("[invokeLLM] onReasoning called", { reasoningLength: reasoningContent.length });
-              if (eventHandler?.onReasoning) {
-                eventHandler.onReasoning(reasoningContent);
-              }
-            }
-
-            if (delta.tool_calls) {
-              invokeLLMLogger.info("[invokeLLM] Received tool_calls from LLM", { 
-                count: delta.tool_calls.length,
-                toolCalls: delta.tool_calls.map(tc => ({
-                  index: tc.index,
-                  id: tc.id,
-                  hasFunction: !!tc.function,
-                  functionName: tc.function?.name,
-                  functionArgsPreview: tc.function?.arguments?.substring(0, 50),
-                }))
-              });
-              for (const tc of delta.tool_calls) {
-                if (tc.index !== undefined) {
-                  if (!toolCalls[tc.index]) {
-                    toolCalls[tc.index] = {
-                      id: tc.id || `call-${tc.index}`,
-                      function: { name: "", arguments: "" },
-                    };
-                    invokeLLMLogger.info("[invokeLLM] Created new toolCall slot", { index: tc.index, id: toolCalls[tc.index].id });
-                  }
-                  if (tc.function?.name) {
-                    toolCalls[tc.index].function.name = tc.function.name;
-                    invokeLLMLogger.info("[invokeLLM] Updated toolCall name", { index: tc.index, name: tc.function.name });
-                  }
-                  if (tc.function?.arguments) {
-                    toolCalls[tc.index].function.arguments += tc.function.arguments;
-                    invokeLLMLogger.info("[invokeLLM] Updated toolCall arguments", { index: tc.index, argsLength: tc.function.arguments.length });
-                  }
-                }
-              }
-              
-              // Emit tool_call event
-              if (eventHandler?.onToolCall && toolCalls.length > 0) {
-                const lastTool = toolCalls[toolCalls.length - 1];
-                invokeLLMLogger.info("[invokeLLM] Checking if should emit tool_call event", { 
-                  hasLastTool: !!lastTool,
-                  lastToolName: lastTool?.function?.name,
-                  lastToolArgs: lastTool?.function?.arguments?.substring(0, 50),
-                });
-                if (lastTool.function.name) {
-                  let parsedArgs: Record<string, unknown> = {};
-                  try {
-                    parsedArgs = JSON.parse(lastTool.function.arguments || "{}");
-                  } catch (e) {
-                    invokeLLMLogger.warn("[invokeLLM] Failed to parse tool arguments, using raw string", { 
-                      args: lastTool.function.arguments,
-                      error: e instanceof Error ? e.message : String(e)
-                    });
-                    // Use raw arguments string if parsing fails
-                    parsedArgs = { _raw: lastTool.function.arguments };
-                  }
-                  invokeLLMLogger.info("[invokeLLM] Emitting tool_call event", { 
-                    toolName: lastTool.function.name, 
-                    toolCallId: lastTool.id,
-                    parsedArgs,
-                  });
-                  eventHandler.onToolCall(
-                    lastTool.function.name,
-                    parsedArgs,
-                    lastTool.id
-                  );
-                }
-              }
-            }
-          } catch {
-            // Skip parse errors
-          }
-        }
-      }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        invokeLLMLogger.info("[invokeLLM] Stream aborted by user");
-        throw err;
-      } else {
-        throw err;
-      }
-    }
-
-    // Filter out invalid tool calls (no function name)
-    const validToolCalls = toolCalls.filter(tc => tc.function?.name && tc.function.name.trim() !== "");
+    // 1. Parse model string to get provider and model
+    const { providerId, modelId } = parseModelString(options.model || config.model);
     
+    invokeLLMLogger.info("[invokeLLM] Starting with AI SDK", { 
+      providerId, 
+      modelId,
+      messageCount: options.messages.length,
+      toolCount: options.tools?.length || 0 
+    });
+
+    // 2. Get provider instance
+    const provider = providerManager.getProvider(providerId);
+    if (!provider) {
+      throw new Error(`Provider ${providerId} not found. Please check providers.jsonc configuration.`);
+    }
+
+    // 3. Get model metadata
+    const modelMetadata = provider.metadata.models.find(m => m.id === modelId);
+    if (!modelMetadata) {
+      invokeLLMLogger.warn(`[invokeLLM] Model ${modelId} not found in provider metadata, using defaults`);
+    }
+
+    // 4. Convert messages to AI SDK format
+    let messages = convertToSDKMessages(options.messages);
+    
+    // 5. Apply provider-specific transformations
+    messages = LLMTransform.normalizeMessages(
+      messages, 
+      provider.metadata, 
+      modelMetadata || provider.metadata.models[0] || { id: modelId, capabilities: { temperature: true, reasoning: false, toolcall: true, attachment: false, input: { text: true, image: false, audio: false, video: false, pdf: false }, output: { text: true, image: false, audio: false } }, limits: { contextWindow: 8192 } }
+    );
+
+    // 6. Apply caching for supported providers
+    if (provider.metadata.sdkType === "anthropic") {
+      messages = LLMTransform.applyCaching(messages, provider.metadata);
+    }
+
+    // 7. Generate provider-specific options
+    const providerOptions = LLMTransform.generateProviderOptions(
+      provider.metadata,
+      modelMetadata || provider.metadata.models[0] || { id: modelId, capabilities: { temperature: true, reasoning: false, toolcall: true, attachment: false, input: { text: true, image: false, audio: false, video: false, pdf: false }, output: { text: true, image: false, audio: false } }, limits: { contextWindow: 8192 } },
+      {
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+      }
+    );
+
+    // 8. Convert tools
+    const tools = options.tools && options.tools.length > 0 
+      ? convertToolsToSDK(options.tools) 
+      : undefined;
+
+    // 9. Emit start event
+    if (eventHandler?.onStart) {
+      eventHandler.onStart({ model: `${providerId}/${modelId}` });
+    }
+
+    // 10. Call AI SDK streamText
+    const result = await streamText({
+      model: provider.sdk.languageModel(modelId),
+      messages,
+      tools,
+      temperature: providerOptions.temperature,
+      maxTokens: providerOptions.maxTokens,
+      ...providerOptions.providerOptions,
+      abortSignal: ctx.abort,
+      maxRetries: 2,
+    });
+
+    // 11. Process stream
+    let fullContent = "";
+    let reasoningContent = "";
+    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+
+    invokeLLMLogger.info("[invokeLLM] Starting to process stream");
+
+    for await (const part of result.fullStream) {
+      const streamPart = part as any;
+      switch (streamPart.type) {
+        case "text-delta":
+          const textDelta = streamPart.text as string;
+          fullContent += textDelta;
+          invokeLLMLogger.debug("[invokeLLM] Text delta received", { length: textDelta.length });
+          if (eventHandler?.onText) {
+            eventHandler.onText(fullContent, textDelta);
+          }
+          break;
+
+        case "reasoning-delta":
+          const reasoningDelta = streamPart.text as string;
+          reasoningContent += reasoningDelta;
+          invokeLLMLogger.debug("[invokeLLM] Reasoning received", { length: reasoningDelta.length });
+          if (eventHandler?.onReasoning) {
+            eventHandler.onReasoning(reasoningContent);
+          }
+          break;
+
+        case "tool-call":
+          const toolInput = streamPart.input as Record<string, unknown>;
+          toolCalls.push({
+            id: streamPart.toolCallId,
+            name: streamPart.toolName,
+            args: toolInput,
+          });
+          invokeLLMLogger.info("[invokeLLM] Tool call received", { 
+            toolName: streamPart.toolName, 
+            toolCallId: streamPart.toolCallId 
+          });
+          if (eventHandler?.onToolCall) {
+            eventHandler.onToolCall(streamPart.toolName, toolInput, streamPart.toolCallId);
+          }
+          break;
+
+        case "error":
+          throw streamPart.error;
+
+        case "finish":
+          invokeLLMLogger.info("[invokeLLM] Stream finished", { 
+            finishReason: streamPart.finishReason,
+            usage: streamPart.totalUsage 
+          });
+          break;
+      }
+    }
+
+    // 12. Build output
     const output: LLMOutput = {
-      content,
-      reasoning: reasoningContent,
-      model: config.model,
+      content: fullContent,
+      reasoning: reasoningContent || undefined,
+      model: `${providerId}/${modelId}`,
     };
 
-    if (validToolCalls.length > 0) {
-      output.tool_calls = validToolCalls;
-      invokeLLMLogger.debug("[invokeLLM] Returning with tool_calls", { count: validToolCalls.length, tools: validToolCalls.map(t => t.function.name) });
+    if (toolCalls.length > 0) {
+      output.tool_calls = toolCalls.map(tc => ({
+        id: tc.id,
+        function: {
+          name: tc.name,
+          arguments: JSON.stringify(tc.args),
+        },
+      }));
+      invokeLLMLogger.info("[invokeLLM] Returning with tool_calls", { count: toolCalls.length });
     } else {
-      invokeLLMLogger.debug("[invokeLLM] Returning content (no tool_calls)");
-      // Emit completed event only when returning final content (no tool calls)
+      // Emit completed event only when no tool calls
       if (eventHandler?.onCompleted) {
-        eventHandler.onCompleted(content, { model: config.model });
+        eventHandler.onCompleted(fullContent, { model: `${providerId}/${modelId}` });
       }
+      invokeLLMLogger.info("[invokeLLM] Returning content (no tool_calls)");
     }
 
     return {
@@ -392,9 +342,13 @@ export async function invokeLLM(
       output,
       metadata: {
         execution_time_ms: Date.now() - startTime,
+        provider: providerId,
+        model: modelId,
       },
     };
+
   } catch (error) {
+    invokeLLMLogger.error("[invokeLLM] Error during invocation:", error);
     return {
       success: false,
       output: "",
@@ -416,20 +370,24 @@ export async function intuitiveReasoning(
 ): Promise<ToolResult> {
   return invokeLLM(
     config,
-    { ...options, stream: false },
+    { ...options, stream: true },  // AI SDK always streams, we just don't emit events
     ctx
   );
 }
 
+/**
+ * Legacy: Create LLM config from environment
+ * Note: This is now handled by ProviderManager, kept for backward compatibility
+ */
 export function createLLMConfigFromEnv(model: string): InvokeLLMConfig | undefined {
   const parts = model.split("/");
   const provider = parts[0] || "openai";
-  const modelId = parts.slice(1).join("/") || getProviderConfig(provider).defaultModel;
+  const modelId = parts.slice(1).join("/") || "gpt-4o";
 
   const apiKey = process.env.LLM_API_KEY || process.env[`${provider.toUpperCase()}_API_KEY`];
   if (!apiKey) return undefined;
 
-  const baseURL = process.env.LLM_BASE_URL || process.env[`${provider.toUpperCase()}_BASE_URL`] || getProviderConfig(provider).baseURL;
+  const baseURL = process.env.LLM_BASE_URL || process.env[`${provider.toUpperCase()}_BASE_URL`];
 
   return {
     model: modelId,
@@ -439,8 +397,8 @@ export function createLLMConfigFromEnv(model: string): InvokeLLMConfig | undefin
 }
 
 /**
- * Create LLM config from explicit parameters
- * Used when configuration is loaded from config files
+ * Legacy: Create LLM config from explicit parameters
+ * Note: This is now handled by ProviderManager, kept for backward compatibility
  */
 export function createLLMConfig(
   model: string,
@@ -448,17 +406,16 @@ export function createLLMConfig(
   apiKey: string
 ): InvokeLLMConfig {
   const parts = model.split("/");
-  const provider = parts[0] || "openai";
-  const modelId = parts.slice(1).join("/") || getProviderConfig(provider).defaultModel;
+  const modelId = parts.slice(1).join("/") || model;
 
   return {
     model: modelId,
-    baseURL: baseURL || getProviderConfig(provider).baseURL || "",
+    baseURL: baseURL || "",
     apiKey,
   };
 }
 
-// Legacy tool creators - kept for backward compatibility but not used internally
+// Legacy tool creators - kept for backward compatibility
 export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
   return {
     name: "invoke_llm",

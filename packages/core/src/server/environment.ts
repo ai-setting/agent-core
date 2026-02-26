@@ -123,6 +123,11 @@ export class ServerEnvironment extends BaseEnvironment {
     try {
       console.log("[ServerEnvironment] Loading configuration...");
 
+      // 0. Initialize ProviderManager for AI SDK integration
+      const { providerManager } = await import("../llm/provider-manager.js");
+      await providerManager.initialize();
+      serverLogger.info(`[ServerEnvironment] ProviderManager initialized with ${providerManager.listProviders().length} providers`);
+
       // 1. Load config file
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
@@ -130,7 +135,7 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1.1. Initialize session storage with persistence config
       const { Storage } = await import("../core/session/storage.js");
       await Storage.initialize({
-        mode: config.session?.persistence?.mode ?? "file",
+        mode: config.session?.persistence?.mode ?? "sqlite",
         path: config.session?.persistence?.path,
         autoSave: config.session?.persistence?.autoSave ?? true,
       });
