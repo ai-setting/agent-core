@@ -184,6 +184,19 @@ describe("LLMTransform", () => {
       expect(result.temperature).toBe(0.7);
     });
 
+    it("should force temperature=1 for ZhipuAI models", () => {
+      const zhipuProvider = { ...mockProvider("openai"), id: "zhipuai" };
+      const glmModel = { ...mockModel("glm-4"), id: "glm-4" };
+
+      const result = LLMTransform.generateProviderOptions(
+        zhipuProvider,
+        glmModel,
+        { temperature: 0.7 }
+      );
+
+      expect(result.temperature).toBe(1);
+    });
+
     it("should include maxTokens when provided", () => {
       const result = LLMTransform.generateProviderOptions(
         mockProvider("openai"),

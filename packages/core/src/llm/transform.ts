@@ -49,6 +49,22 @@ export namespace LLMTransform {
     if (model.id.toLowerCase().includes("mistral")) {
       result = handleMistralMessages(result);
     }
+    
+    // MiniMax-specific handling
+    const isMiniMaxModel = model.id.toLowerCase().includes("minimax");
+    transformLogger.info("[normalizeMessages] Checking MiniMax", {
+      modelId: model.id,
+      isMiniMaxModel,
+    });
+    
+    if (isMiniMaxModel) {
+      transformLogger.info("[normalizeMessages] Applying MiniMax handler");
+      result = handleMiniMaxMessages(result);
+    }
+
+    transformLogger.info("[normalizeMessages] Messages before return", {
+      messageCount: result.length,
+    });
 
     return result;
   }
@@ -168,6 +184,50 @@ export namespace LLMTransform {
   }
 
   /**
+   * MiniMax-specific message handling
+   * MiniMax expects tool-call arguments as JSON string, not object
+   */
+  function handleMiniMaxMessages(msgs: ModelMessage[]): ModelMessage[] {
+    transformLogger.info("[handleMiniMaxMessages] Starting conversion", {
+      messageCount: msgs.length,
+    });
+    
+    return msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+        return msg;
+      }
+
+      // Clone message to avoid mutating original
+      const processedMsg = { ...msg } as any;
+
+      // Convert tool-call args from object to string for MiniMax
+      processedMsg.content = msg.content.map((part: any) => {
+        transformLogger.info("[handleMiniMaxMessages] Processing part", {
+          partType: part.type,
+          hasArgs: !!part.args,
+          argsType: typeof part.args,
+        });
+        
+        if (part.type === "tool-call" && part.args && typeof part.args === "object") {
+          const stringifiedArgs = JSON.stringify(part.args);
+          transformLogger.info("[handleMiniMaxMessages] Converting args to string", {
+            toolName: part.toolName,
+            originalArgs: part.args,
+            stringifiedArgs,
+          });
+          return {
+            ...part,
+            args: stringifiedArgs,
+          };
+        }
+        return part;
+      });
+
+      return processedMsg;
+    });
+  }
+
+  /**
    * Generate provider-specific options
    * Handles parameter name differences between providers
    */
@@ -182,9 +242,48 @@ export namespace LLMTransform {
   ): Record<string, any> {
     const result: Record<string, any> = {};
 
-    // Temperature
-    if (options.temperature !== undefined && model.capabilities.temperature) {
-      result.temperature = options.temperature;
+    // Temperature - handle provider-specific constraints
+    transformLogger.debug("[generateProviderOptions] Processing temperature", {
+      optionsTemperature: options.temperature,
+      modelCapabilities: model.capabilities,
+      providerId: provider.id,
+      modelId: model.id,
+    });
+    
+    if (options.temperature !== undefined && model.capabilities?.temperature) {
+      let temperature = options.temperature;
+      
+      // ZhipuAI GLM models only accept temperature=1
+      const isZhipuAI = provider.id === "zhipuai";
+      const isGLMModel = model.id.includes("glm");
+      
+      transformLogger.debug("[generateProviderOptions] Checking ZhipuAI/GLM", {
+        isZhipuAI,
+        isGLMModel,
+        providerId: provider.id,
+        modelId: model.id,
+      });
+      
+      if (isZhipuAI || isGLMModel) {
+        temperature = 1;
+        transformLogger.info("[generateProviderOptions] Forcing temperature=1 for ZhipuAI/GLM model", { 
+          providerId: provider.id,
+          modelId: model.id,
+          originalTemp: options.temperature 
+        });
+      }
+      
+      result.temperature = temperature;
+      transformLogger.info("[generateProviderOptions] Setting temperature", { 
+        temperature,
+        providerId: provider.id,
+        modelId: model.id 
+      });
+    } else {
+      transformLogger.debug("[generateProviderOptions] Skipping temperature", {
+        hasOptionsTemp: options.temperature !== undefined,
+        modelCapTemp: model.capabilities?.temperature,
+      });
     }
 
     // Max tokens

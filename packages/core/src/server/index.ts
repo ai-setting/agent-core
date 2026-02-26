@@ -72,21 +72,20 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
   }
 
   // 创建 ServerEnvironment
+  // 注意：不直接传入model/apiKey/baseURL，让ServerEnvironment通过loadFromConfig()
+  // 使用模型选择链：recent > config > provider default
   let env: ServerEnvironment | undefined;
-  if (model && apiKey) {
-    try {
-      env = new ServerEnvironment({
-        model,
-        apiKey,
-        baseURL,
-      });
-      await env.waitForReady();
-      console.log(`✅ Environment 已创建 (Model: ${model})`);
-    } catch (error) {
-      console.error("❌ 创建 Environment 失败:", error instanceof Error ? error.message : String(error));
+  try {
+    env = new ServerEnvironment({});
+    await env.waitForReady();
+    const currentModel = env.getCurrentModel();
+    if (currentModel) {
+      console.log(`✅ Environment 已创建 (Model: ${currentModel.providerID}/${currentModel.modelID})`);
+    } else {
+      console.log("⚠️  Environment 已创建，但未配置 LLM");
     }
-  } else {
-    console.log("⚠️  未配置 LLM，将以简化模式运行");
+  } catch (error) {
+    console.error("❌ 创建 Environment 失败:", error instanceof Error ? error.message : String(error));
   }
 
   // 创建并启动 Server

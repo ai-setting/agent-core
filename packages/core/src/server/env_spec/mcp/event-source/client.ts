@@ -109,6 +109,9 @@ export class EventMcpClient {
    * 调用 Server 的 list_pending_events 工具获取事件
     */
   private startPolling(interval: number): void {
+    let consecutiveErrors = 0;
+    const maxErrorsBeforeSilence = 5;
+    
     this.pollInterval = setInterval(async () => {
       try {
         if (!this.client) return;
@@ -119,14 +122,49 @@ export class EventMcpClient {
         });
 
         if (result?.content?.[0]?.text) {
-          const events = JSON.parse(result.content[0].text);
-          for (const rawEvent of events) {
-            await this.handleEvent(rawEvent);
+          const text = result.content[0].text;
+          // Check if it looks like JSON before parsing
+          if (text.trim().startsWith('[') || text.trim().startsWith('{')) {
+            try {
+              const events = JSON.parse(text);
+              if (Array.isArray(events)) {
+                for (const rawEvent of events) {
+                  await this.handleEvent(rawEvent);
+                }
+              }
+              // Reset error counter on success
+              consecutiveErrors = 0;
+            } catch (parseError) {
+              consecutiveErrors++;
+              const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+              // Only log first few errors, then suppress
+              if (consecutiveErrors <= maxErrorsBeforeSilence) {
+                serverLogger.warn(`[EventMcpClient] JSON parse error for ${this.name}:`, { 
+                  error: errorMsg,
+                  preview: text.substring(0, 100)
+                });
+                if (consecutiveErrors === maxErrorsBeforeSilence) {
+                  serverLogger.info(`[EventMcpClient] Suppressing further polling errors for ${this.name} after ${maxErrorsBeforeSilence} consecutive failures`);
+                }
+              }
+            }
+          } else {
+            // Not JSON data, likely an error message from the server
+            consecutiveErrors++;
+            if (consecutiveErrors <= maxErrorsBeforeSilence) {
+              serverLogger.warn(`[EventMcpClient] Non-JSON response from ${this.name}:`, { 
+                preview: text.substring(0, 100) 
+              });
+            }
           }
         }
       } catch (error) {
+        consecutiveErrors++;
         const errorMsg = error instanceof Error ? error.message : String(error);
-        serverLogger.warn(`[EventMcpClient] Polling error for ${this.name}:`, { error: errorMsg });
+        // Only log first few errors
+        if (consecutiveErrors <= maxErrorsBeforeSilence) {
+          serverLogger.warn(`[EventMcpClient] Polling error for ${this.name}:`, { error: errorMsg });
+        }
       }
     }, interval);
   }

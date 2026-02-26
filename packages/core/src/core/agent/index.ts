@@ -59,9 +59,15 @@ export class Agent {
   private tools: import("../types").Tool[];
   private agentId: string;
 
-  private notifyMessageAdded(message: { role: string; content: string; toolCallId?: string }): void {
+  private notifyMessageAdded(message: { role: string; content: string; toolCallId?: string; name?: string }): void {
     if (this.context.onMessageAdded) {
-      this.context.onMessageAdded(message);
+      // Map camelCase to snake_case for tool messages to match expected format
+      const mappedMessage: any = { ...message };
+      if (message.toolCallId) {
+        mappedMessage.tool_call_id = message.toolCallId;
+        delete mappedMessage.toolCallId;
+      }
+      this.context.onMessageAdded(mappedMessage);
     }
   }
 
@@ -113,13 +119,29 @@ export class Agent {
     return count >= this.config.doomLoopThreshold;
   }
 
-  async run(systemPrompt: string, userQuery: string): Promise<string> {
-    console.log(`[Agent] Starting run with query: "${userQuery.substring(0, 50)}..."`);
+  async run(systemPrompt?: string, userQuery?: string): Promise<string> {
+    // Extract user query from event content if not provided
+    const query = userQuery ?? (typeof this.event.content === "string" ? this.event.content : JSON.stringify(this.event.content));
+    
+    // Get system prompt from behavior spec if not provided
+    let prompt = systemPrompt;
+    if (!prompt && this.env.getBehaviorSpec) {
+      try {
+        const spec = await this.env.getBehaviorSpec(this.agentId);
+        prompt = spec.combinedPrompt;
+      } catch (e) {
+        console.warn("[Agent] Failed to get behavior spec:", e);
+        prompt = "You are a helpful assistant.";
+      }
+    }
+    prompt = prompt ?? "You are a helpful assistant.";
+    
+    console.log(`[Agent] Starting run with query: "${query.substring(0, 50)}..."`);
     console.log(`[Agent] Available tools: ${this.tools.map(t => t.name).join(", ")}`);
     
     const messages: ModelMessage[] = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userQuery },
+      { role: "system", content: prompt },
+      { role: "user", content: query },
     ];
 
     let iteration = 0;
@@ -149,7 +171,7 @@ export class Agent {
           return `Error: ${llmResult.error}`;
         }
 
-        const output = llmResult.output as LLMOutput;
+        const output = llmResult.output as unknown as LLMOutput;
         console.log(`[Agent] LLM output received`, {
           contentLength: output.content?.length || 0,
           hasToolCalls: !!(output.tool_calls && output.tool_calls.length > 0),
@@ -182,11 +204,18 @@ export class Agent {
         
         // Add tool calls as tool-call parts
         for (const tc of toolCalls) {
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs = JSON.parse(tc.function.arguments || "{}");
+          } catch {
+            // If JSON parsing fails, use empty args
+            console.warn(`[Agent] Failed to parse tool arguments for ${tc.function.name}: ${tc.function.arguments}`);
+          }
           assistantContent.push({
             type: "tool-call",
             toolCallId: tc.id,
             toolName: tc.function.name,
-            args: JSON.parse(tc.function.arguments || "{}"),
+            args: parsedArgs,
           });
         }
         
@@ -199,6 +228,10 @@ export class Agent {
         this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
 
         console.log(`[Agent] Processing ${toolCalls.length} tool_calls from LLM`);
+        console.log(`[Agent] Assistant message built:`, JSON.stringify({
+          role: "assistant",
+          content: assistantContent,
+        }, null, 2));
         
         for (const toolCall of toolCalls) {
           let toolArgs: Record<string, unknown> = {};
@@ -212,10 +245,10 @@ export class Agent {
             const errorMessage = `Invalid JSON in arguments: ${toolCall.function.arguments}`;
             messages.push({
               role: "tool",
-              content: [{ type: "tool-result", result: `Error: ${errorMessage}` }],
-              toolCallId: toolCall.id,
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+              toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id });
+            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
             continue;
           }
 
@@ -224,10 +257,10 @@ export class Agent {
             const errorMessage = `Doom loop detected: tool "${toolCall.function.name}" has been called ${this.config.doomLoopThreshold} times with the same arguments. Please try a different approach or use a different tool to achieve your goal.`;
             messages.push({
               role: "tool",
-              content: [{ type: "tool-result", result: `Error: ${errorMessage}` }],
-              toolCallId: toolCall.id,
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+              toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id });
+            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
             // Clear the doom loop cache so next attempt can proceed
             this.doomLoopCache.clear();
             continue;
@@ -240,12 +273,11 @@ export class Agent {
             if (!isAllowed) {
               console.log(`[Agent] Rejecting tool call for ${toolCall.function.name}`);
               const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`;
-              messages.push({
-                role: "tool",
-                content: [{ type: "tool-result", result: `Error: ${errorMessage}` }],
-                toolCallId: toolCall.id,
-              } as ModelMessage);
-              this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id });
+            messages.push({
+              role: "tool",
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+            } as ModelMessage);
+            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
               continue;
             }
           }
@@ -273,8 +305,8 @@ export class Agent {
             
             messages.push({
               role: "tool",
-              content: [{ type: "tool-result", result: `Error: ${error}` }],
-              toolCallId: toolCall.id,
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${error}` } }],
+              toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
             this.notifyMessageAdded({ role: "tool", content: `Error: ${error}`, toolCallId: toolCall.id });
             
@@ -286,19 +318,25 @@ export class Agent {
             : JSON.stringify(toolResult.output);
           messages.push({
             role: "tool",
-            content: [{ type: "tool-result", result: toolOutputText }],
-            toolCallId: toolCall.id,
+            content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
+            toolCallId: toolCall.id,  // Required by AI SDK at message level
           } as ModelMessage);
           this.notifyMessageAdded({ 
             role: "tool", 
             content: toolOutputText,
-            toolCallId: toolCall.id
+            toolCallId: toolCall.id,
+            name: toolCall.function.name
           });
 
           console.log(`[Agent] Tool ${toolCall.function.name} completed successfully`);
+          console.log(`[Agent] Tool message built:`, JSON.stringify({
+            role: "tool",
+            content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
+          }, null, 2));
         }
 
         console.log(`[Agent] Completed processing all tool_calls, continuing to next iteration`);
+        console.log(`[Agent] Full messages before invokeLLM:`, JSON.stringify(messages, null, 2));
 
       } catch (error) {
         consecutiveErrors++;

@@ -22,7 +22,7 @@ import { createLogger } from "../../utils/logger.js";
 
 const storageLogger = createLogger("session:storage", "server.log");
 
-export type StorageMode = "memory" | "file";
+export type StorageMode = "memory" | "file" | "sqlite";
 
 export interface PersistenceConfig {
   mode: StorageMode;
@@ -31,7 +31,7 @@ export interface PersistenceConfig {
 }
 
 const DEFAULT_CONFIG: PersistenceConfig = {
-  mode: "file",
+  mode: "sqlite",
   autoSave: true,
 };
 
@@ -227,9 +227,10 @@ export class FileStorage {
 }
 
 class StorageImpl {
-  private mode: StorageMode = "file";
+  private mode: StorageMode = "sqlite";
   private autoSave: boolean = true;
   private fileStorage: FileStorage | null = null;
+  private sqliteStorage: import("./sqlite/index.js").SqlitePersistence | null = null;
 
   private sessions: Map<string, Session> = new Map();
   private sessionInfos: Map<string, SessionInfo> = new Map();
@@ -246,7 +247,7 @@ class StorageImpl {
     
     const needsReinit = !this.initialized || 
                         this.mode !== cfg.mode || 
-                        (cfg.path && this.fileStorage);
+                        (cfg.path && (this.fileStorage || this.sqliteStorage));
 
     if (!needsReinit) {
       return;
@@ -257,6 +258,7 @@ class StorageImpl {
 
     if (this.mode === "file") {
       this.fileStorage = new FileStorage(cfg.path);
+      this.sqliteStorage = null;
       await this.fileStorage.ensureInitialized();
 
       const savedInfos = await this.fileStorage.listSessionInfos();
@@ -283,8 +285,39 @@ class StorageImpl {
         }
       }
       storageLogger.info(`Loaded ${savedInfos.length} sessions from file storage`);
+    } else if (this.mode === "sqlite") {
+      const { SqlitePersistence } = await import("./sqlite/index.js");
+      this.sqliteStorage = new SqlitePersistence(cfg.path);
+      this.fileStorage = null;
+      await this.sqliteStorage.initialize();
+
+      const savedInfos = await this.sqliteStorage.listSessions();
+      for (const info of savedInfos) {
+        this.sessionInfos.set(info.id, info);
+
+        const { Session: SessionClass } = await import("./session.js");
+        const session = SessionClass.create({
+          id: info.id,
+          parentID: info.parentID,
+          title: info.title,
+          directory: info.directory,
+          metadata: info.metadata,
+        });
+        this.sessions.set(info.id, session);
+
+        const savedMessages = await this.sqliteStorage.getMessages(info.id);
+        if (savedMessages.length > 0) {
+          const msgMap = new Map<string, MessageWithParts>();
+          for (const msg of savedMessages) {
+            msgMap.set(msg.info.id, msg);
+          }
+          this.messages.set(info.id, msgMap);
+        }
+      }
+      storageLogger.info(`Loaded ${savedInfos.length} sessions from SQLite storage`);
     } else {
       this.fileStorage = null;
+      this.sqliteStorage = null;
     }
 
     this.initialized = true;
@@ -307,11 +340,18 @@ class StorageImpl {
     this.sessions.set(session.id, session);
     this.sessionInfos.set(session.id, info);
 
-    if (this.autoSave && this.fileStorage) {
-      const op = this.fileStorage.saveSessionInfo(info).catch(err => {
-        storageLogger.error(`Failed to save session ${session.id}: ${err}`);
-      });
-      this.pendingOps.push(op);
+    if (this.autoSave) {
+      if (this.fileStorage) {
+        const op = this.fileStorage.saveSessionInfo(info).catch(err => {
+          storageLogger.error(`Failed to save session ${session.id}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      } else if (this.sqliteStorage) {
+        const op = this.sqliteStorage.saveSession(info).catch(err => {
+          storageLogger.error(`Failed to save session ${session.id}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      }
     }
   }
 
@@ -336,14 +376,21 @@ class StorageImpl {
     this.sessionInfos.delete(id);
     this.messages.delete(id);
 
-    if (this.autoSave && this.fileStorage) {
-      const op1 = this.fileStorage.deleteSessionInfo(id).catch(err => {
-        storageLogger.error(`Failed to delete session ${id}: ${err}`);
-      });
-      const op2 = this.fileStorage.deleteMessages(id).catch(err => {
-        storageLogger.error(`Failed to delete messages for session ${id}: ${err}`);
-      });
-      this.pendingOps.push(op1, op2);
+    if (this.autoSave) {
+      if (this.fileStorage) {
+        const op1 = this.fileStorage.deleteSessionInfo(id).catch(err => {
+          storageLogger.error(`Failed to delete session ${id}: ${err}`);
+        });
+        const op2 = this.fileStorage.deleteMessages(id).catch(err => {
+          storageLogger.error(`Failed to delete messages for session ${id}: ${err}`);
+        });
+        this.pendingOps.push(op1, op2);
+      } else if (this.sqliteStorage) {
+        const op = this.sqliteStorage.deleteSession(id).catch(err => {
+          storageLogger.error(`Failed to delete session ${id}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      }
     }
   }
 
@@ -371,11 +418,18 @@ class StorageImpl {
     }
     this.messages.get(sessionID)!.set(message.info.id, message);
 
-    if (this.autoSave && this.fileStorage) {
-      const op = this.fileStorage.saveMessage(sessionID, message).catch(err => {
-        storageLogger.error(`Failed to save message ${message.info.id}: ${err}`);
-      });
-      this.pendingOps.push(op);
+    if (this.autoSave) {
+      if (this.fileStorage) {
+        const op = this.fileStorage.saveMessage(sessionID, message).catch(err => {
+          storageLogger.error(`Failed to save message ${message.info.id}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      } else if (this.sqliteStorage) {
+        const op = this.sqliteStorage.saveMessage(sessionID, message).catch(err => {
+          storageLogger.error(`Failed to save message ${message.info.id}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      }
     }
   }
 
@@ -394,22 +448,36 @@ class StorageImpl {
   deleteMessage(sessionID: string, messageID: string): void {
     this.messages.get(sessionID)?.delete(messageID);
 
-    if (this.autoSave && this.fileStorage) {
-      const op = this.fileStorage.deleteMessage(sessionID, messageID).catch(err => {
-        storageLogger.error(`Failed to delete message ${messageID}: ${err}`);
-      });
-      this.pendingOps.push(op);
+    if (this.autoSave) {
+      if (this.fileStorage) {
+        const op = this.fileStorage.deleteMessage(sessionID, messageID).catch(err => {
+          storageLogger.error(`Failed to delete message ${messageID}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      } else if (this.sqliteStorage) {
+        const op = this.sqliteStorage.deleteMessage(sessionID, messageID).catch(err => {
+          storageLogger.error(`Failed to delete message ${messageID}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      }
     }
   }
 
   deleteMessages(sessionID: string): void {
     this.messages.delete(sessionID);
 
-    if (this.autoSave && this.fileStorage) {
-      const op = this.fileStorage.deleteMessages(sessionID).catch(err => {
-        storageLogger.error(`Failed to delete messages for session ${sessionID}: ${err}`);
-      });
-      this.pendingOps.push(op);
+    if (this.autoSave) {
+      if (this.fileStorage) {
+        const op = this.fileStorage.deleteMessages(sessionID).catch(err => {
+          storageLogger.error(`Failed to delete messages for session ${sessionID}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      } else if (this.sqliteStorage) {
+        const op = this.sqliteStorage.deleteMessages(sessionID).catch(err => {
+          storageLogger.error(`Failed to delete messages for session ${sessionID}: ${err}`);
+        });
+        this.pendingOps.push(op);
+      }
     }
   }
 
