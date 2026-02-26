@@ -50,11 +50,6 @@ export namespace LLMTransform {
       result = handleMistralMessages(result);
     }
 
-    // MiniMax models require special handling for tool calls
-    if (model.id.toLowerCase().includes("minimax")) {
-      result = handleMiniMaxMessages(result);
-    }
-
     return result;
   }
 
@@ -162,63 +157,6 @@ export namespace LLMTransform {
     }
 
     return result;
-  }
-
-  /**
-   * MiniMax-specific message handling
-   * MiniMax doesn't support content arrays with tool-call types in OpenAI-compatible mode
-   * Need to convert to standard format
-   */
-  function handleMiniMaxMessages(msgs: ModelMessage[]): ModelMessage[] {
-    return msgs.map((msg) => {
-      // Handle assistant messages with content array containing tool-calls
-      if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        const textParts: any[] = [];
-        const toolCalls: any[] = [];
-
-        for (const part of msg.content) {
-          if (part.type === "text") {
-            textParts.push(part);
-          } else if (part.type === "tool-call") {
-            // Convert to MiniMax-compatible format
-            const toolPart = part as any;
-            toolCalls.push({
-              id: toolPart.toolCallId,
-              type: "function",
-              function: {
-                name: toolPart.toolName,
-                arguments: JSON.stringify(toolPart.args || {}),
-              },
-            });
-          }
-        }
-
-        // If we have tool calls, return with tool_calls field
-        if (toolCalls.length > 0) {
-          const textContent = textParts.map((p) => p.text).join("\n");
-          return {
-            role: "assistant",
-            content: textContent || null,
-            tool_calls: toolCalls,
-          } as unknown as ModelMessage;
-        }
-
-        // Otherwise just return text parts
-        if (textParts.length > 0) {
-          return {
-            ...msg,
-            content: textParts.length === 1 ? textParts[0] : textParts,
-          };
-        }
-      }
-
-      // Handle tool messages - ensure they have tool_call_id
-      if (msg.role === "tool" && !(msg as any).toolCallId) {
-        transformLogger.warn("MiniMax tool message missing toolCallId", { msg });
-      }
-
-      return msg;
-    });
   }
 
   /**
