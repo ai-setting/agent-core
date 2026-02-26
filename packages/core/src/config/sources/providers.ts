@@ -16,6 +16,29 @@ export interface ProviderConfig {
   apiKey?: string;
   models?: string[];
   defaultModel?: string;
+  /** SDK type for AI SDK integration */
+  sdkType?: "openai" | "anthropic" | "google" | "openai-compatible";
+  /** Model capabilities override */
+  capabilities?: {
+    temperature?: boolean;
+    reasoning?: boolean;
+    toolcall?: boolean;
+    attachment?: boolean;
+    input?: {
+      text?: boolean;
+      image?: boolean;
+      audio?: boolean;
+      video?: boolean;
+      pdf?: boolean;
+    };
+    output?: {
+      text?: boolean;
+      image?: boolean;
+      audio?: boolean;
+    };
+  };
+  /** Additional headers for API requests */
+  headers?: Record<string, string>;
 }
 
 export interface ProvidersConfig {
