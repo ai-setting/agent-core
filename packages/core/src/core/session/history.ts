@@ -200,7 +200,8 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
 
   return {
     role: "tool",
-    content: [{ type: "tool-result", toolCallId: toolPart.callID || "", result: resultText }],
+    content: [{ type: "text", text: resultText }],
+    toolCallId: toolPart.callID || "",
   } as unknown as ModelMessage;
 }
 

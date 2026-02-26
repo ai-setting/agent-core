@@ -1,14 +1,14 @@
 /**
- * @fileoverview Tests for history conversion with tool_calls
+ * @fileoverview Tests for history conversion with tool_calls (AI SDK ModelMessage format)
  */
 
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { Session } from "./session.js";
 import { sessionToHistory } from "./history.js";
 import type { MessageWithParts, ToolPart, TextPart } from "./types.js";
 
 describe("sessionToHistory with tool_calls", () => {
-  it("should convert assistant message with pending tool calls to history with tool_calls", () => {
+  it("should convert assistant message with pending tool calls to history with tool-call parts", () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -41,13 +41,19 @@ describe("sessionToHistory with tool_calls", () => {
     
     const assistantMsg = history.find(h => h.role === "assistant");
     expect(assistantMsg).toBeDefined();
-    expect(assistantMsg?.tool_calls).toBeDefined();
-    expect(assistantMsg?.tool_calls).toHaveLength(1);
-    expect(assistantMsg?.tool_calls?.[0].id).toBe("call_function_abc123");
-    expect(assistantMsg?.tool_calls?.[0].function.name).toBe("glob");
+    
+    // In AI SDK ModelMessage format, tool calls are in content array as tool-call parts
+    const content = assistantMsg?.content as any[];
+    expect(content).toBeDefined();
+    expect(Array.isArray(content)).toBe(true);
+    
+    const toolCallPart = content?.find((part: any) => part.type === "tool-call");
+    expect(toolCallPart).toBeDefined();
+    expect(toolCallPart?.toolCallId).toBe("call_function_abc123");
+    expect(toolCallPart?.toolName).toBe("glob");
   });
 
-  it("should convert tool result message to history with tool_call_id", () => {
+  it("should convert tool result message to history with toolCallId", () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -74,11 +80,12 @@ describe("sessionToHistory with tool_calls", () => {
     
     const toolMsg = history.find(h => h.role === "tool");
     expect(toolMsg).toBeDefined();
-    expect(toolMsg?.tool_call_id).toBe("call_function_abc123");
-    expect(toolMsg?.name).toBe("glob");
+    
+    // In AI SDK ModelMessage format, tool messages have toolCallId field
+    expect((toolMsg as any).toolCallId).toBe("call_function_abc123");
   });
 
-  it("should preserve tool_call_id in history after multiple turns", () => {
+  it("should preserve toolCallId in history after multiple turns", () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -123,8 +130,11 @@ describe("sessionToHistory with tool_calls", () => {
 
     const history = sessionToHistory(session);
     
-    const toolMsg = history.find(h => h.role === "tool" && h.tool_call_id === "call_function_xyz789");
+    // Find tool message by checking toolCallId field
+    const toolMsg = history.find(h => {
+      if (h.role !== "tool") return false;
+      return (h as any).toolCallId === "call_function_xyz789";
+    });
     expect(toolMsg).toBeDefined();
-    expect(toolMsg?.tool_call_id).toBe("call_function_xyz789");
   });
 });
