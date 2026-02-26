@@ -215,7 +215,7 @@ export class Agent {
             type: "tool-call",
             toolCallId: tc.id,
             toolName: tc.function.name,
-            args: parsedArgs,
+            input: parsedArgs,  // AI SDK expects 'input', not 'args'
           });
         }
         

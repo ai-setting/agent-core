@@ -50,16 +50,14 @@ export namespace LLMTransform {
       result = handleMistralMessages(result);
     }
     
-    // MiniMax-specific handling
-    const isMiniMaxModel = model.id.toLowerCase().includes("minimax");
-    transformLogger.info("[normalizeMessages] Checking MiniMax", {
-      modelId: model.id,
-      isMiniMaxModel,
-    });
-    
-    if (isMiniMaxModel) {
-      transformLogger.info("[normalizeMessages] Applying MiniMax handler");
-      result = handleMiniMaxMessages(result);
+    // OpenAI-compatible provider handling (MiniMax, Kimi, etc.)
+    // Handles reasoning_content extraction for models with reasoning capability
+    if (provider.sdkType === "openai" || provider.sdkType === "openai-compatible") {
+      transformLogger.info("[normalizeMessages] Applying OpenAI-compatible handler", {
+        providerId: provider.id,
+        modelId: model.id,
+      });
+      result = handleMiniMaxMessages(result, provider, model);
     }
 
     transformLogger.info("[normalizeMessages] Messages before return", {
@@ -184,47 +182,75 @@ export namespace LLMTransform {
   }
 
   /**
-   * MiniMax-specific message handling
-   * MiniMax expects tool-call arguments as JSON string, not object
+   * Handle messages for OpenAI-compatible providers (MiniMax, Kimi, etc.)
+   * - Extracts reasoning content from assistant messages and puts it in providerOptions
+   * - Required for models like Kimi k2.5 with reasoning capability
    */
-  function handleMiniMaxMessages(msgs: ModelMessage[]): ModelMessage[] {
+  function handleMiniMaxMessages(
+    msgs: ModelMessage[],
+    provider: ProviderMetadata,
+    model: ModelMetadata
+  ): ModelMessage[] {
     transformLogger.info("[handleMiniMaxMessages] Starting conversion", {
       messageCount: msgs.length,
+      providerId: provider.id,
+      modelId: model.id,
     });
-    
-    return msgs.map((msg) => {
-      if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
-        return msg;
-      }
 
-      // Clone message to avoid mutating original
-      const processedMsg = { ...msg } as any;
+    const isKimiK2 = provider.id === "kimi" && model.id.toLowerCase().includes("kimi-k2");
+    const hasReasoning = model.capabilities?.reasoning;
 
-      // Convert tool-call args from object to string for MiniMax
-      processedMsg.content = msg.content.map((part: any) => {
-        transformLogger.info("[handleMiniMaxMessages] Processing part", {
-          partType: part.type,
-          hasArgs: !!part.args,
-          argsType: typeof part.args,
-        });
-        
-        if (part.type === "tool-call" && part.args && typeof part.args === "object") {
-          const stringifiedArgs = JSON.stringify(part.args);
-          transformLogger.info("[handleMiniMaxMessages] Converting args to string", {
-            toolName: part.toolName,
-            originalArgs: part.args,
-            stringifiedArgs,
+    // For Kimi k2.5 or other reasoning models, extract reasoning from assistant messages
+    // Check for both "openai" and "openai-compatible" sdk types
+    if ((isKimiK2 || hasReasoning) && (provider.sdkType === "openai" || provider.sdkType === "openai-compatible")) {
+      return msgs.map((msg) => {
+        if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+          return msg;
+        }
+
+        // Find reasoning parts
+        const reasoningParts: string[] = [];
+        const otherParts: any[] = [];
+
+        for (const part of msg.content as any[]) {
+          if (part.type === "reasoning") {
+            reasoningParts.push(part.text);
+          } else if (part.type === "text" && part.text?.startsWith("<think>") && part.text?.endsWith("</think>")) {
+            // Extract reasoning from <think> tags (added by agent/index.ts)
+            const reasoning = part.text.slice(7, -8); // Remove <think> and </think>
+            reasoningParts.push(reasoning);
+          } else {
+            otherParts.push(part);
+          }
+        }
+
+        // If we have reasoning and tool calls, add reasoning_content to providerOptions
+        const hasToolCalls = otherParts.some((p: any) => p.type === "tool-call");
+        if (reasoningParts.length > 0 && hasToolCalls) {
+          const reasoningText = reasoningParts.join("\n");
+          transformLogger.info("[handleMiniMaxMessages] Adding reasoning_content for tool-call message", {
+            reasoningLength: reasoningText.length,
+            toolCallCount: otherParts.filter((p: any) => p.type === "tool-call").length,
           });
+
           return {
-            ...part,
-            args: stringifiedArgs,
+            ...msg,
+            content: otherParts,
+            providerOptions: {
+              ...msg.providerOptions,
+              openaiCompatible: {
+                ...(msg.providerOptions as any)?.openaiCompatible,
+                reasoning_content: reasoningText,
+              },
+            },
           };
         }
-        return part;
-      });
 
-      return processedMsg;
-    });
+        return msg;
+      });
+    }
+
+    return msgs;
   }
 
   /**
@@ -267,6 +293,21 @@ export namespace LLMTransform {
       if (isZhipuAI || isGLMModel) {
         temperature = 1;
         transformLogger.info("[generateProviderOptions] Forcing temperature=1 for ZhipuAI/GLM model", { 
+          providerId: provider.id,
+          modelId: model.id,
+          originalTemp: options.temperature 
+        });
+      }
+      
+      // Kimi k2.5 models only accept temperature=1
+      const isKimi = provider.id === "kimi";
+      const isKimiK25 = model.id.toLowerCase().includes("kimi-k2.5") || 
+                       model.id.toLowerCase().includes("kimi-k2") ||
+                       model.id.toLowerCase().includes("k2.5");
+      
+      if (isKimi && isKimiK25) {
+        temperature = 1;
+        transformLogger.info("[generateProviderOptions] Forcing temperature=1 for Kimi k2.5 model", { 
           providerId: provider.id,
           modelId: model.id,
           originalTemp: options.temperature 
@@ -319,6 +360,8 @@ export namespace LLMTransform {
         }
         break;
     }
+    
+
 
     return result;
   }
