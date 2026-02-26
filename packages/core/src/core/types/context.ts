@@ -14,5 +14,18 @@ export interface Context {
    * Called whenever the agent adds an assistant or tool message.
    * Useful for persisting messages to session history in real-time.
    */
-  onMessageAdded?: (message: { role: string; content: string; name?: string; tool_call_id?: string }) => void;
+  onMessageAdded?: (message: { 
+    role: string; 
+    content: string; 
+    name?: string; 
+    tool_call_id?: string; 
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }>;
+  }) => void;
 }

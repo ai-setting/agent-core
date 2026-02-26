@@ -995,6 +995,19 @@ export class ServerEnvironment extends BaseEnvironment {
               onMessageAdded: (msg) => {
                 if (msg.role === "assistant" && msg.content) {
                   session?.addAssistantMessage(msg.content);
+                  if (msg.tool_calls && msg.tool_calls.length > 0) {
+                    for (const tc of msg.tool_calls) {
+                      let args = {};
+                      try {
+                        args = JSON.parse(tc.function.arguments);
+                      } catch {}
+                      session?.addToolCall(
+                        tc.function.name,
+                        tc.id,
+                        args
+                      );
+                    }
+                  }
                 } else if (msg.role === "tool" && msg.name) {
                   session?.addToolMessage(
                     msg.name,

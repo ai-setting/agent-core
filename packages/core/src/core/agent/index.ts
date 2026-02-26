@@ -90,7 +90,7 @@ export class Agent {
   private tools: import("../types").Tool[];
   private agentId: string;
 
-  private notifyMessageAdded(message: { role: string; content: string; name?: string; tool_call_id?: string }): void {
+  private notifyMessageAdded(message: { role: string; content: string; name?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> }): void {
     if (this.context.onMessageAdded) {
       this.context.onMessageAdded(message);
     }
@@ -127,6 +127,8 @@ export class Agent {
         role: h.role as Message["role"],
         content: convertContent(h.content),
         name: h.name,
+        tool_call_id: h.tool_call_id,
+        tool_calls: h.tool_calls as Message["tool_calls"],
       })),
       { role: "user", content: this.formatEvent(this.event) },
     ];
@@ -212,6 +214,11 @@ export class Agent {
 
     if (!hasToolCalls) {
       console.log(`[Agent] No tool calls, returning content: "${output.content}"`);
+      messages.push({
+        role: "assistant",
+        content: output.content || "",
+        reasoning_content: output.reasoning,
+      } as Message);
       this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
       return output.content || "(no response)";
     }
@@ -221,22 +228,23 @@ export class Agent {
 
     // Push assistant message with reasoning and tool_calls (for models like Kimi)
     // Kimi requires reasoning_content when thinking is enabled
+    const assistantToolCalls = toolCalls.map((tc) => ({
+      id: tc.id,
+      type: "function",
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+      },
+    }));
     messages.push({
       role: "assistant",
       content: output.content || "",
       reasoning_content: output.reasoning,
-      tool_calls: toolCalls.map((tc) => ({
-        id: tc.id,
-        type: "function",
-        function: {
-          name: tc.function.name,
-          arguments: tc.function.arguments,
-        },
-      })),
+      tool_calls: assistantToolCalls,
     } as Message);
 
     // Notify about assistant message
-    this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
+    this.notifyMessageAdded({ role: "assistant", content: output.content || "", tool_calls: assistantToolCalls });
 
     console.log(`[Agent] Processing ${toolCalls.length} tool_calls from LLM`);
     
