@@ -181,6 +181,14 @@ export function CommandDialog(props: CommandDialogProps) {
               tuiLogger.info("[CommandDialog] AgentEnvDialog replace called");
               break;
             }
+            case "sessions": {
+              tuiLogger.info("[CommandDialog] Importing SessionsDialog...");
+              const { SessionsDialog } = await import("./SessionsDialog.js");
+              tuiLogger.info("[CommandDialog] SessionsDialog imported, calling replace");
+              dialog.replace(() => <SessionsDialog data={(result.data as any)} />);
+              tuiLogger.info("[CommandDialog] SessionsDialog replace called");
+              break;
+            }
             default:
               tuiLogger.info("[CommandDialog] Unknown dialog command, showing result");
               dialog.pop();

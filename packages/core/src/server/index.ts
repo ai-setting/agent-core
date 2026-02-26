@@ -14,6 +14,7 @@ import { connectCommand } from "./command/built-in/connect.js";
 import { modelsCommand } from "./command/built-in/models.js";
 import { agentEnvCommand } from "./command/built-in/agent-env.js";
 import { exitCommand } from "./command/built-in/exit.js";
+import { sessionsCommand } from "./command/built-in/sessions.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
 export interface ServerInitOptions {
@@ -48,6 +49,7 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     commandRegistry.register(modelsCommand);
     commandRegistry.register(agentEnvCommand);
     commandRegistry.register(exitCommand);
+    commandRegistry.register(sessionsCommand);
     console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   }
 
