@@ -13,6 +13,9 @@
 
 import type { Environment, HistoryMessage, MessageContent, BehaviorSpec } from "../environment";
 import { Event, Context } from "../types";
+import { createLogger } from "../../utils/logger.js";
+
+const agentLogger = createLogger("agent", "server.log");
 
 interface Message {
   role: "system" | "user" | "assistant" | "tool";
@@ -133,6 +136,12 @@ export class Agent {
       { role: "user", content: this.formatEvent(this.event) },
     ];
 
+    agentLogger.info("[Agent.run] Messages prepared for LLM", {
+      historyCount: this._history.length,
+      totalMessages: messages.length,
+      hasToolCalls: messages.some(m => m.tool_calls && m.tool_calls.length > 0),
+    });
+
     while (this.iteration < this.config.maxIterations) {
       this.iteration++;
 
@@ -143,13 +152,23 @@ export class Agent {
       try {
         const result = await this.executeIteration(messages);
         console.log(`[Agent] executeIteration returned: ${result === null ? 'null' : typeof result + ' (length: ' + result.length + ')'}`);
+        agentLogger.info("[Agent.run] executeIteration completed", {
+          iteration: this.iteration,
+          resultIsNull: result === null,
+          resultLength: result?.length,
+        });
         if (result !== null) {
           console.log(`[Agent] Returning result from run(): "${result.substring(0, 50)}..."`);
+          agentLogger.info("[Agent.run] Returning final result", {
+            resultLength: result.length,
+            preview: result.substring(0, 100),
+          });
           return result;
         }
         console.log(`[Agent] Result was null, continuing to next iteration`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        agentLogger.error("[Agent.run] executeIteration threw error", { error: errorMessage, iteration: this.iteration });
         
         if (this.isRetryableError(errorMessage)) {
           this.errorRetryCount++;
@@ -174,6 +193,19 @@ export class Agent {
   private async executeIteration(messages: Message[]): Promise<string | null> {
     console.log(`[Agent] executeIteration - Available tools: ${this.tools.map(t => t.name).join(", ") || "none"}`);
     
+    agentLogger.info("[Agent.invokeLLM] Calling invokeLLM with messages", {
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content.substring(0, 100) : '[multimodal]',
+        tool_calls: m.tool_calls?.map(tc => ({
+          id: tc.id,
+          function: tc.function.name,
+          arguments: tc.function.arguments,
+        })),
+      })),
+    });
+
     const llmResult = await this.env.invokeLLM(
       messages,
       this.tools.length > 0 ? this.tools : undefined,
@@ -203,16 +235,33 @@ export class Agent {
     console.log(`[Agent] LLM result type: ${typeof llmResult.output}, success: ${llmResult.success}`);
     console.log(`[Agent] LLM output raw:`, JSON.stringify(llmResult.output, null, 2));
     console.log(`[Agent] LLM output keys: ${Object.keys(llmResult.output || {}).join(", ")}`);
+    agentLogger.info("[Agent] LLM output received", {
+      hasOutput: !!llmResult.output,
+      outputKeys: llmResult.output ? Object.keys(llmResult.output) : [],
+      hasToolCalls: !!(llmResult.output as any)?.tool_calls,
+      toolCallsCount: (llmResult.output as any)?.tool_calls?.length || 0,
+      toolCallsRaw: llmResult.output ? JSON.stringify((llmResult.output as any).tool_calls || []).substring(0, 200) : undefined,
+    });
     
     const output = llmResult.output as unknown as LLMOutput;
     console.log(`[Agent] After cast - output.content: "${output.content}", type: ${typeof output.content}`);
     console.log(`[Agent] After cast - output.tool_calls:`, output.tool_calls);
     const hasToolCalls = output.tool_calls && output.tool_calls.length > 0;
+    agentLogger.info("[Agent] Tool calls check", { 
+      hasToolCalls, 
+      toolCallsLength: output.tool_calls?.length,
+      toolCallsDetail: output.tool_calls?.map(tc => ({
+        id: tc.id,
+        functionName: tc.function?.name,
+        functionArgs: tc.function?.arguments?.substring(0, 100),
+      })),
+    });
 
     console.log(`[Agent] LLM returned - hasToolCalls: ${hasToolCalls}, content length: ${(output.content || "").length}`);
     console.log(`[Agent] Output content preview: ${(output.content || "").substring(0, 100)}`);
 
     if (!hasToolCalls) {
+      agentLogger.info("[Agent] No tool calls detected, returning content directly");
       console.log(`[Agent] No tool calls, returning content: "${output.content}"`);
       messages.push({
         role: "assistant",
@@ -224,6 +273,10 @@ export class Agent {
     }
 
     const toolCalls = output.tool_calls!;
+    agentLogger.info("[Agent] Processing tool_calls", { 
+      count: toolCalls.length,
+      tools: toolCalls.map(tc => ({ id: tc.id, name: tc.function.name, args: tc.function.arguments?.substring(0, 50) })),
+    });
     console.log(`[Agent] Processing ${toolCalls.length} tool_calls: ${toolCalls.map(tc => tc.function.name).join(", ")}`);
 
     // Push assistant message with reasoning and tool_calls (for models like Kimi)
@@ -310,12 +363,20 @@ export class Agent {
       ).catch((error) => {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.warn(`Tool "${toolCall.function.name}" threw error: ${errorMessage}`);
+        agentLogger.warn("[Agent] handle_action threw error", { tool: toolCall.function.name, error: errorMessage });
         return {
           success: false,
           output: "",
           error: errorMessage,
           metadata: {},
         };
+      });
+
+      agentLogger.info("[Agent] handle_action completed", {
+        tool: toolCall.function.name,
+        success: toolResult.success,
+        hasOutput: !!toolResult.output,
+        outputLength: typeof toolResult.output === 'string' ? toolResult.output.length : 0,
       });
 
       if (!toolResult.success) {

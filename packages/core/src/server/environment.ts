@@ -865,6 +865,12 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "tool_call":
+        console.log("[ServerEnvironment] Publishing stream.tool_call event", { 
+          sessionId, 
+          messageId, 
+          toolName: event.tool_name,
+          toolCallId: event.tool_call_id 
+        });
         if (event.tool_name) {
           this.currentStreamingContent.toolCalls.push({
             id: event.tool_call_id || "",
@@ -969,7 +975,9 @@ export class ServerEnvironment extends BaseEnvironment {
   }
 
   async publishEvent<T>(event: EnvEvent<T>): Promise<void> {
+    serverLogger.info("[ServerEnvironment.publishEvent] called", { eventType: event.type, sessionId: (event.payload as any)?.sessionId });
     await this.eventBus.publish(event);
+    serverLogger.info("[ServerEnvironment.publishEvent] completed", { eventType: event.type });
   }
 
   private initEventRules(): void {
@@ -983,6 +991,12 @@ export class ServerEnvironment extends BaseEnvironment {
           const { sessionId, content } = event.payload as { sessionId: string; content: string };
           const session = await this.getSession!(sessionId);
           const history = session?.toHistory() || [];
+          
+          serverLogger.info("[ServerEnvironment] USER_QUERY - history prepared", {
+            sessionId,
+            historyCount: history.length,
+            hasToolCalls: history.some(h => h.tool_calls && h.tool_calls.length > 0),
+          });
           
           session?.addUserMessage(content);
           

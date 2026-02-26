@@ -26,6 +26,9 @@ import type {
 import { ID } from "./id";
 import { Storage } from "./storage";
 import { sessionToHistory } from "./history";
+import { createLogger } from "../../utils/logger.js";
+
+const sessionLogger = createLogger("session", "server.log");
 
 const DEFAULT_MESSAGE_LIMIT = 100;
 
@@ -182,6 +185,13 @@ export class Session {
     this._info.time.updated = Date.now();
     Storage.saveSession(this);
     Storage.saveMessage(this.id, message);
+
+    sessionLogger.debug("[Session.addMessage] Message added", {
+      sessionId: this.id,
+      messageId: info.id,
+      role: info.role,
+      partsCount: parts.length,
+    });
 
     return info.id;
   }
@@ -397,7 +407,12 @@ export class Session {
    * Convert session messages to Agent Core history format.
    */
   toHistory(): any[] {
-    return sessionToHistory(this);
+    const history = sessionToHistory(this);
+    sessionLogger.debug("[Session.toHistory] History converted", {
+      sessionId: this.id,
+      messageCount: history.length,
+    });
+    return history;
   }
 
   /**

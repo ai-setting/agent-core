@@ -164,12 +164,33 @@ export async function invokeLLM(
       if (m.tool_call_id && m.role === "tool") {
         msg.tool_call_id = m.tool_call_id;
       }
+      // Log if tool message is missing tool_call_id
+      if (m.role === "tool" && !m.tool_call_id) {
+        invokeLLMLogger.warn("[invokeLLM] Tool message missing tool_call_id", { 
+          role: m.role, 
+          name: m.name, 
+          contentPreview: typeof m.content === 'string' ? m.content.substring(0, 50) : '[multimodal]'
+        });
+      }
       return msg;
     }),
     stream,
     temperature: options.temperature,
     max_tokens: options.maxTokens,
   };
+
+  invokeLLMLogger.info("[invokeLLM] Request body prepared", {
+    messageCount: requestBody.messages.length,
+    messages: requestBody.messages.map((m: any) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content.substring(0, 100) : '[multimodal]',
+      tool_calls: m.tool_calls?.map((tc: any) => ({
+        id: tc.id,
+        function: tc.function?.name,
+        arguments: tc.function?.arguments,
+      })),
+    })),
+  });
 
   if (tools && tools.length > 0) {
     requestBody.tools = convertTools(tools);
@@ -269,7 +290,16 @@ export async function invokeLLM(
             }
 
             if (delta.tool_calls) {
-              invokeLLMLogger.debug("[invokeLLM] onToolCall called", { count: delta.tool_calls.length });
+              invokeLLMLogger.info("[invokeLLM] Received tool_calls from LLM", { 
+                count: delta.tool_calls.length,
+                toolCalls: delta.tool_calls.map(tc => ({
+                  index: tc.index,
+                  id: tc.id,
+                  hasFunction: !!tc.function,
+                  functionName: tc.function?.name,
+                  functionArgsPreview: tc.function?.arguments?.substring(0, 50),
+                }))
+              });
               for (const tc of delta.tool_calls) {
                 if (tc.index !== undefined) {
                   if (!toolCalls[tc.index]) {
@@ -277,12 +307,15 @@ export async function invokeLLM(
                       id: tc.id || `call-${tc.index}`,
                       function: { name: "", arguments: "" },
                     };
+                    invokeLLMLogger.info("[invokeLLM] Created new toolCall slot", { index: tc.index, id: toolCalls[tc.index].id });
                   }
                   if (tc.function?.name) {
                     toolCalls[tc.index].function.name = tc.function.name;
+                    invokeLLMLogger.info("[invokeLLM] Updated toolCall name", { index: tc.index, name: tc.function.name });
                   }
                   if (tc.function?.arguments) {
                     toolCalls[tc.index].function.arguments += tc.function.arguments;
+                    invokeLLMLogger.info("[invokeLLM] Updated toolCall arguments", { index: tc.index, argsLength: tc.function.arguments.length });
                   }
                 }
               }
@@ -290,10 +323,31 @@ export async function invokeLLM(
               // Emit tool_call event
               if (eventHandler?.onToolCall && toolCalls.length > 0) {
                 const lastTool = toolCalls[toolCalls.length - 1];
+                invokeLLMLogger.info("[invokeLLM] Checking if should emit tool_call event", { 
+                  hasLastTool: !!lastTool,
+                  lastToolName: lastTool?.function?.name,
+                  lastToolArgs: lastTool?.function?.arguments?.substring(0, 50),
+                });
                 if (lastTool.function.name) {
+                  let parsedArgs: Record<string, unknown> = {};
+                  try {
+                    parsedArgs = JSON.parse(lastTool.function.arguments || "{}");
+                  } catch (e) {
+                    invokeLLMLogger.warn("[invokeLLM] Failed to parse tool arguments, using raw string", { 
+                      args: lastTool.function.arguments,
+                      error: e instanceof Error ? e.message : String(e)
+                    });
+                    // Use raw arguments string if parsing fails
+                    parsedArgs = { _raw: lastTool.function.arguments };
+                  }
+                  invokeLLMLogger.info("[invokeLLM] Emitting tool_call event", { 
+                    toolName: lastTool.function.name, 
+                    toolCallId: lastTool.id,
+                    parsedArgs,
+                  });
                   eventHandler.onToolCall(
                     lastTool.function.name,
-                    JSON.parse(lastTool.function.arguments || "{}"),
+                    parsedArgs,
                     lastTool.id
                   );
                 }
