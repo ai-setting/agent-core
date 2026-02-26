@@ -105,34 +105,63 @@ function parseModelString(model?: string): { providerId: string; modelId: string
  */
 function convertToSDKMessages(messages: LLMMessage[]): ModelMessage[] {
   return messages.map((msg) => {
-    const sdkMsg: any = {
+    // Handle tool role messages
+    if (msg.role === "tool") {
+      const toolContent = typeof msg.content === "string" 
+        ? [{ type: "text" as const, text: msg.content }]
+        : [{ type: "text" as const, text: JSON.stringify(msg.content) }];
+      
+      return {
+        role: "tool" as const,
+        content: toolContent,
+        toolCallId: msg.tool_call_id || "",
+      } as unknown as ModelMessage;
+    }
+
+    // Handle assistant role with tool_calls
+    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      const content: any[] = [];
+      
+      // Add text content if present
+      if (msg.content && typeof msg.content === "string" && msg.content.trim()) {
+        content.push({ type: "text", text: msg.content });
+      }
+      
+      // Add tool calls
+      for (const tc of msg.tool_calls) {
+        try {
+          content.push({
+            type: "tool-call",
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            args: JSON.parse(tc.function.arguments || "{}"),
+          });
+        } catch (e) {
+          invokeLLMLogger.warn("[convertToSDKMessages] Failed to parse tool arguments", {
+            toolName: tc.function.name,
+            arguments: tc.function.arguments,
+          });
+          content.push({
+            type: "tool-call",
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            args: {},
+          });
+        }
+      }
+      
+      return {
+        role: "assistant" as const,
+        content,
+      } as ModelMessage;
+    }
+
+    // Handle regular messages
+    return {
       role: msg.role,
       content: msg.content,
-    };
-
-    if (msg.name) {
-      sdkMsg.name = msg.name;
-    }
-
-    if (msg.tool_call_id) {
-      sdkMsg.toolCallId = msg.tool_call_id;
-    }
-
-    if (msg.tool_calls && msg.role === "assistant") {
-      // Convert tool_calls to AI SDK format
-      sdkMsg.content = [
-        ...(typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : []),
-        ...msg.tool_calls.map((tc) => ({
-          type: "tool-call",
-          toolCallId: tc.id,
-          toolName: tc.function.name,
-          args: JSON.parse(tc.function.arguments || "{}"),
-        })),
-      ];
-    }
-
-    return sdkMsg;
-  }) as ModelMessage[];
+    } as ModelMessage;
+  });
 }
 
 /**
@@ -212,6 +241,16 @@ export async function invokeLLM(
 
     // 4. Convert messages to AI SDK format
     let messages = convertToSDKMessages(options.messages);
+    
+    invokeLLMLogger.debug("[invokeLLM] Messages converted", { 
+      count: messages.length,
+      messages: messages.map(m => ({ 
+        role: m.role, 
+        contentType: typeof m.content,
+        hasToolCalls: (m as any).tool_calls?.length > 0,
+        toolCallId: (m as any).toolCallId,
+      }))
+    });
     
     // 5. Apply provider-specific transformations
     messages = LLMTransform.normalizeMessages(
