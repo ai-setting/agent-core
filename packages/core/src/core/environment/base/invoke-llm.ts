@@ -246,10 +246,17 @@ export async function invokeLLM(
       count: messages.length,
       messages: messages.map(m => ({ 
         role: m.role, 
-        contentType: typeof m.content,
-        hasToolCalls: (m as any).tool_calls?.length > 0,
+        contentType: Array.isArray(m.content) ? 'array' : typeof m.content,
+        contentPreview: Array.isArray(m.content) 
+          ? JSON.stringify(m.content).substring(0, 200)
+          : String(m.content).substring(0, 100),
         toolCallId: (m as any).toolCallId,
       }))
+    });
+    
+    // Log full messages for debugging tool call issues
+    invokeLLMLogger.info("[invokeLLM] Full messages for debugging", {
+      messages: JSON.stringify(messages, null, 2)
     });
     
     // 5. Apply provider-specific transformations
@@ -285,16 +292,32 @@ export async function invokeLLM(
     }
 
     // 10. Call AI SDK streamText
-    const result = await streamText({
-      model: provider.sdk.languageModel(modelId),
-      messages,
-      tools,
-      temperature: providerOptions.temperature,
-      maxTokens: providerOptions.maxTokens,
-      ...providerOptions.providerOptions,
-      abortSignal: ctx.abort,
-      maxRetries: 2,
+    invokeLLMLogger.info("[invokeLLM] About to call streamText", { 
+      modelId, 
+      messageCount: messages.length,
+      toolsCount: tools ? Object.keys(tools).length : 0
     });
+    
+    let result;
+    try {
+      result = await streamText({
+        model: provider.sdk.languageModel(modelId),
+        messages,
+        tools,
+        temperature: providerOptions.temperature,
+        maxTokens: providerOptions.maxTokens,
+        ...providerOptions.providerOptions,
+        abortSignal: ctx.abort,
+        maxRetries: 2,
+      });
+      invokeLLMLogger.info("[invokeLLM] streamText completed");
+    } catch (streamError) {
+      invokeLLMLogger.error("[invokeLLM] streamText failed", { 
+        error: streamError instanceof Error ? streamError.message : String(streamError),
+        stack: streamError instanceof Error ? streamError.stack : undefined
+      });
+      throw streamError;
+    }
 
     // 11. Process stream
     let fullContent = "";
@@ -387,7 +410,13 @@ export async function invokeLLM(
     };
 
   } catch (error) {
-    invokeLLMLogger.error("[invokeLLM] Error during invocation:", error);
+    invokeLLMLogger.error("[invokeLLM] Error during invocation", { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      providerId: (() => { try { return parseModelString(options.model).providerId; } catch { return 'unknown'; } })(),
+      modelId: (() => { try { return parseModelString(options.model).modelId; } catch { return 'unknown'; } })(),
+      messageCount: options.messages.length
+    });
     return {
       success: false,
       output: "",
