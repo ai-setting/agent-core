@@ -72,8 +72,15 @@ class ProviderManager {
       try {
         // 1. Resolve environment variables in apiKey
         const resolvedApiKey = this.resolveEnvVar(providerConfig.apiKey);
+        providerLogger.info(`[ProviderManager] Processing provider: ${providerId}`, {
+          hasApiKey: !!providerConfig.apiKey,
+          apiKeyResolved: !!resolvedApiKey,
+          baseURL: providerConfig.baseURL,
+          modelsCount: providerConfig.models?.length || 0
+        });
+        
         if (!resolvedApiKey) {
-          providerLogger.warn(`Skipping provider ${providerId}: API key not found`);
+          providerLogger.warn(`[ProviderManager] Skipping provider ${providerId}: API key not found or empty`);
           continue;
         }
 

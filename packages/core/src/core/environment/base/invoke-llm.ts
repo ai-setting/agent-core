@@ -57,13 +57,23 @@ export interface StreamEventHandler {
  * Parse model string in format "providerId/modelId"
  */
 function parseModelString(model?: string): { providerId: string; modelId: string } {
+  invokeLLMLogger.info("[parseModelString] Starting to parse model", { model });
+  
   if (!model) {
     // Use default from providers.jsonc
     const providers = providerManager.listProviders();
+    invokeLLMLogger.info("[parseModelString] No model provided, using default", { 
+      availableProviders: providers.length 
+    });
+    
     if (providers.length === 0) {
       throw new Error("No providers available. Please check providers.jsonc configuration.");
     }
     const defaultProvider = providers[0];
+    invokeLLMLogger.info("[parseModelString] Using default provider", { 
+      providerId: defaultProvider.id, 
+      modelId: defaultProvider.defaultModel 
+    });
     return { 
       providerId: defaultProvider.id, 
       modelId: defaultProvider.defaultModel 
@@ -72,17 +82,37 @@ function parseModelString(model?: string): { providerId: string; modelId: string
 
   const parts = model.split("/");
   if (parts.length === 2) {
+    invokeLLMLogger.info("[parseModelString] Parsed provider/model format", { 
+      providerId: parts[0], 
+      modelId: parts[1] 
+    });
     return { providerId: parts[0], modelId: parts[1] };
   }
 
   // If only modelId provided, try to find in providers
   const providers = providerManager.listProviders();
+  invokeLLMLogger.info("[parseModelString] Looking for model in providers", { 
+    model,
+    availableProviders: providers.map(p => ({ 
+      id: p.id, 
+      models: p.models.map(m => m.id) 
+    }))
+  });
+  
   for (const provider of providers) {
     if (provider.models.some(m => m.id === model)) {
+      invokeLLMLogger.info("[parseModelString] Found model in provider", { 
+        providerId: provider.id, 
+        modelId: model 
+      });
       return { providerId: provider.id, modelId: model };
     }
   }
 
+  invokeLLMLogger.error("[parseModelString] Model not found in any provider", { 
+    model,
+    availableProviders: providers.map(p => p.id)
+  });
   throw new Error(`Invalid model format: ${model}. Expected: providerId/modelId or model must exist in providers.jsonc`);
 }
 
