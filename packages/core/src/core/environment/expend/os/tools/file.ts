@@ -454,14 +454,14 @@ export function createFileTools(): ToolInfo[] {
 If the path does not exist, an error is returned.
 
 Usage:
-- The filePath parameter must be an absolute path, not a relative path
+- The path parameter must be an absolute path, not a relative path
 - By default, this tool returns up to 2000 lines from the start of the file
 - The offset parameter is the line number to start from (0-indexed)
 - To read later sections, call this tool again with a larger offset
 - Use the grep tool to find specific content in large files or files with long lines
 - If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern
 - Results are returned using cat -n format, with line numbers starting at 1
-- Call this tool in parallel when you know there are multiple files you want to read
+- Call this tool in parallel when you know the multiple files you want to read
 - AVOID tiny repeated slices (30 line chunks). If you need more context, read a larger window
 - This tool can read image files and return them as file attachments
 - If a file was not found but has similar names, suggestions will be provided in the error message`;
