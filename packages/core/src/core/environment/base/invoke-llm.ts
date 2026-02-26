@@ -5,7 +5,7 @@
  * Maintains backward compatibility with existing StreamEventHandler interface.
  */
 
-import { streamText, type ModelMessage, type ToolSet } from "ai";
+import { streamText, type ModelMessage, type ToolSet, jsonSchema } from "ai";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ToolInfo, ToolResult, ToolContext } from "../../types/index.js";
@@ -145,10 +145,10 @@ function convertToolsToSDK(tools: ToolInfo[]): ToolSet {
   const result: ToolSet = {};
   
   for (const tool of tools) {
-    // Use type assertion to avoid strict type checking issues
+    const jsonSchemaObj = extractToolSchema(tool.parameters);
     (result as any)[tool.name] = {
       description: tool.description || "",
-      parameters: extractToolSchema(tool.parameters),
+      inputSchema: jsonSchema(jsonSchemaObj),
     };
   }
   
@@ -156,7 +156,7 @@ function convertToolsToSDK(tools: ToolInfo[]): ToolSet {
     input: tools.map(t => t.name), 
     output: Object.keys(result) 
   });
-  
+
   return result;
 }
 
@@ -263,7 +263,7 @@ export async function invokeLLM(
         maxTokens: options.maxTokens,
       }
     );
-    
+
     invokeLLMLogger.info("[invokeLLM] Provider options generated", {
       providerOptions,
       hasTemperature: providerOptions.temperature !== undefined,
@@ -289,24 +289,24 @@ export async function invokeLLM(
     
     let result;
     try {
-      const streamTextOptions = {
-        model: provider.sdk.languageModel(modelId),
-        messages,
-        tools,
-        temperature: providerOptions.temperature,
-        maxTokens: providerOptions.maxTokens,
-        ...providerOptions.providerOptions,
-        abortSignal: ctx.abort,
-        maxRetries: 2,
-      };
-      
-      invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
-        modelId,
-        providerId: provider.metadata.id,
-        temperature: streamTextOptions.temperature,
-        maxTokens: streamTextOptions.maxTokens,
-        hasTools: !!tools,
-      });
+    const streamTextOptions = {
+      model: provider.sdk.languageModel(modelId),
+      messages,
+      tools,
+      temperature: providerOptions.temperature,
+      maxTokens: providerOptions.maxTokens,
+      ...providerOptions.providerOptions,
+      abortSignal: ctx.abort,
+      maxRetries: 2,
+    };
+    
+    invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
+      modelId,
+      providerId: provider.metadata.id,
+      temperature: streamTextOptions.temperature,
+      maxTokens: streamTextOptions.maxTokens,
+      hasTools: !!tools,
+    });
       
       result = await streamText(streamTextOptions);
       invokeLLMLogger.info("[invokeLLM] streamText completed");
