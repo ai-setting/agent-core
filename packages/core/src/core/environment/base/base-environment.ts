@@ -9,12 +9,12 @@ import {
   Environment,
   Prompt,
   StreamEvent,
-  HistoryMessage,
   type EnvironmentProfile,
   type EnvironmentAgentSpec,
   type SkillInfo,
   type BehaviorSpec,
 } from "../index.js";
+import type { ModelMessage } from "ai";
 import { createLogger } from "../../../utils/logger.js";
 import {
   Context,
@@ -41,7 +41,6 @@ import {
   intuitiveReasoning, 
   type InvokeLLMConfig, 
   type LLMOptions, 
-  type LLMMessage,
   type LLMOutput,
   type StreamEventHandler 
 } from "./invoke-llm.js";
@@ -686,7 +685,7 @@ export abstract class BaseEnvironment implements Environment {
     return stream;
   }
 
-  async handle_query(query: string, context?: Context, history?: HistoryMessage[]): Promise<string> {
+  async handle_query(query: string, context?: Context, history?: ModelMessage[]): Promise<string> {
     await this.ensureLLMInitialized();
 
     // Reload skills before each query to support dynamic skill addition
@@ -933,7 +932,7 @@ export abstract class BaseEnvironment implements Environment {
    * This is the primary way for agents to interact with LLM
    */
   async invokeLLM(
-    messages: LLMMessage[],
+    messages: ModelMessage[],
     tools?: ToolInfo[],
     context?: Context,
     options?: Omit<LLMOptions, "messages" | "tools">
@@ -1009,7 +1008,7 @@ export abstract class BaseEnvironment implements Environment {
    * Simple non-streaming LLM call for intuitive reasoning
    */
   async intuitiveReasoning(
-    messages: LLMMessage[],
+    messages: ModelMessage[],
     options?: Omit<LLMOptions, "messages" | "tools" | "stream">
   ): Promise<ToolResult> {
     await this.ensureLLMInitialized();
@@ -1238,13 +1237,6 @@ export abstract class BaseEnvironment implements Environment {
   onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
   protected emitStreamEvent(event: StreamEvent, context: Context): void | Promise<void> {
-    BaseEnvironment.baseLogger.info("[BaseEnvironment.emitStreamEvent]", { 
-      eventType: event.type, 
-      toolName: (event as any).tool_name,
-      toolArgs: (event as any).tool_args ? JSON.stringify((event as any).tool_args).substring(0, 100) : undefined,
-      toolCallId: (event as any).tool_call_id,
-      sessionId: context.session_id 
-    });
     if (this.onStreamEvent) {
       return this.onStreamEvent(event, context);
     }

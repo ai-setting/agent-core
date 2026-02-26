@@ -123,11 +123,6 @@ export class ServerEnvironment extends BaseEnvironment {
     try {
       console.log("[ServerEnvironment] Loading configuration...");
 
-      // 0. Initialize ProviderManager for AI SDK integration
-      const { providerManager } = await import("../llm/provider-manager.js");
-      await providerManager.initialize();
-      serverLogger.info(`[ServerEnvironment] ProviderManager initialized with ${providerManager.listProviders().length} providers`);
-
       // 1. Load config file
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
@@ -135,7 +130,7 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1.1. Initialize session storage with persistence config
       const { Storage } = await import("../core/session/storage.js");
       await Storage.initialize({
-        mode: config.session?.persistence?.mode ?? "sqlite",
+        mode: config.session?.persistence?.mode ?? "file",
         path: config.session?.persistence?.path,
         autoSave: config.session?.persistence?.autoSave ?? true,
       });
@@ -870,12 +865,6 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "tool_call":
-        console.log("[ServerEnvironment] Publishing stream.tool_call event", { 
-          sessionId, 
-          messageId, 
-          toolName: event.tool_name,
-          toolCallId: event.tool_call_id 
-        });
         if (event.tool_name) {
           this.currentStreamingContent.toolCalls.push({
             id: event.tool_call_id || "",
@@ -980,9 +969,7 @@ export class ServerEnvironment extends BaseEnvironment {
   }
 
   async publishEvent<T>(event: EnvEvent<T>): Promise<void> {
-    serverLogger.info("[ServerEnvironment.publishEvent] called", { eventType: event.type, sessionId: (event.payload as any)?.sessionId });
     await this.eventBus.publish(event);
-    serverLogger.info("[ServerEnvironment.publishEvent] completed", { eventType: event.type });
   }
 
   private initEventRules(): void {
@@ -997,12 +984,6 @@ export class ServerEnvironment extends BaseEnvironment {
           const session = await this.getSession!(sessionId);
           const history = session?.toHistory() || [];
           
-          serverLogger.info("[ServerEnvironment] USER_QUERY - history prepared", {
-            sessionId,
-            historyCount: history.length,
-            hasToolCalls: history.some(h => h.tool_calls && h.tool_calls.length > 0),
-          });
-          
           session?.addUserMessage(content);
           
           // Wait for config to be loaded (including prompts)
@@ -1014,19 +995,6 @@ export class ServerEnvironment extends BaseEnvironment {
               onMessageAdded: (msg) => {
                 if (msg.role === "assistant" && msg.content) {
                   session?.addAssistantMessage(msg.content);
-                  if (msg.tool_calls && msg.tool_calls.length > 0) {
-                    for (const tc of msg.tool_calls) {
-                      let args = {};
-                      try {
-                        args = JSON.parse(tc.function.arguments);
-                      } catch {}
-                      session?.addToolCall(
-                        tc.function.name,
-                        tc.id,
-                        args
-                      );
-                    }
-                  }
                 } else if (msg.role === "tool" && msg.name) {
                   session?.addToolMessage(
                     msg.name,

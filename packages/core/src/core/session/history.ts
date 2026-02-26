@@ -1,30 +1,26 @@
 /**
- * @fileoverview History conversion - Convert Session to Agent Core format.
+ * @fileoverview History conversion - Convert Session to AI SDK ModelMessage format.
  *
- * Converts Session messages to the format expected by Agent Core's handle_query.
- * Supports multimodal content (text, images, audio, files).
- *
- * Based on OpenCode's MessageV2.toModelMessages implementation.
+ * Converts Session messages to AI SDK ModelMessage format for direct use with LLM APIs.
+ * This eliminates the need for format conversion in invoke_llm.ts.
  */
 
+import type { ModelMessage } from "ai";
 import type { Session } from "./session";
-import type { MessageWithParts, TextPart, ToolPart, ReasoningPart, FilePart, HistoryMessage, MessageContent, TextContent, ImageContent } from "./types";
+import type { MessageWithParts, TextPart, ToolPart, ReasoningPart, FilePart } from "./types";
 import { createLogger } from "../../utils/logger.js";
 
 const historyLogger = createLogger("history", "server.log");
 
 /**
- * Convert a session's messages to Agent Core history format.
- *
- * This format is compatible with the `history` parameter of `handle_query`.
- * Supports multimodal content (text, images, audio, files).
+ * Convert a session's messages to AI SDK ModelMessage format.
  *
  * @param session - The session to convert
- * @returns Array of messages in Agent Core format
+ * @returns Array of messages in AI SDK ModelMessage format
  */
-export function sessionToHistory(session: Session): HistoryMessage[] {
+export function sessionToHistory(session: Session): ModelMessage[] {
   const messages = session.getMessages();
-  const history: HistoryMessage[] = [];
+  const history: ModelMessage[] = [];
 
   for (const msg of messages) {
     const converted = convertMessage(msg);
@@ -43,9 +39,9 @@ export function sessionToHistory(session: Session): HistoryMessage[] {
 }
 
 /**
- * Convert a single message with parts to history format.
+ * Convert a single message with parts to AI SDK ModelMessage format.
  */
-function convertMessage(msg: MessageWithParts): HistoryMessage | null {
+function convertMessage(msg: MessageWithParts): ModelMessage | null {
   switch (msg.info.role) {
     case "user":
       return convertUserMessage(msg);
@@ -60,237 +56,158 @@ function convertMessage(msg: MessageWithParts): HistoryMessage | null {
       return convertSystemMessage(msg);
 
     default:
+      historyLogger.warn("[convertMessage] Unknown message role", {
+        role: msg.info.role,
+        messageId: msg.info.id,
+      });
       return null;
   }
 }
 
 /**
- * Convert a user message to multimodal format.
+ * Convert a user message to AI SDK ModelMessage format.
  */
-function convertUserMessage(msg: MessageWithParts): HistoryMessage {
-  const contents: MessageContent[] = [];
+function convertUserMessage(msg: MessageWithParts): ModelMessage {
+  const parts: any[] = [];
 
   for (const part of msg.parts) {
     switch (part.type) {
-      case "text":
-        contents.push({
-          type: "text",
-          text: (part as TextPart).text,
-        });
+      case "text": {
+        const textPart = part as TextPart;
+        if (!textPart.ignored) {
+          parts.push({ type: "text", text: textPart.text });
+        }
         break;
+      }
 
-      case "file":
+      case "file": {
         const filePart = part as FilePart;
-        if (filePart.mime.startsWith("image/")) {
-          contents.push({
-            type: "image",
-            image: filePart.url,
-            mimeType: filePart.mime,
-          });
-        } else if (filePart.mime.startsWith("audio/")) {
-          contents.push({
-            type: "audio",
-            audio: filePart.url,
-            mimeType: filePart.mime,
-          });
-        } else if (filePart.mime === "text/plain" || filePart.mime === "application/x-directory") {
-          contents.push({
-            type: "text",
-            text: `[File: ${filePart.filename || filePart.url}]`,
-          });
-        } else {
-          contents.push({
+        // Skip text/plain and directory files
+        if (filePart.mime !== "text/plain" && filePart.mime !== "application/x-directory") {
+          parts.push({
             type: "file",
             url: filePart.url,
-            mimeType: filePart.mime,
+            mediaType: filePart.mime,
             filename: filePart.filename,
           });
         }
         break;
+      }
 
-      case "compaction":
-        contents.push({
-          type: "text",
-          text: "[Previous conversation history has been summarized]",
-        });
-        break;
-
-      case "subtask":
-        contents.push({
-          type: "text",
-          text: "[The following tool was executed by the user]",
-        });
-        break;
+      // Note: Image parts are not currently supported in session storage
+      // case "image": {
+      //   break;
+      // }
     }
   }
 
   // Default text if no content
-  if (contents.length === 0) {
-    contents.push({
-      type: "text",
-      text: "(empty)",
-    });
+  if (parts.length === 0) {
+    parts.push({ type: "text", text: "(empty)" });
   }
 
   return {
     role: "user",
-    content: contents.length === 1 ? contents[0] : contents,
-  };
+    content: parts.length === 1 ? parts[0] : parts,
+  } as ModelMessage;
 }
 
 /**
- * Convert an assistant message to multimodal format.
+ * Convert an assistant message to AI SDK ModelMessage format.
+ * Tool calls are embedded in content array as tool-call parts.
  */
-function convertAssistantMessage(msg: MessageWithParts): HistoryMessage {
-  const contents: MessageContent[] = [];
-  let hasTextContent = false;
+function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
+  const parts: any[] = [];
 
   for (const part of msg.parts) {
     switch (part.type) {
-      case "text":
+      case "text": {
         const textPart = part as TextPart;
-        if (!textPart.ignored) {
-          contents.push({
-            type: "text",
-            text: textPart.text,
-          });
-          if (textPart.text) hasTextContent = true;
+        if (!textPart.ignored && textPart.text) {
+          parts.push({ type: "text", text: textPart.text });
         }
         break;
+      }
 
-      case "reasoning":
+      case "reasoning": {
         const reasoningPart = part as ReasoningPart;
-        contents.push({
-          type: "text",
-          text: `[Reasoning: ${reasoningPart.text}]`,
-        });
+        // Store reasoning as text for now
+        // TODO: Use reasoning type when AI SDK supports it
+        parts.push({ type: "text", text: reasoningPart.text });
         break;
+      }
 
-      case "tool":
+      case "tool": {
         const toolPart = part as ToolPart;
-        const status = getToolStatusIcon(toolPart.state);
-        contents.push({
-          type: "text",
-          text: `[Tool ${status}: ${toolPart.tool}]`,
-        });
+        // Assistant messages show tool calls as tool-call parts
+        if (toolPart.state === "pending" || toolPart.state === "running") {
+          parts.push({
+            type: "tool-call",
+            toolCallId: toolPart.callID || `call_${Date.now()}`,
+            toolName: toolPart.tool,
+            args: toolPart.input || {},
+          });
+        }
         break;
-
-      case "step-start":
-        contents.push({
-          type: "text",
-          text: "---",
-        });
-        break;
-
-      case "step-finish":
-        // Already included via content
-        break;
+      }
     }
   }
 
-  // Add tool calls summary if there are any
-  const toolParts = msg.parts.filter((p): p is ToolPart => p.type === "tool");
-  if (toolParts.length > 0) {
-    const toolNames = toolParts.map((p) => p.tool).join(", ");
-    contents.push({
-      type: "text",
-      text: `\n[Tool calls: ${toolNames}]`,
-    });
+  // Ensure we have at least some content
+  if (parts.length === 0) {
+    parts.push({ type: "text", text: "(no content)" });
   }
 
-  // Build tool_calls array for assistant messages with tool parts
-  const toolCalls = toolParts
-    .filter((p) => p.state === "pending" || p.state === "running")
-    .map((p) => ({
-      id: p.callID,
-      type: "function",
-      function: {
-        name: p.tool,
-        arguments: JSON.stringify(p.input),
-      },
-    }));
-
-  // Ensure we have at least some meaningful content
-  const onlyContentIsEmptyText = 
-    contents.length === 1 && 
-    contents[0].type === "text" && 
-    (contents[0] as TextContent).text === "";
-  
-  if (contents.length === 0 || onlyContentIsEmptyText) {
-    contents.length = 0; // Clear contents
-    contents.push({
-      type: "text",
-      text: "(no content)",
-    });
-  }
-
-  const result: HistoryMessage = {
+  return {
     role: "assistant",
-    content: contents.length === 1 ? contents[0] : contents,
-  };
-
-  if (toolCalls.length > 0) {
-    result.tool_calls = toolCalls;
-  }
-
-  return result;
+    content: parts.length === 1 ? parts[0] : parts,
+  } as ModelMessage;
 }
 
 /**
- * Convert a tool message to multimodal format.
+ * Convert a tool message to AI SDK ModelMessage format.
  */
-function convertToolMessage(msg: MessageWithParts): HistoryMessage | null {
+function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   const toolPart = msg.parts.find((p): p is ToolPart => p.type === "tool");
 
   if (!toolPart) {
-    historyLogger.warn("[convertToolMessage] No tool part found in tool message", { 
+    historyLogger.warn("[convertToolMessage] No tool part found in tool message", {
       messageId: msg.info.id,
       role: msg.info.role,
       partsCount: msg.parts.length,
-      partsTypes: msg.parts.map(p => p.type),
+      partsTypes: msg.parts.map((p) => p.type),
     });
     return null;
   }
 
   if (!toolPart.callID) {
-    historyLogger.warn("[convertToolMessage] Tool part missing callID", { 
+    historyLogger.warn("[convertToolMessage] Tool part missing callID", {
       messageId: msg.info.id,
       toolName: toolPart.tool,
       state: toolPart.state,
     });
   }
 
-  let content: MessageContent;
+  let resultText: string;
 
   if (toolPart.state === "error") {
-    content = {
-      type: "text",
-      text: `Error: ${toolPart.error || "Unknown error"}`,
-    };
+    resultText = `Error: ${toolPart.error || "Unknown error"}`;
   } else if (toolPart.state === "completed") {
-    content = {
-      type: "text",
-      text: toolPart.output || "(no output)",
-    };
+    resultText = toolPart.output || "(no output)";
   } else {
-    content = {
-      type: "text",
-      text: "(tool call pending or running)",
-    };
+    resultText = "(tool call pending or running)";
   }
 
   return {
     role: "tool",
-    content,
-    name: toolPart.tool,
-    tool_call_id: toolPart.callID,
-  };
+    content: [{ type: "tool-result", toolCallId: toolPart.callID || "", result: resultText }],
+  } as unknown as ModelMessage;
 }
 
 /**
- * Convert a system message to multimodal format.
+ * Convert a system message to AI SDK ModelMessage format.
  */
-function convertSystemMessage(msg: MessageWithParts): HistoryMessage {
+function convertSystemMessage(msg: MessageWithParts): ModelMessage {
   const textParts = msg.parts
     .filter((p): p is TextPart => p.type === "text")
     .map((p) => p.text);
@@ -299,61 +216,65 @@ function convertSystemMessage(msg: MessageWithParts): HistoryMessage {
 
   return {
     role: "system",
-    content: {
-      type: "text",
-      text,
-    },
-  };
-}
-
-/**
- * Get a status icon for a tool call state.
- */
-function getToolStatusIcon(state: ToolPart["state"]): string {
-  switch (state) {
-    case "completed":
-      return "✓";
-    case "error":
-      return "✗";
-    case "running":
-      return "⋯";
-    case "pending":
-      return "○";
-    default:
-      return "?";
-  }
+    content: text,
+  } as unknown as ModelMessage;
 }
 
 /**
  * Filter messages up to a certain limit.
  * Useful for limiting context window size.
  */
-export function filterMessages(
-  messages: HistoryMessage[],
-  maxMessages: number
-): HistoryMessage[] {
+export function filterMessages(messages: ModelMessage[], maxMessages: number): ModelMessage[] {
   if (messages.length <= maxMessages) {
     return messages;
   }
 
+  // Keep the most recent messages
   return messages.slice(-maxMessages);
 }
 
 /**
- * Get the most recent N messages from a session.
+ * Get the last N user messages from the history.
  */
-export function getRecentHistory(
-  session: Session,
-  count: number
-): HistoryMessage[] {
-  const history = sessionToHistory(session);
-  return history.slice(-count);
+export function getLastUserMessages(messages: ModelMessage[], count: number): ModelMessage[] {
+  return messages.filter((m) => m.role === "user").slice(-count);
 }
 
 /**
- * Check if a session has compacted content (for future use).
+ * Get recent history (last N messages).
+ * @deprecated Use filterMessages instead
  */
-export function hasCompactedContent(session: Session): boolean {
-  const messages = session.getMessages();
-  return messages.some((msg) => msg.parts.some((part) => part.type === "compaction"));
+export function getRecentHistory(messages: ModelMessage[], maxMessages: number): ModelMessage[] {
+  return filterMessages(messages, maxMessages);
+}
+
+/**
+ * Check if history has compacted content.
+ * @returns Always false for now (compaction not implemented)
+ */
+export function hasCompactedContent(_messages: ModelMessage[]): boolean {
+  return false;
+}
+
+/**
+ * Format a message for display (debug/logging).
+ */
+export function formatMessageForDisplay(msg: ModelMessage): string {
+  if (typeof msg.content === "string") {
+    return msg.content.substring(0, 100);
+  }
+
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .map((part: any) => {
+        if (part.type === "text") return part.text;
+        if (part.type === "tool-call") return `[Tool: ${part.toolName}]`;
+        if (part.type === "tool-result") return `[Tool Result]`;
+        return `[${part.type}]`;
+      })
+      .join(" ")
+      .substring(0, 100);
+  }
+
+  return JSON.stringify(msg.content).substring(0, 100);
 }

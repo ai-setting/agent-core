@@ -431,7 +431,7 @@ export function EventStreamProvider(props: {
       return;
     }
 
-    eventLogger.info("[TUI] sendPrompt called", { sessionId, contentLength: content.length, contentPreview: content.substring(0, 50) });
+    eventLogger.info("Sending prompt", { sessionId, contentLength: content.length });
 
     // 添加用户消息到 store
     const userMessage: Message = {
@@ -441,16 +441,16 @@ export function EventStreamProvider(props: {
       timestamp: Date.now(),
     };
     store.addMessage(userMessage);
-    eventLogger.info("[TUI] Added user message to store", { messageId: userMessage.id, content: content.substring(0, 30) });
+    eventLogger.info("Added user message to store", { messageId: userMessage.id });
 
     // 确保已连接到事件流
     if (!isConnected()) {
-      eventLogger.info("[TUI] Not connected, connecting to event stream...");
+      eventLogger.info("Not connected, connecting to event stream...");
       await connect();
     }
 
     try {
-      eventLogger.info("[TUI] Calling server /prompt API", { sessionId, content: content.substring(0, 30) });
+      eventLogger.info("Sending prompt to server", { sessionId });
       const response = await apiCall(`/sessions/${sessionId}/prompt`, {
         method: "POST",
         body: JSON.stringify({ content }),
@@ -461,11 +461,11 @@ export function EventStreamProvider(props: {
         throw new Error(err.error || `Failed to send prompt: ${response.status}`);
       }
 
-      eventLogger.info("[TUI] /prompt API returned successfully", { sessionId, status: response.status });
+      eventLogger.info("Prompt sent successfully, waiting for stream...");
       // 不要断开重连，保持现有连接来接收流式事件
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      eventLogger.error("[TUI] Failed to send prompt", { error: errorMessage, sessionId });
+      eventLogger.error("Failed to send prompt", { error: errorMessage });
       setError(errorMessage);
       store.setError(errorMessage);
     }

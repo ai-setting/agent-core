@@ -3,9 +3,10 @@
  */
 
 import type { Context, Action, ToolResult, Tool, LLMStream, StreamHandler, LLMStreamEvent, ToolInfo } from "../types";
-import type { LLMMessage, LLMOptions } from "./base/invoke-llm.js";
-import type { Session, SessionCreateOptions, HistoryMessage } from "../session/index.js";
+import type { LLMOptions } from "./base/invoke-llm.js";
+import type { Session, SessionCreateOptions } from "../session/index.js";
 import type { SkillInfo } from "./skills/types.js";
+import type { ModelMessage } from "ai";
 
 export type StreamEventType = "text" | "reasoning" | "tool_call" | "tool_result" | "completed" | "error" | "start";
 
@@ -73,6 +74,8 @@ export interface FileContent {
   mimeType: string;
   filename?: string;
 }
+
+// Note: HistoryMessage is removed. Use ModelMessage from 'ai' SDK directly.
 
 /**
  * 供 env 推导 profiles/agents 用的 Agent 描述（仅定义在 core，env_spec 依赖此类型做推导，core 不依赖 env_spec）。
@@ -154,7 +157,7 @@ export interface EnvironmentQueryLogsParams {
 }
 
 export interface Environment {
-  handle_query(query: string, context?: Context, history?: HistoryMessage[]): Promise<string>;
+  handle_query(query: string, context?: Context, history?: import("ai").ModelMessage[]): Promise<string>;
   handle_action(action: Action, context: Context): Promise<ToolResult>;
   getTools(): Tool[];
   getPrompt(prompt_id: string): Prompt | undefined;
@@ -170,7 +173,7 @@ export interface Environment {
   /**
    * Invoke LLM as a native environment capability
    */
-  invokeLLM(messages: LLMMessage[], tools?: ToolInfo[], context?: Context, options?: Omit<LLMOptions, "messages" | "tools">): Promise<ToolResult>;
+  invokeLLM(messages: ModelMessage[], tools?: ToolInfo[], context?: Context, options?: Omit<LLMOptions, "messages" | "tools">): Promise<ToolResult>;
 
   /**
    * 获取指定 agent 的完整行为规范
@@ -265,6 +268,5 @@ export {
   DefaultMetricsCollector,
 } from "./base/index.js";
 export { BaseEnvironment } from "./base/base-environment.js";
-export { HistoryMessage } from "../session/index.js";
 export * from "./expend/os/index.js";
 export * from "./skills/index.js";
