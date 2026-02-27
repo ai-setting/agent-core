@@ -228,11 +228,6 @@ export async function invokeLLM(
       }))
     });
     
-    // Log full messages for debugging tool call issues
-    invokeLLMLogger.info("[invokeLLM] Full messages for debugging", {
-      messages: JSON.stringify(messages, null, 2)
-    });
-    
     // 5. Apply provider-specific transformations
     messages = LLMTransform.normalizeMessages(
       messages, 
