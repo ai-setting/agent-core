@@ -31,9 +31,21 @@ export class EventHandlerAgent {
   ) {}
 
   async handle<T>(event: EnvEvent<T>): Promise<void> {
-    const sessionId = event.metadata.trigger_session_id;
+    let sessionId = event.metadata.trigger_session_id;
+    
+    // Fallback: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
     if (!sessionId) {
-      console.warn("[EventHandlerAgent] No trigger_session_id in event metadata");
+      const clientId = event.metadata.clientId;
+      if (clientId && this.env.getActiveSessionManager) {
+        sessionId = this.env.getActiveSessionManager().getActiveSession(clientId);
+        if (sessionId) {
+          console.log(`[EventHandlerAgent] Using active session from clientId ${clientId}: ${sessionId}`);
+        }
+      }
+    }
+    
+    if (!sessionId) {
+      console.warn("[EventHandlerAgent] No trigger_session_id in event metadata and no active session available");
       return;
     }
 

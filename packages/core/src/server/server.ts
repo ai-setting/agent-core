@@ -155,6 +155,16 @@ export class AgentServer {
   }
 
   async stop(): Promise<void> {
+    // 先清理 MCP 资源
+    if (this.env) {
+      const eventMcpManager = this.env.getEventMcpManager?.();
+      if (eventMcpManager) {
+        await eventMcpManager.disconnectAll();
+        console.log("✓ EventSource 连接已断开");
+      }
+    }
+    
+    // 然后停止 HTTP 服务器
     if (this.bunServer) {
       this.bunServer.stop();
       this.bunServer = undefined;

@@ -77,6 +77,9 @@ export const ConfigInfo = z.object({
   // 指定当前使用哪个 Agent 运行时环境（如 'os_env', 'web_env'）
   activeEnvironment: z.string().optional().describe("Active Agent runtime environment name (e.g., 'os_env', 'web_env')"),
   
+  // === 用户标识（用于事件路由）===
+  clientId: z.string().optional().describe("User identifier for event routing (e.g., email)"),
+  
   // === 默认模型配置（当 Environment 未指定时回退到此配置）===
   defaultModel: z.string().optional().describe("Default LLM model, format: provider/model"),
   baseURL: z.string().optional().describe("Default LLM provider base URL"),

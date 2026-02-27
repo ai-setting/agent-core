@@ -44,7 +44,7 @@ export function App(props: AppProps) {
       <box flexGrow={1} minHeight={0} overflow="hidden">
         <MessageList />
       </box>
-      <InputBox />
+      <InputBox onExit={props.onExit} />
       {/* Dialog 栈渲染 */}
       <DialogStack />
     </box>

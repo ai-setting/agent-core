@@ -162,6 +162,22 @@ async function handleSelectAction(
     }
   }
 
+  // 设置 Active Session
+  const clientId = process.env.CLIENT_ID;
+  if (clientId && context.env && "getActiveSessionManager" in context.env) {
+    try {
+      (context.env as any).getActiveSessionManager().setActiveSession(clientId, action.sessionId);
+      serverLogger.info("[SessionsCommand] Active session set", {
+        clientId,
+        sessionId: action.sessionId,
+      });
+    } catch (error) {
+      serverLogger.error("[SessionsCommand] Failed to set active session", {
+        error: String(error),
+      });
+    }
+  }
+
   if (!switched) {
     // If env doesn't support switching, just return success
     // The TUI can handle the session switch locally

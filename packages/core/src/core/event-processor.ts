@@ -42,6 +42,9 @@ export interface EventProcessorOptions {
 export interface EventProcessorEnv {
   getSession?: (id: string) => SessionLike | undefined;
   handle_query: (query: string, ctx: any, history: any[]) => Promise<string>;
+  getActiveSessionManager?: () => {
+    getActiveSession: (clientId: string) => string | undefined;
+  };
 }
 
 /**
@@ -62,9 +65,22 @@ export async function processEventInSession<T>(
     toolName = "get_event_info"
   } = options;
 
-  const sessionId = event.metadata.trigger_session_id;
+  let sessionId = event.metadata.trigger_session_id;
+  
+  // Fallback: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
   if (!sessionId) {
-    console.warn("[EventProcessor] No trigger_session_id in event metadata");
+    const clientId = event.metadata.clientId as string | undefined;
+    if (clientId && env.getActiveSessionManager) {
+      const activeSessionManager = env.getActiveSessionManager();
+      sessionId = activeSessionManager.getActiveSession(clientId);
+      if (sessionId) {
+        console.log(`[EventProcessor] Using active session from clientId ${clientId}: ${sessionId}`);
+      }
+    }
+  }
+  
+  if (!sessionId) {
+    console.warn("[EventProcessor] No trigger_session_id in event metadata and no active session available");
     return;
   }
 
