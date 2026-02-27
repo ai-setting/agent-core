@@ -37,7 +37,7 @@ export class EventMcpManager {
   /**
    * 加载 EventSource MCP Clients
    * 从 mcp.clients 配置中筛选需要作为事件源的客户端
-    */
+   */
   async loadClients(
     mcpClientsConfig: Record<string, McpClientConfig>,
     eventSourceConfig?: Record<string, EventSourceClientConfig>
@@ -47,6 +47,16 @@ export class EventMcpManager {
       acc[name] = { name, client: mcpClientsConfig[name], enabled: true };
       return acc;
     }, {} as Record<string, EventSourceClientConfig>);
+
+    // 先断开已存在的同名客户端，避免子进程残留
+    for (const name of Object.keys(targetConfigs)) {
+      const existingClient = this.clients.get(name);
+      if (existingClient) {
+        serverLogger.info(`[EventMcpManager] Disconnecting existing client: ${name}`);
+        await existingClient.disconnect();
+        this.clients.delete(name);
+      }
+    }
 
     for (const [name, config] of Object.entries(targetConfigs)) {
       // 从 mcpClientsConfig 获取对应的 client 配置
