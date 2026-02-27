@@ -137,4 +137,8 @@ async function main() {
   console.log("按 Ctrl+C 停止服务");
 }
 
-main().catch(console.error);
+// 只有直接运行此文件时才执行 main()
+// 通过检查 import.meta.url 来判断是否是直接运行
+if (import.meta.main) {
+  main().catch(console.error);
+}

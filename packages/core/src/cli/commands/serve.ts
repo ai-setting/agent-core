@@ -37,7 +37,7 @@ export const ServeCommand: CommandModule<object, ServeOptions> = {
     console.log();
 
     // 初始化 Server（注册命令、加载配置、创建 Environment）
-    const { port: actualPort } = await initServer({
+    const { port: actualPort, server, env } = await initServer({
       port: args.port,
       hostname: args.host,
     });
@@ -48,6 +48,23 @@ export const ServeCommand: CommandModule<object, ServeOptions> = {
     console.log();
     console.log("按 Ctrl+C 停止");
 
-    await new Promise(() => {});
+    // 等待退出信号
+    await new Promise<void>((resolve) => {
+      const cleanup = async () => {
+        console.log("\n正在关闭服务器...");
+        try {
+          // 调用 server.stop() 清理 MCP 连接
+          if (server) {
+            await server.stop();
+          }
+        } catch (error) {
+          console.error("关闭时出错:", error);
+        }
+        resolve();
+      };
+
+      process.on("SIGINT", cleanup);
+      process.on("SIGTERM", cleanup);
+    });
   },
 };
