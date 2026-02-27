@@ -11,9 +11,12 @@
  * - BehaviorSpec support (env rules + agent prompt)
  */
 
+import { createLogger } from "../../utils/logger.js";
 import type { Environment, MessageContent, BehaviorSpec } from "../environment";
 import type { ModelMessage } from "ai";
 import { Event, Context } from "../types";
+
+const agentLogger = createLogger("agent", "server.log");
 
 // Note: Using ModelMessage from 'ai' SDK directly
 
@@ -136,27 +139,54 @@ export class Agent {
     }
     prompt = prompt ?? "You are a helpful assistant.";
     
-    console.log(`[Agent] Starting run with query: "${query.substring(0, 50)}..."`);
-    console.log(`[Agent] Available tools: ${this.tools.map(t => t.name).join(", ")}`);
+    agentLogger.info(`Starting run with query: "${query.substring(0, 50)}..."`);
+    agentLogger.info(`Available tools: ${this.tools.map(t => t.name).join(", ")}`);
+    agentLogger.info(`History count: ${this._history.length}`);
     
     const messages: ModelMessage[] = [
       { role: "system", content: prompt },
+      ...this._history,
       { role: "user", content: query },
     ];
+
+    agentLogger.info(`===== FINAL MESSAGES FOR LLM =====`);
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      agentLogger.info(`Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
+      if (typeof m.content === 'string') {
+        agentLogger.info(`  content: ${m.content.substring(0, 100)}`);
+      } else if (Array.isArray(m.content)) {
+        agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
+      } else {
+        agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
+      }
+    }
+    agentLogger.info(`=========================================`);
 
     let iteration = 0;
     let consecutiveErrors = 0;
 
     while (iteration < this.config.maxIterations) {
-      if (this.isAborted()) {
-        console.log("[Agent] Run aborted by user");
-        throw new Error("Agent run was aborted");
-      }
+    if (this.isAborted()) {
+      agentLogger.info("Run aborted by user");
+      throw new Error("Agent run was aborted");
+    }
 
-      iteration++;
-      console.log(`[Agent] Iteration ${iteration}/${this.config.maxIterations}`);
+    iteration++;
+    agentLogger.info(`Iteration ${iteration}/${this.config.maxIterations}`);
 
       try {
+        agentLogger.info(`===== INVOKING LLM (iteration ${iteration}) =====`);
+        for (let i = 0; i < messages.length; i++) {
+          const m = messages[i];
+          agentLogger.info(`LLM Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
+          if (typeof m.content === 'string') {
+            agentLogger.info(`  content: ${m.content.substring(0, 100)}`);
+          } else if (Array.isArray(m.content)) {
+            agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
+          }
+        }
+        
         const llmResult = await this.env.invokeLLM(
           messages,
           this.tools,
@@ -172,7 +202,7 @@ export class Agent {
         }
 
         const output = llmResult.output as unknown as LLMOutput;
-        console.log(`[Agent] LLM output received`, {
+        agentLogger.info(`LLM output received`, {
           contentLength: output.content?.length || 0,
           hasToolCalls: !!(output.tool_calls && output.tool_calls.length > 0),
           toolCallsCount: output.tool_calls?.length || 0,
@@ -181,7 +211,7 @@ export class Agent {
         const hasToolCalls = output.tool_calls && output.tool_calls.length > 0;
 
         if (!hasToolCalls) {
-          console.log(`[Agent] No tool calls, returning content: "${output.content}"`);
+          agentLogger.info(`No tool calls, returning content: "${output.content}"`);
           this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
           return output.content || "(no response)";
         }
@@ -209,7 +239,7 @@ export class Agent {
             parsedArgs = JSON.parse(tc.function.arguments || "{}");
           } catch {
             // If JSON parsing fails, use empty args
-            console.warn(`[Agent] Failed to parse tool arguments for ${tc.function.name}: ${tc.function.arguments}`);
+            agentLogger.warn(`Failed to parse tool arguments for ${tc.function.name}: ${tc.function.arguments}`);
           }
           assistantContent.push({
             type: "tool-call",
@@ -227,8 +257,8 @@ export class Agent {
         // Notify about assistant message
         this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
 
-        console.log(`[Agent] Processing ${toolCalls.length} tool_calls from LLM`);
-        console.log(`[Agent] Assistant message built:`, JSON.stringify({
+        agentLogger.info(`Processing ${toolCalls.length} tool_calls from LLM`);
+        agentLogger.info(`Assistant message built:`, JSON.stringify({
           role: "assistant",
           content: assistantContent,
         }, null, 2));
@@ -236,7 +266,7 @@ export class Agent {
         for (const toolCall of toolCalls) {
           let toolArgs: Record<string, unknown> = {};
 
-          console.log(`[Agent] Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
+          agentLogger.info(`Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
 
           try {
             toolArgs = JSON.parse(toolCall.function.arguments);
@@ -269,9 +299,9 @@ export class Agent {
           // Check if tool is allowed (if tools list is provided)
           if (this.tools.length > 0) {
             const isAllowed = this.tools.some(t => t.name === toolCall.function.name);
-            console.log(`[Agent] Tool ${toolCall.function.name} allowed: ${isAllowed}`);
+            agentLogger.info(`Tool ${toolCall.function.name} allowed: ${isAllowed}`);
             if (!isAllowed) {
-              console.log(`[Agent] Rejecting tool call for ${toolCall.function.name}`);
+              agentLogger.info(`Rejecting tool call for ${toolCall.function.name}`);
               const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`;
             messages.push({
               role: "tool",
@@ -290,7 +320,7 @@ export class Agent {
             this.context
           ).catch((error) => {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            console.warn(`Tool "${toolCall.function.name}" threw error: ${errorMessage}`);
+            agentLogger.warn(`Tool "${toolCall.function.name}" threw error: ${errorMessage}`);
             return {
               success: false,
               output: "",
@@ -301,7 +331,7 @@ export class Agent {
 
           if (!toolResult.success) {
             const error = toolResult.error || "Unknown tool error";
-            console.warn(`Tool "${toolCall.function.name}" failed: ${error}`);
+            agentLogger.warn(`Tool "${toolCall.function.name}" failed: ${error}`);
             
             messages.push({
               role: "tool",
@@ -328,38 +358,53 @@ export class Agent {
             name: toolCall.function.name
           });
 
-          console.log(`[Agent] Tool ${toolCall.function.name} completed successfully`);
-          console.log(`[Agent] Tool message built:`, JSON.stringify({
+          agentLogger.info(`Tool ${toolCall.function.name} completed successfully`);
+          agentLogger.info(`Tool message built:`, JSON.stringify({
             role: "tool",
             content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
           }, null, 2));
         }
 
-        console.log(`[Agent] Completed processing all tool_calls, continuing to next iteration`);
-        console.log(`[Agent] Full messages before invokeLLM:`, JSON.stringify(messages, null, 2));
+        agentLogger.info(`Completed processing all tool_calls, continuing to next iteration`);
+        
+        // Debug: 打印所有消息的详细信息
+        agentLogger.info(`=== DEBUG: All messages before invokeLLM ===`);
+        for (let i = 0; i < messages.length; i++) {
+          const m = messages[i];
+          agentLogger.info(`Message ${i} [${m.role}]:`, {
+            contentType: typeof m.content,
+            isArray: Array.isArray(m.content),
+            hasToolCallId: !!(m as any).toolCallId,
+          });
+          if (m.role === "tool" && (m as any).toolCallId) {
+            const toolContent = (m as any).content;
+            agentLogger.info(`  Tool message content:`, JSON.stringify(toolContent).substring(0, 500));
+          }
+        }
+        agentLogger.info(`============================================`);
 
       } catch (error) {
         consecutiveErrors++;
         
         if (this.isAborted()) {
-          console.log("[Agent] Run aborted during error handling");
+          agentLogger.info("Run aborted during error handling");
           throw new Error("Agent run was aborted");
         }
 
-        console.error(`[Agent] Error in iteration ${iteration}:`, error);
+        agentLogger.error(`Error in iteration ${iteration}:`, error);
 
         if (consecutiveErrors >= this.config.maxErrorRetries) {
-          console.error(`[Agent] Max consecutive errors (${this.config.maxErrorRetries}) exceeded`);
+          agentLogger.error(`Max consecutive errors (${this.config.maxErrorRetries}) exceeded`);
           return `Error: Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${error instanceof Error ? error.message : String(error)}`;
         }
 
         const delay = this.getRetryDelay(consecutiveErrors - 1);
-        console.log(`[Agent] Retrying after ${delay}ms (attempt ${consecutiveErrors}/${this.config.maxErrorRetries})`);
+        agentLogger.info(`Retrying after ${delay}ms (attempt ${consecutiveErrors}/${this.config.maxErrorRetries})`);
         await this.delay(delay);
       }
     }
 
-    console.log(`[Agent] Max iterations (${this.config.maxIterations}) reached`);
+    agentLogger.info(`Max iterations (${this.config.maxIterations}) reached`);
     return `Error: Max iterations (${this.config.maxIterations}) reached without completion`;
   }
 }

@@ -108,7 +108,7 @@ function convertUserMessage(msg: MessageWithParts): ModelMessage {
 
   return {
     role: "user",
-    content: parts.length === 1 ? parts[0] : parts,
+    content: parts,
   } as ModelMessage;
 }
 
@@ -145,7 +145,7 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
             type: "tool-call",
             toolCallId: toolPart.callID || `call_${Date.now()}`,
             toolName: toolPart.tool,
-            args: toolPart.input || {},
+            input: toolPart.input || {},
           });
         }
         break;
@@ -160,7 +160,7 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
 
   return {
     role: "assistant",
-    content: parts.length === 1 ? parts[0] : parts,
+    content: parts,
   } as ModelMessage;
 }
 
@@ -200,7 +200,12 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
 
   return {
     role: "tool",
-    content: [{ type: "text", text: resultText }],
+    content: [{ 
+      type: "tool-result", 
+      toolCallId: toolPart.callID || "", 
+      toolName: toolPart.tool,
+      output: { type: "text", value: resultText }
+    }],
     toolCallId: toolPart.callID || "",
   } as unknown as ModelMessage;
 }

@@ -15,6 +15,7 @@ describe("processEventInSession", () => {
       id: "session-1",
       addUserMessage: vi.fn(),
       addAssistantMessage: vi.fn(),
+      addAssistantMessageWithTool: vi.fn(),
       toHistory: vi.fn().mockReturnValue([
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Hi there!" },

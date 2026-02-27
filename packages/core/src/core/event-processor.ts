@@ -11,8 +11,11 @@ import type { EnvEvent } from "./types/event.js";
 
 interface HistoryMessageWithTool {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | Record<string, unknown>;
+  content: string | Record<string, unknown> | Array<Record<string, unknown>>;
   name?: string;
+  toolCallId?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
   tool_calls?: Array<{
     id: string;
     type: string;
@@ -27,6 +30,7 @@ interface HistoryMessageWithTool {
 export interface SessionLike {
   addUserMessage(content: string): void;
   addAssistantMessage(content: string): void;
+  addAssistantMessageWithTool(toolCallId: string, toolName: string, toolArgs: Record<string, unknown>): void;
   toHistory(): HistoryMessageWithTool[];
 }
 
@@ -97,7 +101,15 @@ export async function processEventInSession<T>(
       const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
       session.addUserMessage(content);
     } else if (msg.role === "assistant") {
-      session.addAssistantMessage(msg.content as string);
+      if (msg.toolCallId && msg.toolName) {
+        session.addAssistantMessageWithTool(
+          msg.toolCallId,
+          msg.toolName,
+          msg.toolArgs || {}
+        );
+      } else {
+        session.addAssistantMessage(msg.content as string);
+      }
     }
   });
 
@@ -120,45 +132,51 @@ function constructEventMessages<T>(
 ): HistoryMessageWithTool[] {
   const { includeToolCall, toolName } = options;
 
+  const userText = [
+    `Observed event: ${event.type}`,
+    `Event ID: ${event.id}`,
+    `Time: ${new Date(event.timestamp).toISOString()}`,
+  ].join("\n");
+
   const userMessage: HistoryMessageWithTool = {
     role: "user",
-    content: [
-      `Observed event: ${event.type}`,
-      `Event ID: ${event.id}`,
-      `Time: ${new Date(event.timestamp).toISOString()}`,
-    ].join("\n"),
+    content: userText,
   };
 
   if (!includeToolCall) {
     return [userMessage];
   }
 
+  const toolResult = JSON.stringify({
+    event_id: event.id,
+    event_type: event.type,
+    timestamp: event.timestamp,
+    metadata: event.metadata,
+    payload: event.payload,
+  });
+
+  const toolCallId = `call_${event.id}`;
+
   return [
     userMessage,
     {
       role: "assistant",
       content: "",
-      tool_calls: [
-        {
-          id: `call_${event.id}`,
-          type: "function",
-          function: {
-            name: toolName,
-            arguments: JSON.stringify({ event_ids: [event.id] }),
-          },
-        },
-      ],
+      toolCallId,
+      toolName,
+      toolArgs: { event_ids: [event.id] },
     },
     {
       role: "tool",
-      tool_call_id: `call_${event.id}`,
-      content: JSON.stringify({
-        event_id: event.id,
-        event_type: event.type,
-        timestamp: event.timestamp,
-        metadata: event.metadata,
-        payload: event.payload,
-      }),
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: toolCallId,
+          toolName: toolName,
+          output: { type: "text", value: toolResult },
+        },
+      ],
+      toolCallId: toolCallId,
     },
   ];
 }
