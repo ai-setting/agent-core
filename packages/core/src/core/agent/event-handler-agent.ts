@@ -91,11 +91,17 @@ export class EventHandlerAgent {
   }
 
   private constructMessages<T>(event: EnvEvent<T>): HistoryMessageWithTool[] {
-    const userText = [
+    const userTextParts = [
       `Observed event: ${event.type}`,
       `Event ID: ${event.id}`,
       `Time: ${new Date(event.timestamp).toISOString()}`,
-    ].join("\n");
+    ];
+
+    if (event.metadata?.agent_guide) {
+      userTextParts.push(`\nAgent处理指南: ${event.metadata.agent_guide}`);
+    }
+
+    const userText = userTextParts.join("\n");
 
     const toolResult = JSON.stringify({
       event_id: event.id,
@@ -103,7 +109,7 @@ export class EventHandlerAgent {
       timestamp: event.timestamp,
       metadata: event.metadata,
       payload: event.payload,
-    });
+    }, null, 2);
 
     const toolCallId = `call_${event.id}`;
 
