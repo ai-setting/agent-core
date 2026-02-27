@@ -24,7 +24,11 @@ interface PendingCommandResult {
   message?: string;
 }
 
-export function InputBox() {
+interface InputBoxProps {
+  onExit?: () => void;
+}
+
+export function InputBox(props: InputBoxProps) {
   const store = useStore();
   const eventStream = useEventStream();
   const theme = useTheme();
@@ -269,6 +273,7 @@ export function InputBox() {
             }, 100);
           }
         }}
+        onExit={props.onExit}
       />
 
       {/* 输入框主体 */}

@@ -102,6 +102,13 @@ app.post("/", async (c) => {
     title = undefined;
   }
   const session = await resolve(env.createSession!({ title }));
+  
+  // 设置 Active Session
+  const clientId = process.env.CLIENT_ID;
+  if (clientId) {
+    env.getActiveSessionManager().setActiveSession(clientId, session.id);
+  }
+  
   return c.json(sessionToSummary(session), 201);
 });
 

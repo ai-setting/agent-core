@@ -27,6 +27,8 @@ interface CommandPaletteProps {
   ref: (ref: CommandPaletteRef) => void;
   /** 选择命令时的回调（用于需要参数的命令） */
   onSelectCommand?: (cmdName: string) => void;
+  /** 退出回调 */
+  onExit?: () => void;
 }
 
 export function CommandPalette(props: CommandPaletteProps) {
@@ -252,16 +254,15 @@ export function CommandPalette(props: CommandPaletteProps) {
     const result = await command.executeCommand(name, args);
     
     if ((result.data as any)?.mode === "exit") {
-      tuiLogger.info("[CommandPalette] Exit command received, exiting...");
+      tuiLogger.info("[CommandPalette] Exit command received, calling onExit...");
       store.addMessage({
         id: `cmd-result-${Date.now()}`,
         role: "system",
         content: "👋 Goodbye!",
         timestamp: Date.now(),
       });
-      setTimeout(() => {
-        process.exit(0);
-      }, 500);
+      // 调用 onExit 回调来正确清理资源
+      await props.onExit?.();
       return;
     }
     

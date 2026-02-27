@@ -66,6 +66,14 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     if (!apiKey && config.apiKey) apiKey = config.apiKey;
     if (!baseURL && config.baseURL) baseURL = config.baseURL;
     
+    // 将 clientId 注入环境变量，供 MCP Server 使用
+    if (config.clientId) {
+      process.env.CLIENT_ID = config.clientId;
+      console.log(`[Config] CLIENT_ID set to: ${config.clientId}`);
+    } else {
+      console.log(`[Config] CLIENT_ID not found in config`);
+    }
+    
     if (model && apiKey) {
       console.log(`✅ 配置加载成功: ${model}`);
     }

@@ -32,12 +32,12 @@ export async function startTUI(options: TUIOptions): Promise<void> {
   console.debug = () => {};
   console.warn = () => {};
 
-  const handleExit = () => {
+  const handleExit = async () => {
     // 恢复 console
     console.log = originalConsoleLog;
     console.debug = originalConsoleDebug;
     console.warn = originalConsoleWarn;
-    options.onExit?.();
+    await options.onExit?.();
     process.exit(0);
   };
 

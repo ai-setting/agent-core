@@ -29,7 +29,7 @@ export class EventMcpClient {
   private transport?: StdioClientTransport | StreamableHTTPClientTransport;
   private status: EventSourceStatus = EventSourceStatus.STOPPED;
   private pollInterval?: ReturnType<typeof setInterval>;
-  private eventCount = 0;
+  private eventCount = 0;;
 
   constructor(
     env: ServerEnvironment,
@@ -50,6 +50,25 @@ export class EventMcpClient {
     this.status = EventSourceStatus.STARTING;
     this.transport = this.createTransport();
     this.client = new Client({ name: `eventsource-${this.name}`, version: "1.0.0" });
+
+    // 对于 local 类型的 MCP，在 connect 之前设置 stderr 监听器
+    if (this.config.type === "local" && this.transport) {
+      const stdioTransport = this.transport as StdioClientTransport;
+      const stderrStream = stdioTransport.stderr;
+      if (stderrStream) {
+        serverLogger.info(`[MCP:${this.name}] Setting up stderr listener`);
+        stderrStream.on("data", (data: Buffer) => {
+          const str = data.toString();
+          serverLogger.info(`[MCP:${this.name}] stderr: ${str.substring(0, 500)}`);
+        });
+        stderrStream.on("end", () => {
+          serverLogger.info(`[MCP:${this.name}] stderr stream ended`);
+        });
+        stderrStream.on("error", (error: Error) => {
+          serverLogger.warn(`[MCP:${this.name}] stderr error: ${error.message}`);
+        });
+      }
+    }
 
     await this.client.connect(this.transport);
 
@@ -72,12 +91,13 @@ export class EventMcpClient {
   private createTransport(): StdioClientTransport | StreamableHTTPClientTransport {
     if (this.config.type === "local") {
       const [cmd, ...args] = this.config.command!;
-      return new StdioClientTransport({
+      const transport = new StdioClientTransport({
         command: cmd,
         args,
         env: { ...process.env as Record<string, string>, ...this.config.environment },
         stderr: "pipe",
       });
+      return transport;
     } else {
       return new StreamableHTTPClientTransport(new URL(this.config.url!), {
         requestInit: this.config.headers ? { headers: this.config.headers } : undefined,
@@ -194,15 +214,31 @@ export class EventMcpClient {
    * 断开连接
    */
   async disconnect(): Promise<void> {
+    serverLogger.info(`[EventMcpClient] disconnect() called for ${this.name}, status: ${this.status}`);
+    
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = undefined;
     }
     
     if (this.client) {
+      serverLogger.info(`[EventMcpClient] Calling client.close() for ${this.name}`);
       await this.client.close();
+      serverLogger.info(`[EventMcpClient] client.close() completed for ${this.name}`);
       this.client = undefined;
     }
+    
+    // 关闭 transport
+    if (this.transport) {
+      serverLogger.info(`[EventMcpClient] Closing transport for ${this.name}`);
+      await this.transport.close();
+      serverLogger.info(`[EventMcpClient] Transport closed for ${this.name}`);
+      this.transport = undefined;
+    }
+    
+    // 等待子进程退出
+    serverLogger.info(`[EventMcpClient] Waiting for child process to exit for ${this.name}`);
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     this.status = EventSourceStatus.STOPPED;
     serverLogger.info(`[EventMcpClient] Disconnected from ${this.name}`);

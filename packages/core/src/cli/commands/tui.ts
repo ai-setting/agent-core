@@ -97,7 +97,7 @@ export const TuiCommand: CommandModule<object, TuiOptions> = {
     console.log("🚀 启动 tong_work...");
 
     // 初始化 Server（注册命令、加载配置、创建 Environment）
-    const { server, port: actualPort } = await initServer({
+    const { server, env, port: actualPort } = await initServer({
       port: args.port || 4096,
       hostname: "localhost",
       model: args.model,
@@ -124,7 +124,17 @@ export const TuiCommand: CommandModule<object, TuiOptions> = {
 
     const stopServer = async () => {
       console.log("\n🛑 正在停止服务器...");
+      
+      // 先断开 EventMcpManager（关闭 MCP 子进程）
+      const eventMcpManager = env?.getEventMcpManager?.();
+      if (eventMcpManager) {
+        await eventMcpManager.disconnectAll();
+        console.log("✓ EventSource 连接已断开");
+      }
+      
+      // 然后停止 HTTP 服务器
       await server.stop();
+      console.log("✓ 服务器已停止");
     };
 
     await startTUI({

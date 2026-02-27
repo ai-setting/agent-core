@@ -16,6 +16,7 @@ import type { StreamEvent } from "../core/environment/index.js";
 import { EventTypes, type EnvEvent } from "../core/types/event.js";
 import * as Bus from "./eventbus/bus.js";
 import { EnvEventBus } from "./eventbus/bus.js";
+import { ActiveSessionManager } from "./active-session-manager.js";
 import {
   StreamStartEvent,
   StreamTextEvent,
@@ -71,6 +72,7 @@ export class ServerEnvironment extends BaseEnvironment {
   private backgroundTaskManager: BackgroundTaskManager | undefined;
   private eventMcpManager: EventMcpManager | undefined;
   private eventSourceConfig: EventSourceMcpConfig | undefined;
+  private activeSessionManager: ActiveSessionManager;
   
   // Track streaming content for interrupt handling
   private currentStreamingContent: {
@@ -95,6 +97,7 @@ export class ServerEnvironment extends BaseEnvironment {
     this.modelStore = new ModelStore();
     this.eventBus = new EnvEventBus(this);
     this.eventMcpManager = new EventMcpManager(this);
+    this.activeSessionManager = new ActiveSessionManager();
 
     // Initialize event rules
     this.initEventRules();
@@ -744,6 +747,13 @@ export class ServerEnvironment extends BaseEnvironment {
    */
   getEventMcpManager(): EventMcpManager | undefined {
     return this.eventMcpManager;
+  }
+
+  /**
+   * 获取 ActiveSession 管理器
+   */
+  getActiveSessionManager(): ActiveSessionManager {
+    return this.activeSessionManager;
   }
 
   /**
