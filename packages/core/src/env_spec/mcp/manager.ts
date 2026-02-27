@@ -87,7 +87,7 @@ export class McpManager {
 
         // 连接 MCP 服务器
         try {
-          await this.connectClient(server.name, config)
+          await this.connectClient(server.name, config, serverDir)
           loaded++
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
@@ -165,7 +165,7 @@ export class McpManager {
   /**
    * 连接 MCP 客户端
    */
-  async connectClient(name: string, config: McpClientConfig): Promise<void> {
+  async connectClient(name: string, config: McpClientConfig, cwd?: string): Promise<void> {
     // 如果已连接，先断开
     if (this.clients.has(name)) {
       await this.disconnectClient(name)
@@ -176,7 +176,7 @@ export class McpManager {
 
     try {
       // 创建传输层并连接
-      const transport = this.createTransport(config)
+      const transport = this.createTransport(config, cwd)
       serverLogger.debug(`[MCP] Transport created for ${name}`)
       
       const client = new Client({ name: "agent-core", version: "1.0.0" })
@@ -223,7 +223,7 @@ export class McpManager {
   /**
    * 创建传输层
    */
-  private createTransport(config: McpClientConfig): StdioClientTransport | StreamableHTTPClientTransport {
+  private createTransport(config: McpClientConfig, cwd?: string): StdioClientTransport | StreamableHTTPClientTransport {
     if (config.type === "local") {
       const [cmd, ...args] = config.command!
       const env: Record<string, string> = {}
@@ -240,6 +240,7 @@ export class McpManager {
         args,
         env,
         stderr: "pipe",
+        cwd,
       })
     } else {
       // 远程 MCP
