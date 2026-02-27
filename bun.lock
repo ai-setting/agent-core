@@ -32,7 +32,7 @@
         "@ai-sdk/perplexity": "^3.0.17",
         "@ai-sdk/togetherai": "^2.0.30",
         "@ai-sdk/xai": "^3.0.47",
-        "@modelcontextprotocol/sdk": "^1.0.0",
+        "@modelcontextprotocol/sdk": "^1.27.1",
         "@mozilla/readability": "^0.6.0",
         "@opentui/core": "0.1.79",
         "@opentui/solid": "0.1.79",
