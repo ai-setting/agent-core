@@ -366,22 +366,6 @@ export class Agent {
         }
 
         agentLogger.info(`Completed processing all tool_calls, continuing to next iteration`);
-        
-        // Debug: 打印所有消息的详细信息
-        agentLogger.info(`=== DEBUG: All messages before invokeLLM ===`);
-        for (let i = 0; i < messages.length; i++) {
-          const m = messages[i];
-          agentLogger.info(`Message ${i} [${m.role}]:`, {
-            contentType: typeof m.content,
-            isArray: Array.isArray(m.content),
-            hasToolCallId: !!(m as any).toolCallId,
-          });
-          if (m.role === "tool" && (m as any).toolCallId) {
-            const toolContent = (m as any).content;
-            agentLogger.info(`  Tool message content:`, JSON.stringify(toolContent).substring(0, 500));
-          }
-        }
-        agentLogger.info(`============================================`);
 
       } catch (error) {
         consecutiveErrors++;
