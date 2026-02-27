@@ -242,6 +242,36 @@ export class Session {
   }
 
   /**
+   * Add an assistant message with tool call (for fake messages in event handling).
+   */
+  addAssistantMessageWithTool(
+    toolCallId: string,
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    metadata?: Record<string, unknown>
+  ): string {
+    const id = ID.ascending("message");
+    const info: MessageInfo = {
+      id,
+      sessionID: this.id,
+      role: "assistant",
+      timestamp: Date.now(),
+      metadata,
+    };
+
+    const toolPart: ToolPart = {
+      id: ID.ascending("part"),
+      type: "tool",
+      callID: toolCallId,
+      tool: toolName,
+      state: "pending",
+      input: toolArgs,
+    };
+
+    return this.addMessage(info, [toolPart]);
+  }
+
+  /**
    * Add reasoning content.
    */
   addReasoning(text: string, metadata?: Record<string, unknown>): string {

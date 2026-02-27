@@ -8,6 +8,7 @@ import { Agent } from "./index.js";
 import type { Environment } from "../environment/index.js";
 import type { Context } from "../types/context.js";
 import type { Tool } from "../types/index.js";
+import type { ModelMessage } from "ai";
 
 describe("Agent onMessageAdded Callback", () => {
   let mockEnv: any;
@@ -440,6 +441,111 @@ describe("Agent onMessageAdded Callback", () => {
 
       const errorMessages = messages.filter(m => m.role === "tool" && m.content.includes("not available"));
       expect(errorMessages.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("with history parameter", () => {
+    it("should include history messages in LLM call", async () => {
+      const historyMessages: ModelMessage[] = [
+        { role: "user", content: [{ type: "text", text: "Previous user message" }] },
+        { role: "assistant", content: [{ type: "text", text: "Previous assistant response" }] },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: "call_prev", toolName: "test_tool", output: { type: "text", value: "tool result" } }] as any },
+      ];
+
+      let capturedMessages: any[] = [];
+      mockEnv.invokeLLM = vi.fn().mockImplementation((msgs: any[]) => {
+        capturedMessages = msgs;
+        return {
+          success: true,
+          output: { content: "Final answer" },
+        };
+      });
+
+      const agent = new Agent(
+        { event_type: "user_query", content: "new query", timestamp: new Date().toISOString(), role: "user" },
+        mockEnv as Environment,
+        mockTools,
+        context,
+        {},
+        historyMessages
+      );
+
+      await agent.run();
+
+      // Verify history is included in messages sent to LLM
+      // Should be: [system, user(history), assistant(history), tool(history), user(new query)]
+      const roles = capturedMessages.map(m => m.role);
+      expect(roles).toContain("user");
+      expect(roles).toContain("assistant");
+      expect(roles).toContain("tool");
+      
+      // Verify the new user query is at the end
+      const lastUserMsg = capturedMessages[capturedMessages.length - 1];
+      expect(lastUserMsg.role).toBe("user");
+      expect(lastUserMsg.content).toBe("new query");
+    });
+
+    it("should work with empty history", async () => {
+      let capturedMessages: any[] = [];
+      mockEnv.invokeLLM = vi.fn().mockImplementation((msgs: any[]) => {
+        capturedMessages = msgs;
+        return {
+          success: true,
+          output: { content: "Final answer" },
+        };
+      });
+
+      const agent = new Agent(
+        { event_type: "user_query", content: "test query", timestamp: new Date().toISOString(), role: "user" },
+        mockEnv as Environment,
+        mockTools,
+        context,
+        {},
+        [] // empty history
+      );
+
+      await agent.run();
+
+      // Should have: system + user
+      expect(capturedMessages.length).toBe(2);
+      expect(capturedMessages[0].role).toBe("system");
+      expect(capturedMessages[1].role).toBe("user");
+      expect(capturedMessages[1].content).toBe("test query");
+    });
+
+    it("should correctly order messages: system + history + new query", async () => {
+      const historyMessages: ModelMessage[] = [
+        { role: "user", content: [{ type: "text", text: "History user msg" }] },
+        { role: "assistant", content: [{ type: "text", text: "History assistant msg" }] },
+      ];
+
+      let capturedMessages: any[] = [];
+      mockEnv.invokeLLM = vi.fn().mockImplementation((msgs: any[]) => {
+        capturedMessages = msgs;
+        return {
+          success: true,
+          output: { content: "Done" },
+        };
+      });
+
+      const agent = new Agent(
+        { event_type: "user_query", content: "current query", timestamp: new Date().toISOString(), role: "user" },
+        mockEnv as Environment,
+        mockTools,
+        context,
+        {},
+        historyMessages
+      );
+
+      await agent.run();
+
+      // Order should be: system, history user, history assistant, current user
+      expect(capturedMessages).toEqual([
+        { role: "system", content: expect.any(String) },
+        { role: "user", content: [{ type: "text", text: "History user msg" }] },
+        { role: "assistant", content: [{ type: "text", text: "History assistant msg" }] },
+        { role: "user", content: "current query" },
+      ]);
     });
   });
 });
