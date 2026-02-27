@@ -236,9 +236,9 @@ export class EventMcpClient {
       this.transport = undefined;
     }
     
-    // 等待子进程退出
+    // 显式等待子进程退出
     serverLogger.info(`[EventMcpClient] Waiting for child process to exit for ${this.name}`);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     this.status = EventSourceStatus.STOPPED;
     serverLogger.info(`[EventMcpClient] Disconnected from ${this.name}`);
