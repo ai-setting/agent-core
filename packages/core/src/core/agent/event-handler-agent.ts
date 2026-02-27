@@ -8,6 +8,8 @@
 import type { EnvEvent } from "../types/event.js";
 import type { TextContent } from "../environment/index.js";
 
+type OnMessageAddedPayload = { role: string; content: string; name?: string; tool_call_id?: string; assistantContent?: any[] };
+
 interface HistoryMessageWithTool {
   role: "system" | "user" | "assistant" | "tool";
   content: string | Record<string, unknown> | Array<Record<string, unknown>>;
@@ -85,7 +87,35 @@ export class EventHandlerAgent {
     const history = session.toHistory();
     await this.env.handle_query(
       `Process event: ${event.type}`,
-      { session_id: sessionId },
+      {
+        session_id: sessionId,
+        onMessageAdded: (msg: OnMessageAddedPayload) => {
+          if (msg.role === "assistant" && msg.content) {
+            // Check if there's assistant content with tool-calls
+            if (msg.assistantContent && Array.isArray(msg.assistantContent)) {
+              const toolCallPart = msg.assistantContent.find((p: any) => p.type === "tool-call");
+              if (toolCallPart) {
+                session.addAssistantMessageWithTool(
+                  toolCallPart.toolCallId,
+                  toolCallPart.toolName,
+                  toolCallPart.input || {}
+                );
+              } else {
+                session.addAssistantMessage(msg.content);
+              }
+            } else {
+              session.addAssistantMessage(msg.content);
+            }
+          } else if (msg.role === "tool" && msg.name) {
+            session.addToolMessage(
+              msg.name,
+              msg.tool_call_id || `call_${Date.now()}`,
+              msg.content,
+              {}
+            );
+          }
+        },
+      },
       history
     );
   }

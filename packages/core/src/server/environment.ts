@@ -1017,7 +1017,21 @@ export class ServerEnvironment extends BaseEnvironment {
               session_id: sessionId,
               onMessageAdded: (msg) => {
                 if (msg.role === "assistant" && msg.content) {
-                  session?.addAssistantMessage(msg.content);
+                  // Check if there's assistant content with tool-calls
+                  if (msg.assistantContent && Array.isArray(msg.assistantContent)) {
+                    const toolCallPart = msg.assistantContent.find((p: any) => p.type === "tool-call");
+                    if (toolCallPart) {
+                      session?.addAssistantMessageWithTool(
+                        toolCallPart.toolCallId,
+                        toolCallPart.toolName,
+                        toolCallPart.input || {}
+                      );
+                    } else {
+                      session?.addAssistantMessage(msg.content);
+                    }
+                  } else {
+                    session?.addAssistantMessage(msg.content);
+                  }
                 } else if (msg.role === "tool" && msg.name) {
                   session?.addToolMessage(
                     msg.name,

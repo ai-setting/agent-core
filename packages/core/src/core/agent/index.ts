@@ -62,13 +62,17 @@ export class Agent {
   private tools: import("../types").Tool[];
   private agentId: string;
 
-  private notifyMessageAdded(message: { role: string; content: string; toolCallId?: string; name?: string }): void {
+  private notifyMessageAdded(message: { role: string; content: string; toolCallId?: string; name?: string }, assistantContent?: any[]): void {
     if (this.context.onMessageAdded) {
       // Map camelCase to snake_case for tool messages to match expected format
       const mappedMessage: any = { ...message };
       if (message.toolCallId) {
         mappedMessage.tool_call_id = message.toolCallId;
         delete mappedMessage.toolCallId;
+      }
+      // Pass assistant content (including tool-calls) if available
+      if (assistantContent) {
+        mappedMessage.assistantContent = assistantContent;
       }
       this.context.onMessageAdded(mappedMessage);
     }
@@ -254,8 +258,8 @@ export class Agent {
           content: assistantContent,
         } as ModelMessage);
 
-        // Notify about assistant message
-        this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
+        // Notify about assistant message (pass full content including tool-calls)
+        this.notifyMessageAdded({ role: "assistant", content: output.content || "" }, assistantContent);
 
         agentLogger.info(`Processing ${toolCalls.length} tool_calls from LLM`);
         agentLogger.info(`Assistant message built:`, JSON.stringify({
