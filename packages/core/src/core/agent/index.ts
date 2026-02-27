@@ -342,7 +342,7 @@ export class Agent {
               content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${error}` } }],
               toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${error}`, toolCallId: toolCall.id });
+            this.notifyMessageAdded({ role: "tool", content: `Error: ${error}`, toolCallId: toolCall.id, name: toolCall.function.name });
             
             continue;
           }
