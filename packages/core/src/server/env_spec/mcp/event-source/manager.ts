@@ -6,13 +6,16 @@
  * 1. 从 mcp.clients 配置中筛选事件源
  * 2. 创建并连接 EventMcpClient
  * 3. EventMcpClient 内部直接调用 env.publishEvent()，无需 Manager 转发
+ * 4. 注册 EventSource MCP 工具到 Environment
  */
 
 import type { McpClientConfig } from "../../../../env_spec/mcp/types.js";
+import type { ToolInfo } from "../../../../core/types/index.js";
 import type { ServerEnvironment } from "../../../environment.js";
 import { EventMcpClient } from "./client.js";
 import { EventSourceStatus, type EventSourceOptions } from "./types.js";
 import { serverLogger } from "../../../logger.js";
+import { convertMcpTool } from "../../../../env_spec/mcp/convert.js";
 
 export interface EventSourceClientConfig {
   name: string;
@@ -29,6 +32,7 @@ export class EventMcpManager {
   private env: ServerEnvironment;
   private clients: Map<string, EventMcpClient> = new Map();
   private status: Map<string, EventSourceStatus> = new Map();
+  private tools: Map<string, ToolInfo> = new Map();
 
   constructor(env: ServerEnvironment) {
     this.env = env;
@@ -77,6 +81,12 @@ export class EventMcpManager {
         
         this.clients.set(name, client);
         this.status.set(name, EventSourceStatus.RUNNING);
+        
+        // 注册 MCP 工具（如果未禁用）
+        const registerTools = config.options?.registerTools ?? true;
+        if (registerTools) {
+          await this.registerMcpTools(client, name, config.options?.toolPrefix);
+        }
         
         serverLogger.info(`[EventMcpManager] Loaded EventSource: ${name}`);
       } catch (error) {
@@ -131,5 +141,57 @@ export class EventMcpManager {
    */
   getClient(name: string): EventMcpClient | undefined {
     return this.clients.get(name);
+  }
+
+  /**
+   * 注册 MCP 工具
+   */
+  private async registerMcpTools(
+    client: EventMcpClient,
+    sourceName: string,
+    toolPrefix?: string
+  ): Promise<void> {
+    try {
+      const mcpTools = await client.listTools();
+      
+      for (const mcpTool of mcpTools.tools || []) {
+        const prefix = toolPrefix || sourceName;
+        const toolInfo = convertMcpTool(mcpTool, client.getMcpClient(), prefix);
+        this.tools.set(toolInfo.name, toolInfo);
+      }
+      
+      serverLogger.info(`[EventMcpManager] Registered ${mcpTools.tools?.length || 0} tools from ${sourceName}`);
+    } catch (error) {
+      serverLogger.warn(`[EventMcpManager] Failed to register tools from ${sourceName}:`, error);
+    }
+  }
+
+  /**
+   * 获取所有已注册的工具
+   */
+  getTools(): ToolInfo[] {
+    return Array.from(this.tools.values());
+  }
+
+  /**
+   * 断开单个客户端连接并清理工具
+   */
+  async disconnectClient(name: string): Promise<void> {
+    const client = this.clients.get(name);
+    if (client) {
+      await client.disconnect();
+      this.clients.delete(name);
+      this.status.delete(name);
+      
+      // 清理该源的所有工具
+      const prefix = `${name}_`;
+      for (const toolName of this.tools.keys()) {
+        if (toolName.startsWith(prefix)) {
+          this.tools.delete(toolName);
+        }
+      }
+      
+      serverLogger.info(`[EventMcpManager] Disconnected client: ${name}`);
+    }
   }
 }
