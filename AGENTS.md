@@ -127,7 +127,7 @@
 
 - **日志目录**：`$XDG_DATA_HOME/tong_work/logs/`（默认 `~/.local/share/tong_work/logs/`）
   - Linux/macOS 示例：`~/.local/share/tong_work/logs/`
-  - Windows 示例：`%LOCALAPPDATA%\tong_work\logs\`
+  - Windows 示例：`C:\Users\<username>\.local\share\tong_work\logs\`（如 `C:\Users\gddzh\.local\share\tong_work\logs\`）
 
 常用文件：
 - **Server 日志**：`server.log`
