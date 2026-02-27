@@ -54,6 +54,10 @@ export interface EventSourceOptions {
   pollInterval?: number;
   /** 自定义元数据 */
   metadata?: Record<string, unknown>;
+  /** 是否注册 MCP 工具到 Environment（默认 true） */
+  registerTools?: boolean;
+  /** MCP 工具名前缀（默认使用 EventSource 名称） */
+  toolPrefix?: string;
 }
 
 /**
@@ -72,6 +76,8 @@ export const EventSourceMcpConfigSchema = z.object({
       eventTypes: z.array(z.string()).optional(),
       pollInterval: z.number().optional(),
       metadata: z.record(z.unknown()).optional(),
+      registerTools: z.boolean().optional(),
+      toolPrefix: z.string().optional(),
     }).optional(),
   })).optional(),
 });

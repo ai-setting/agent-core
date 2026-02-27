@@ -264,4 +264,28 @@ export class EventMcpClient {
   getEventCount(): number {
     return this.eventCount;
   }
+
+  /**
+   * 获取 MCP Client 实例（用于工具调用）
+   */
+  getMcpClient(): Client {
+    return this.client!;
+  }
+
+  /**
+   * 列出可用工具
+   */
+  async listTools(): Promise<{ tools: any[] }> {
+    if (!this.client) {
+      return { tools: [] };
+    }
+    
+    try {
+      const result = await this.client.listTools();
+      return { tools: result.tools || [] };
+    } catch (error) {
+      serverLogger.warn(`[EventMcpClient] Failed to list tools for ${this.name}:`, error);
+      return { tools: [] };
+    }
+  }
 }

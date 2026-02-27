@@ -733,8 +733,16 @@ export class ServerEnvironment extends BaseEnvironment {
         mcpClientsConfig,
         this.eventSourceConfig?.sources as any
       );
+      
+      // 注册 EventSource MCP 工具到 Environment
+      const eventSourceTools = this.eventMcpManager.getTools();
+      for (const tool of eventSourceTools) {
+        this.registerTool(tool);
+      }
+      
       serverLogger.info("[ServerEnvironment] EventSources initialized", {
-        sources: this.eventMcpManager.getEventSourceNames()
+        sources: this.eventMcpManager.getEventSourceNames(),
+        toolsRegistered: eventSourceTools.length
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
