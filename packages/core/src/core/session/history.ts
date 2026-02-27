@@ -13,6 +13,14 @@ import { createLogger } from "../../utils/logger.js";
 const historyLogger = createLogger("history", "server.log");
 
 /**
+ * Normalize toolCallId to be compatible with all LLM providers.
+ * Replaces special characters (like colon) with underscores.
+ */
+function normalizeToolCallId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
  * Convert a session's messages to AI SDK ModelMessage format.
  *
  * @param session - The session to convert
@@ -143,7 +151,7 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
         if (toolPart.state === "pending" || toolPart.state === "running") {
           parts.push({
             type: "tool-call",
-            toolCallId: toolPart.callID || `call_${Date.now()}`,
+            toolCallId: normalizeToolCallId(toolPart.callID || `call_${Date.now()}`),
             toolName: toolPart.tool,
             input: toolPart.input || {},
           });
@@ -198,15 +206,17 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
     resultText = "(tool call pending or running)";
   }
 
+  const normalizedCallId = normalizeToolCallId(toolPart.callID || "");
+
   return {
     role: "tool",
     content: [{ 
       type: "tool-result", 
-      toolCallId: toolPart.callID || "", 
+      toolCallId: normalizedCallId, 
       toolName: toolPart.tool,
       output: { type: "text", value: resultText }
     }],
-    toolCallId: toolPart.callID || "",
+    toolCallId: normalizedCallId,
   } as unknown as ModelMessage;
 }
 
