@@ -272,6 +272,43 @@ export class Session {
   }
 
   /**
+   * Add an assistant message with both text and tool call.
+   */
+  addAssistantMessageWithTextAndTool(
+    text: string,
+    toolCallId: string,
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    metadata?: Record<string, unknown>
+  ): string {
+    const id = ID.ascending("message");
+    const info: MessageInfo = {
+      id,
+      sessionID: this.id,
+      role: "assistant",
+      timestamp: Date.now(),
+      metadata,
+    };
+
+    const textPart: TextPart = {
+      id: ID.ascending("part"),
+      type: "text",
+      text,
+    };
+
+    const toolPart: ToolPart = {
+      id: ID.ascending("part"),
+      type: "tool",
+      callID: toolCallId,
+      tool: toolName,
+      state: "pending",
+      input: toolArgs,
+    };
+
+    return this.addMessage(info, [textPart, toolPart]);
+  }
+
+  /**
    * Add reasoning content.
    */
   addReasoning(text: string, metadata?: Record<string, unknown>): string {
