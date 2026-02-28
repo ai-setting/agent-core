@@ -54,6 +54,12 @@ describe("ServerEnvironment", () => {
     expect(typeof commitVersion).toBe("string");
   });
 
+  it("should have built-in skills directory", () => {
+    const builtInDir = (env as any).getBuiltInSkillsDirectory();
+    expect(builtInDir).toBeDefined();
+    expect(builtInDir).toContain("skills");
+  });
+
   it("should handle stream events and publish to EventBus", async () => {
     const received: any[] = [];
     const sessionId = "test-session-123";
