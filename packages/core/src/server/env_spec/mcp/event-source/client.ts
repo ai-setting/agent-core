@@ -19,6 +19,7 @@ import type { McpClientConfig } from "../../../../env_spec/mcp/types.js";
 import type { Notification } from "@modelcontextprotocol/sdk/types.js";
 import { EventSourceStatus, type EventSourceOptions } from "./types.js";
 import { serverLogger } from "../../../logger.js";
+import { getTraceContext } from "../../../../utils/trace-context.js";
 
 export class EventMcpClient {
   private env: ServerEnvironment;
@@ -29,7 +30,8 @@ export class EventMcpClient {
   private transport?: StdioClientTransport | StreamableHTTPClientTransport;
   private status: EventSourceStatus = EventSourceStatus.STOPPED;
   private pollInterval?: ReturnType<typeof setInterval>;
-  private eventCount = 0;;
+  private eventCount = 0;
+  private trace = getTraceContext();
 
   constructor(
     env: ServerEnvironment,
@@ -199,20 +201,26 @@ export class EventMcpClient {
    * 直接调用 env.publishEvent() 发布到 EnvEventBus
    */
   private async handleEvent(rawEvent: Record<string, unknown>): Promise<void> {
-    const envEvent: EnvEvent = {
-      id: (rawEvent.id as string) || crypto.randomUUID(),
-      type: rawEvent.type as string,
-      timestamp: (rawEvent.timestamp as number) || Date.now(),
-      metadata: {
-        source: (rawEvent.metadata as Record<string, unknown>)?.source as string || this.name,
-        source_name: this.name,
-        ...(rawEvent.metadata as Record<string, unknown>),
-      },
-      payload: rawEvent.payload || {},
-    };
+    const requestId = this.trace.generateRequestId();
+    
+    await this.trace.runWithNewContextAsync(requestId, undefined, async () => {
+      serverLogger.info(`[MCP:${this.name}] Received event`, { type: rawEvent.type, requestId });
 
-    await this.env.publishEvent(envEvent);
-    this.eventCount++;
+      const envEvent: EnvEvent = {
+        id: (rawEvent.id as string) || crypto.randomUUID(),
+        type: rawEvent.type as string,
+        timestamp: (rawEvent.timestamp as number) || Date.now(),
+        metadata: {
+          source: (rawEvent.metadata as Record<string, unknown>)?.source as string || this.name,
+          source_name: this.name,
+          ...(rawEvent.metadata as Record<string, unknown>),
+        },
+        payload: rawEvent.payload || {},
+      };
+
+      await this.env.publishEvent(envEvent);
+      this.eventCount++;
+    });
   }
 
   /**

@@ -65,8 +65,8 @@ export class AgentServer {
       const requestId = c.req.header("X-Request-Id") || trace.generateRequestId();
       const sessionId = c.req.header("X-Session-Id");
       
-      trace.runWithNewContext(requestId, sessionId || undefined, async () => {
-        return next();
+      await trace.runWithNewContextAsync(requestId, sessionId || undefined, async () => {
+        await next();
       });
     });
 
