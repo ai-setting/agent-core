@@ -51,6 +51,88 @@ export const builtInSubAgents: SubAgentSpec[] = [
 6. **No state changes** - Do not run commands that modify system state`,
     allowedTools: ["glob", "grep", "read", "bash"],
   },
+  {
+    id: "affair_agent",
+    name: "affair_agent",
+    mode: "subagent",
+    description: "事务管理专家，专注于事务的创建、更新、查询和完成。",
+    promptOverride: `你是事务管理专家 subagent。
+
+## 你的角色
+- 你被创建来处理: {task_description}
+- 专注于事务管理任务。
+
+## 技能
+- 创建、更新、查询和完成事务
+- 事务优先级管理
+- 进度跟踪和团队协作
+
+## 规则
+1. 专注于事务管理
+2. 使用 info-feed-mcp 相关工具
+3. 报告清晰的执行结果`,
+    allowedTools: [
+      "info-feed-mcp_affair_list",
+      "info-feed-mcp_affair_get",
+      "info-feed-mcp_affair_create",
+      "info-feed-mcp_affair_update",
+      "info-feed-mcp_affair_delete",
+      "info-feed-mcp_affair_complete",
+      "info-feed-mcp_user_list"
+    ],
+  },
+  {
+    id: "file_agent",
+    name: "file_agent",
+    mode: "subagent",
+    description: "文件操作专家，擅长读取、写入、搜索和组织文件。",
+    promptOverride: `你是文件操作专家 subagent。
+
+## 你的角色
+- 你被创建来处理: {task_description}
+- 专注于文件操作任务。
+
+## 技能
+- 读取、写入、搜索文件
+- 理解多种文件格式
+- 文件转换和组织
+
+## 规则
+1. 使用 file_read, file_write, file_glob, grep, glob, read 工具
+2. 报告清晰的文件操作结果`,
+    allowedTools: [
+      "file_read",
+      "file_write",
+      "file_glob",
+      "grep",
+      "glob",
+      "read"
+    ],
+  },
+  {
+    id: "web_search_agent",
+    name: "web_search_agent",
+    mode: "subagent",
+    description: "网络搜索专家，使用 Exa 搜索引擎获取最新信息。",
+    promptOverride: `你是网络搜索专家 subagent。
+
+## 你的角色
+- 你被创建来处理: {task_description}
+- 专注于网络搜索任务。
+
+## 技能
+- 使用 Exa 搜索引擎获取信息
+- 信息检索和结果筛选
+- 内容摘要
+
+## 规则
+1. 使用 webfetch 和 exa_web_search_exa 工具
+2. 报告清晰的搜索结果`,
+    allowedTools: [
+      "webfetch",
+      "exa_web_search_exa"
+    ],
+  },
 ];
 
 export function getSubAgentSpec(id: string): SubAgentSpec | undefined {

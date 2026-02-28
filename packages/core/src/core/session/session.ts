@@ -23,9 +23,13 @@ import type {
   ToolPart,
   MessageWithParts,
 } from "./types";
+import type { ModelMessage } from "ai";
 import { ID } from "./id";
 import { Storage } from "./storage";
 import { sessionToHistory } from "./history";
+import { createLogger } from "../../utils/logger.js";
+
+const sessionLogger = createLogger("session:addMessage", "server.log");
 
 const DEFAULT_MESSAGE_LIMIT = 100;
 
@@ -195,6 +199,102 @@ export class Session {
     Storage.saveMessage(this.id, message);
 
     return info.id;
+  }
+
+  /**
+   * Add a message directly from AI SDK ModelMessage format.
+   * This is the unified method for adding messages from the Agent.
+   */
+  addMessageFromModelMessage(message: ModelMessage): string {
+    const id = ID.ascending("message");
+    const now = Date.now();
+    
+    let role: MessageInfo["role"] = message.role as MessageInfo["role"];
+    if (role === "system") {
+      role = "system";
+    }
+
+    const parts: Part[] = [];
+
+    const normalizeToolCallId = (id: string): string => {
+      return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    };
+
+    const content = message.content;
+    
+    sessionLogger.debug(`addMessageFromModelMessage: role=${role}, content type=${typeof content}, isArray=${Array.isArray(content)}`);
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        sessionLogger.debug(`  part type=${part.type}`);
+        if (part.type === "tool-call") {
+          sessionLogger.debug(`    toolCallId=${part.toolCallId}, normalized=${normalizeToolCallId(part.toolCallId || "")}`);
+        } else if (part.type === "tool-result") {
+          sessionLogger.debug(`    toolCallId=${part.toolCallId}, normalized=${normalizeToolCallId(part.toolCallId || "")}`);
+        }
+      }
+    }
+
+    if (typeof content === "string") {
+      if (content) {
+        const textPart: TextPart = {
+          id: ID.ascending("part"),
+          type: "text",
+          text: content,
+        };
+        parts.push(textPart);
+      }
+    } else if (Array.isArray(content)) {
+      for (const part of content) {
+        if (part.type === "text") {
+          const textPart: TextPart = {
+            id: ID.ascending("part"),
+            type: "text",
+            text: part.text || "",
+          };
+          parts.push(textPart);
+        } else if (part.type === "tool-call") {
+          const toolPart: ToolPart = {
+            id: ID.ascending("part"),
+            type: "tool",
+            callID: normalizeToolCallId(part.toolCallId || `call_${Date.now()}`),
+            tool: part.toolName,
+            state: "pending",
+            input: part.input as Record<string, unknown>,
+          };
+          parts.push(toolPart);
+        } else if (part.type === "tool-result") {
+          const toolPart: ToolPart = {
+            id: ID.ascending("part"),
+            type: "tool",
+            callID: normalizeToolCallId(part.toolCallId || `call_${Date.now()}`),
+            tool: part.toolName || "unknown",
+            state: "completed",
+            input: {} as Record<string, unknown>,
+            output: typeof part.output === "string" ? part.output : JSON.stringify(part.output),
+            time: { start: now, end: now },
+          };
+          parts.push(toolPart);
+        } else if (part.type === "file") {
+          const filePart: FilePart = {
+            id: ID.ascending("part"),
+            type: "file",
+            mime: (part as any).mediaType || "application/octet-stream",
+            url: (part as any).url || "",
+            filename: (part as any).filename,
+          };
+          parts.push(filePart);
+        }
+      }
+    }
+
+    const info: MessageInfo = {
+      id,
+      sessionID: this.id,
+      role,
+      timestamp: now,
+    };
+
+    return this.addMessage(info, parts);
   }
 
   /**

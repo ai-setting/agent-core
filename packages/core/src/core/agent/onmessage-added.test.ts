@@ -78,7 +78,9 @@ describe("Agent onMessageAdded Callback", () => {
 
       const assistantMessages = messages.filter(m => m.role === "assistant");
       expect(assistantMessages.length).toBeGreaterThan(0);
-      expect(assistantMessages[0].content).toBe("I'll use a tool to help.");
+      const assistantContent = assistantMessages[0].content as any[];
+      const textPart = assistantContent.find((p: any) => p.type === "text");
+      expect(textPart?.text).toBe("I'll use a tool to help.");
     });
 
     it("should store tool message when tool executes successfully", async () => {
@@ -116,9 +118,10 @@ describe("Agent onMessageAdded Callback", () => {
 
       const toolMessages = messages.filter(m => m.role === "tool");
       expect(toolMessages.length).toBeGreaterThan(0);
-      expect(toolMessages[0].name).toBe("bash");
-      expect(toolMessages[0].content).toBe("tool output");
-      expect(toolMessages[0].tool_call_id).toBe("call_123");
+      const toolContent = toolMessages[0].content as any[];
+      const toolResultPart = toolContent.find((p: any) => p.type === "tool-result");
+      expect(toolResultPart?.toolName).toBe("bash");
+      expect(toolResultPart?.output?.value).toBe("tool output");
     });
 
     it("should store tool error message when tool execution fails", async () => {
@@ -155,9 +158,11 @@ describe("Agent onMessageAdded Callback", () => {
 
       await agent.run();
 
-      const toolErrorMessages = messages.filter(m => m.role === "tool" && m.content.includes("Error"));
+      const toolErrorMessages = messages.filter(m => m.role === "tool");
       expect(toolErrorMessages.length).toBeGreaterThan(0);
-      expect(toolErrorMessages[0].content).toContain("Command not found");
+      const toolContent = toolErrorMessages[0].content as any[];
+      const toolResultPart = toolContent.find((p: any) => p.type === "tool-result");
+      expect(toolResultPart?.output?.value).toContain("Command not found");
     });
   });
 
@@ -352,8 +357,12 @@ describe("Agent onMessageAdded Callback", () => {
 
       const toolMessages = messages.filter(m => m.role === "tool");
       expect(toolMessages.length).toBe(2);
-      expect(toolMessages[0].content).toBe("uptime output");
-      expect(toolMessages[1].content).toBe("memory output");
+      const toolContent1 = toolMessages[0].content as any[];
+      const toolContent2 = toolMessages[1].content as any[];
+      const toolResultPart1 = toolContent1.find((p: any) => p.type === "tool-result");
+      const toolResultPart2 = toolContent2.find((p: any) => p.type === "tool-result");
+      expect(toolResultPart1?.output?.value).toBe("uptime output");
+      expect(toolResultPart2?.output?.value).toBe("memory output");
     });
   });
 
@@ -409,8 +418,11 @@ describe("Agent onMessageAdded Callback", () => {
 
       await agent.run();
 
-      const errorMessages = messages.filter(m => m.role === "tool" && m.content.includes("Invalid JSON"));
+      const errorMessages = messages.filter(m => m.role === "tool");
       expect(errorMessages.length).toBeGreaterThan(0);
+      const toolContent = errorMessages[0].content as any[];
+      const toolResultPart = toolContent.find((p: any) => p.type === "tool-result");
+      expect(toolResultPart?.output?.value).toContain("Invalid JSON");
     });
 
     it("should store error for disallowed tool", async () => {
@@ -439,8 +451,11 @@ describe("Agent onMessageAdded Callback", () => {
 
       await agent.run();
 
-      const errorMessages = messages.filter(m => m.role === "tool" && m.content.includes("not available"));
+      const errorMessages = messages.filter(m => m.role === "tool");
       expect(errorMessages.length).toBeGreaterThan(0);
+      const toolContent = errorMessages[0].content as any[];
+      const toolResultPart = toolContent.find((p: any) => p.type === "tool-result");
+      expect(toolResultPart?.output?.value).toContain("not available");
     });
   });
 

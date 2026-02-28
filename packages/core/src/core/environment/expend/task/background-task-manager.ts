@@ -210,7 +210,12 @@ export class BackgroundTaskManager {
         });
       }
 
-      this.env.handle_query(prompt, { session_id: subSession.id }, subSession.toHistory())
+      this.env.handle_query(prompt, { 
+        session_id: subSession.id,
+        onMessageAdded: (message: any) => {
+          subSession.addMessageFromModelMessage(message);
+        }
+      }, subSession.toHistory())
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

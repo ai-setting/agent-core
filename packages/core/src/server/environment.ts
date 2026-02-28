@@ -1015,45 +1015,8 @@ export class ServerEnvironment extends BaseEnvironment {
           try {
             const response = await this.handle_query(content, { 
               session_id: sessionId,
-              onMessageAdded: (msg) => {
-                if (msg.role === "assistant" && msg.content) {
-                  // Check if there's assistant content with tool-calls
-                  if (msg.assistantContent && Array.isArray(msg.assistantContent)) {
-                    const hasToolCall = msg.assistantContent.some((p: any) => p.type === "tool-call");
-                    const hasText = msg.assistantContent.some((p: any) => p.type === "text");
-                    const textPart = msg.assistantContent.find((p: any) => p.type === "text");
-                    const toolCallPart = msg.assistantContent.find((p: any) => p.type === "tool-call");
-                    
-                    if (hasToolCall && hasText && textPart && toolCallPart) {
-                      // Both text and tool-call in same message - save together
-                      session?.addAssistantMessageWithTextAndTool(
-                        textPart.text || "",
-                        toolCallPart.toolCallId,
-                        toolCallPart.toolName,
-                        toolCallPart.input || {}
-                      );
-                    } else if (hasToolCall && toolCallPart) {
-                      // Only tool-call
-                      session?.addAssistantMessageWithTool(
-                        toolCallPart.toolCallId,
-                        toolCallPart.toolName,
-                        toolCallPart.input || {}
-                      );
-                    } else {
-                      // Only text
-                      session?.addAssistantMessage(msg.content);
-                    }
-                  } else {
-                    session?.addAssistantMessage(msg.content);
-                  }
-                } else if (msg.role === "tool" && msg.name) {
-                  session?.addToolMessage(
-                    msg.name,
-                    msg.tool_call_id || `call_${Date.now()}`,
-                    msg.content,
-                    {}
-                  );
-                }
+              onMessageAdded: (message) => {
+                session?.addMessageFromModelMessage(message);
               }
             }, history);
             

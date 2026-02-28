@@ -101,7 +101,12 @@ export class SubAgentManager {
         reject(new Error(`Task execution timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      this.env.handle_query(query, { session_id: sessionId }, history)
+      this.env.handle_query(query, { 
+        session_id: sessionId,
+        onMessageAdded: (message: any) => {
+          // Sub-agent messages are handled by the parent session
+        }
+      }, history)
         .then((result: string) => {
           clearTimeout(timer);
           resolve(result);
