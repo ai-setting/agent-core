@@ -838,13 +838,11 @@ export class ServerEnvironment extends BaseEnvironment {
     event: StreamEvent,
     context: Context
   ): Promise<void> {
-    console.log("[ServerEnvironment] handleStreamEvent called", { type: event.type, hasCallback: !!this.onStreamEvent });
     const sessionId = context.session_id || this.sessionId;
     const messageId = context.message_id || `msg_${Date.now()}`;
 
     switch (event.type) {
       case "start":
-        console.log("[ServerEnvironment] Publishing stream.start event", { sessionId, messageId });
         // Reset streaming content for new request
         this.currentStreamingContent = { reasoning: "", text: "", toolCalls: [] };
         await Bus.publish(
@@ -859,7 +857,6 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "text":
-        console.log("[ServerEnvironment] Publishing stream.text event", { sessionId, messageId, contentLength: event.content?.length, deltaLength: event.delta?.length });
         this.currentStreamingContent.text = event.content || "";
         await Bus.publish(
           StreamTextEvent,
@@ -874,7 +871,6 @@ export class ServerEnvironment extends BaseEnvironment {
         break;
 
       case "reasoning":
-        console.log("[ServerEnvironment] Publishing stream.reasoning event", { sessionId, messageId, contentLength: event.content?.length });
         this.currentStreamingContent.reasoning = event.content || "";
         await Bus.publish(
           StreamReasoningEvent,

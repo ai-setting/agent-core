@@ -74,8 +74,6 @@ export async function publish<Def extends EventDefinition>(
     properties,
   };
 
-  console.log("[Bus] Publishing:", { type: definition.type, sessionId });
-
   const pending: (void | Promise<void>)[] = [];
   const sessionState = getSessionState(sessionId);
 
