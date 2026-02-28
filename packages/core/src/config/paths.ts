@@ -76,6 +76,7 @@ function getPaths() {
     storage: _storageDir,
     sessionStorage: path.join(_storageDir, "sessions"),
     messageStorage: path.join(_storageDir, "messages"),
+    traces: path.join(_storageDir, "traces"),
   };
 }
 
@@ -95,6 +96,7 @@ class ConfigPathsClass {
   get storage() { return getPaths().storage; }
   get sessionStorage() { return getPaths().sessionStorage; }
   get messageStorage() { return getPaths().messageStorage; }
+  get traces() { return getPaths().traces; }
 }
 
 export const ConfigPaths = new ConfigPathsClass();
