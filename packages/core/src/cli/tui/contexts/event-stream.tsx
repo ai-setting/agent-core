@@ -5,10 +5,11 @@
  * 参考 OpenCode 的批处理机制
  */
 
-import { createContext, useContext, createSignal, onCleanup, batch } from "solid-js";
+import { createContext, useContext, createSignal, onCleanup, batch, createMemo } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 import { useStore, type Message, type MessagePart } from "./store.js";
 import { eventLogger } from "../logger.js";
+import { createApiClient } from "../utils/api-client.js";
 
 // ============================================================================
 // 类型定义
@@ -307,20 +308,10 @@ export function EventStreamProvider(props: {
     }
   };
 
-  // API 调用辅助函数
-  const apiCall = async (endpoint: string, options?: RequestInit): Promise<Response> => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    
-    if (props.password) {
-      headers["Authorization"] = `Bearer ${props.password}`;
-    }
-    
-    return fetch(`${url()}${endpoint}`, {
-      ...options,
-      headers: { ...headers, ...(options?.headers as Record<string, string> || {}) },
-    });
+  // API Client
+  const apiClient = createMemo(() => createApiClient({ baseUrl: url(), password: props.password }));
+  const apiCall = (endpoint: string, options?: RequestInit): Promise<Response> => {
+    return apiClient().apiCall(endpoint, options);
   };
 
   // 连接到事件流

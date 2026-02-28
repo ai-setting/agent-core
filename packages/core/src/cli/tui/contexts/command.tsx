@@ -4,10 +4,11 @@
  * 管理 Command 列表、执行和 Command Palette 状态
  */
 
-import { createContext, useContext, createSignal, batch } from "solid-js";
+import { createContext, useContext, createSignal, batch, createMemo } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 import { tuiLogger } from "../logger.js";
 import { useStore } from "./store.js";
+import { createApiClient } from "../utils/api-client.js";
 
 // ============================================================================
 // 类型定义
@@ -75,16 +76,10 @@ export function CommandProvider(props: {
   const [isExecuting, setIsExecuting] = createSignal(false);
   const [lastResult, setLastResult] = createSignal<CommandResult | null>(null);
 
-  // API 调用辅助函数
-  const apiCall = async (endpoint: string, options?: RequestInit): Promise<Response> => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    return fetch(`${props.serverUrl}${endpoint}`, {
-      ...options,
-      headers: { ...headers, ...(options?.headers as Record<string, string> || {}) },
-    });
+  // API Client
+  const apiClient = createMemo(() => createApiClient({ baseUrl: props.serverUrl }));
+  const apiCall = (endpoint: string, options?: RequestInit): Promise<Response> => {
+    return apiClient().apiCall(endpoint, options);
   };
 
   // 从服务器加载 Command 列表
