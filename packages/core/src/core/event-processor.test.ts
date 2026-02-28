@@ -15,7 +15,6 @@ describe("processEventInSession", () => {
       id: "session-1",
       addUserMessage: vi.fn(),
       addAssistantMessage: vi.fn(),
-      addAssistantMessageWithTool: vi.fn(),
       addMessageFromModelMessage: vi.fn(),
       toHistory: vi.fn().mockReturnValue([
         { role: "user", content: "Hello" },
@@ -52,7 +51,7 @@ describe("processEventInSession", () => {
       await processEventInSession(mockEnv, event);
 
       expect(mockEnv.getSession).toHaveBeenCalledWith("session-1");
-      expect(mockSession.addUserMessage).toHaveBeenCalled();
+      expect(mockSession.addMessageFromModelMessage).toHaveBeenCalled();
       expect(mockEnv.handle_query).toHaveBeenCalled();
     });
 
@@ -115,9 +114,9 @@ describe("processEventInSession", () => {
 
       await processEventInSession(mockEnv, event);
 
-      const userMessageCall = mockSession.addUserMessage.mock.calls[0][0];
-      expect(userMessageCall).toContain("Observed event: test.event");
-      expect(userMessageCall).toContain("event-123");
+      const userMessageCall = mockSession.addMessageFromModelMessage.mock.calls[0][0];
+      expect(userMessageCall.content).toContain("Observed event: test.event");
+      expect(userMessageCall.content).toContain("event-123");
     });
 
     it("should include tool call by default", async () => {
