@@ -665,9 +665,9 @@ Usage:
           return {
             success: true,
             output,
-              metadata: createMetadata({
+            metadata: createMetadata({
               output_size: content.length,
-              file_path: absolutePath.split("/").pop() || absolutePath.split("\\").pop() || absolutePath,
+              file_path: absolutePath,
               diagnostics: lspResult.diagnostics,
             }),
           };
@@ -788,7 +788,7 @@ Usage:
             output,
             metadata: createMetadata({
               output_size: contentNew.length,
-              file_path: absolutePath.split("/").pop() || absolutePath.split("\\").pop() || absolutePath,
+              file_path: absolutePath,
               diff,
               diagnostics: lspResult.diagnostics,
             }),
