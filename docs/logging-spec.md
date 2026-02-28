@@ -295,6 +295,52 @@ class OpenTelemetryTraceContext implements ITraceContext {
 
 ---
 
+## 6.1 EventSource MCP Client 场景
+
+当 Server 端的 EventSource MCP Client 从外部 EventSource MCP Server 收到事件后，后续处理逻辑也需要带 requestId。
+
+### 场景特点
+- Server 主动接收外部推送的事件（无 HTTP 请求/响应头）
+- 需要在事件处理入口注入 trace context
+
+### 实现方案
+
+```typescript
+// packages/core/src/server/env_spec/mcp/event-source/client.ts
+
+import { getTraceContext } from "../../../../../../utils/trace-context.js";
+import { serverLogger } from "../../../../../logger.js";
+
+class EventSourceClient {
+  private trace = getTraceContext();
+
+  async handleEvent(event: EventSourceEvent): Promise<void> {
+    // 事件入口：生成 requestId 并注入 trace context
+    const requestId = this.trace.generateRequestId();
+    
+    await this.trace.runWithNewContextAsync(requestId, undefined, async () => {
+      // 后续所有日志自动带 requestId
+      serverLogger.info("Received event from EventSource", { type: event.type });
+      
+      await this.processEvent(event);
+      await this.notifySubscribers(event);
+    });
+  }
+
+  private async processEvent(event: EventSourceEvent): void {
+    // 此处日志自动带 requestId
+    serverLogger.debug("Processing event", { eventId: event.id });
+  }
+}
+```
+
+### 关键点
+- **事件入口注入**：在 EventSource Client 收到事件的第一时间（handleEvent）生成 requestId
+- **使用 runWithNewContextAsync**：确保整个事件处理流程都在同一个 trace context 中
+- **无需修改 EventContext**：不需要在类型定义中添加 requestId 字段
+
+---
+
 ## 7. 实施计划
 
 | 阶段 | 任务 | 文件 |
@@ -303,6 +349,7 @@ class OpenTelemetryTraceContext implements ITraceContext {
 | **Phase 1** | 改造 Logger 集成 requestId 注入 | `utils/logger.ts` |
 | **Phase 2** | 统一 TUI fetch 封装 | `cli/tui/utils/api-client.ts` |
 | **Phase 2** | Server 中间件注入 Context | `server/index.ts` |
+| **Phase 2.1** | EventSource Client 事件入口注入 requestId | `server/env_spec/mcp/event-source/client.ts` |
 | **Phase 3** | (可选) 源码位置注入 | `utils/logger.ts` |
 | **Future** | OTel 升级 | `utils/trace-context-otel.ts` |
 

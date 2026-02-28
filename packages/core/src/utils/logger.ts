@@ -9,7 +9,7 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { basename, dirname, join } from "path";
 import { xdgData } from "xdg-basedir";
 import { getTraceContext } from "./trace-context.js";
 
@@ -84,7 +84,7 @@ class Logger {
         const match = line.match(/at\s+.+\s+\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
         if (match) {
           const filePath = match[1];
-          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "unknown";
+          const fileName = basename(filePath);
           return {
             file: fileName,
             line: parseInt(match[2], 10),
@@ -96,8 +96,17 @@ class Logger {
   }
 
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}.${String(now.getMilliseconds()).padStart(3, "0")}`;
+    const now = new Date();
+    const timestamp = now.toLocaleString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).replace(/\//g, "-") + "." + String(now.getMilliseconds()).padStart(3, "0");
     const prefix = this.prefix ? `[${this.prefix}]` : "";
     
     const trace = getTraceContext();
