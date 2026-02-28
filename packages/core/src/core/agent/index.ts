@@ -39,8 +39,6 @@ interface AgentConfig {
   retryBackoffFactor?: number;
   maxRetryDelayMs?: number;
   doomLoopThreshold?: number;
-  /** Agent ID（用于获取特定的行为规范） */
-  agentId?: string;
 }
 
 const DEFAULT_CONFIG: Required<AgentConfig> = {
@@ -50,7 +48,6 @@ const DEFAULT_CONFIG: Required<AgentConfig> = {
   retryBackoffFactor: 2,
   maxRetryDelayMs: 30000,
   doomLoopThreshold: 5,
-  agentId: "system",
 };
 
 export class Agent {
@@ -60,7 +57,6 @@ export class Agent {
   private aborted: boolean = false;
   private _history: ModelMessage[] = [];
   private tools: import("../types").Tool[];
-  private agentId: string;
 
   private notifyMessageAdded(message: ModelMessage): void {
     if (this.context.onMessageAdded) {
@@ -78,7 +74,6 @@ export class Agent {
   ) {
     this.config = { ...DEFAULT_CONFIG, ...configOverrides };
     this.tools = tools;
-    this.agentId = configOverrides.agentId || DEFAULT_CONFIG.agentId;
     if (history) {
       this._history = history;
     }
@@ -120,11 +115,14 @@ export class Agent {
     // Extract user query from event content if not provided
     const query = userQuery ?? (typeof this.event.content === "string" ? this.event.content : JSON.stringify(this.event.content));
     
+    // Get agentType from context for behavior spec selection, default to "system"
+    const agentType = this.context.agentType || "system";
+    
     // Get system prompt from behavior spec if not provided
     let prompt = systemPrompt;
     if (!prompt && this.env.getBehaviorSpec) {
       try {
-        const spec = await this.env.getBehaviorSpec(this.agentId);
+        const spec = await this.env.getBehaviorSpec(agentType);
         prompt = spec.combinedPrompt;
       } catch (e) {
         console.warn("[Agent] Failed to get behavior spec:", e);

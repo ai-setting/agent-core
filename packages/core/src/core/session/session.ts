@@ -216,6 +216,10 @@ export class Session {
 
     const parts: Part[] = [];
 
+    // Log received message
+    const msgStr = JSON.stringify(message).substring(0, 300);
+    sessionLogger.info(`addMessageFromModelMessage: role=${role}, content=${msgStr}`);
+
     const normalizeToolCallId = (id: string): string => {
       return id.replace(/[^a-zA-Z0-9_-]/g, "_");
     };

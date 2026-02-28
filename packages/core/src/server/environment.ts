@@ -126,14 +126,14 @@ export class ServerEnvironment extends BaseEnvironment {
     try {
       serverLogger.info("[ServerEnvironment] Loading configuration...");
 
-      // 0. Initialize ProviderManager for AI SDK integration
+      // 1. Load config file first (this loads auth.json into env vars)
+      const rawConfig = await Config_get();
+      const config = await resolveConfig(rawConfig);
+
+      // 0. Initialize ProviderManager for AI SDK integration (AFTER auth is loaded)
       const { providerManager } = await import("../llm/provider-manager.js");
       await providerManager.initialize();
       serverLogger.info(`[ServerEnvironment] ProviderManager initialized with ${providerManager.listProviders().length} providers`);
-
-      // 1. Load config file
-      const rawConfig = await Config_get();
-      const config = await resolveConfig(rawConfig);
 
       // 1.1. Initialize session storage with persistence config
       const { Storage } = await import("../core/session/storage.js");

@@ -77,9 +77,14 @@ export class EventMcpClient {
       this.setupNotificationHandler();
       serverLogger.info(`[EventMcpClient] Connected to ${this.name} (mode: notification)`);
     } else {
-      const pollInterval = this.options?.pollInterval || 1000;
-      this.startPolling(pollInterval);
-      serverLogger.info(`[EventMcpClient] Connected to ${this.name} (mode: polling, interval: ${pollInterval}ms)`);
+      const pollEnabled = process.env.EVENTSOURCE_POLLING_ENABLED !== "false";
+      if (!pollEnabled) {
+        serverLogger.info(`[EventMcpClient] Connected to ${this.name} (mode: disabled polling)`);
+      } else {
+        const pollInterval = this.options?.pollInterval || 1000;
+        this.startPolling(pollInterval);
+        serverLogger.info(`[EventMcpClient] Connected to ${this.name} (mode: polling, interval: ${pollInterval}ms)`);
+      }
     }
 
     this.status = EventSourceStatus.RUNNING;
