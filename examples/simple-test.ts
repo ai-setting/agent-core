@@ -1,5 +1,5 @@
 /**
- * TaskTool 集成测试
+ * TaskTool 集成测试入口
  * 
  * 运行方式:
  *   bun run examples/simple-test.ts
@@ -7,6 +7,7 @@
  * 调试时可通过环境变量控制:
  *   EVENTSOURCE_POLLING_ENABLED=false 禁用轮询
  *   LOG_LEVEL=debug 输出 debug 日志
+ *   LOG_TO_FILE=false 禁用文件日志，只输出到 stdout
  */
 
 import { ServerEnvironment } from "../packages/core/src/server/environment.js";
@@ -30,21 +31,19 @@ async function main() {
   console.log("✓ 父 Session 已创建:", parentSession.id, "\n");
 
   // 测试通过主 Agent 调用 task tool
-  console.log("【测试通过主 Agent 调用 task tool】");
+  console.log("【测试 1: 简单计算】");
   console.log("Prompt: 请使用 task tool 计算 1+1 = ?\n");
-  
-  const startTime = Date.now();
   
   await env.handle_query("请使用 task tool 计算 1+1 = ?", {
     session_id: parentSession.id,
     onMessageAdded: (message) => {
-      // 保存消息到 session
+      console.log(`[onMessageAdded] role=${message.role}, content=${JSON.stringify(message.content).substring(0, 100)}...`);
       parentSession.addMessageFromModelMessage(message);
     }
   });
 
   // 等待事件处理
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 2000));
 
   // 检查父 session 的消息
   console.log("\n【父 Session 消息列表】");
