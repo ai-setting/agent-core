@@ -5,6 +5,7 @@ import type { TextPart, Part } from "../../../session/types.js";
 import type { SubAgentSpec, SessionPermission } from "./types.js";
 import { getSubAgentSpec } from "./agents.js";
 import { buildSubAgentPermissions, getDefaultSubAgentPrompt } from "./permissions.js";
+import type { ModelMessage } from "ai";
 
 export interface CreateSubSessionOptions {
   parentSessionId: string;
@@ -30,32 +31,24 @@ export class SubAgentManager {
       extraPermissions: options.permission,
     });
 
+    // Store description in metadata for behavior spec injection
+    const metadata = {
+      subagent_type: subagentType,
+      created_by: "subagent",
+      permissions,
+    };
+    if (description) {
+      (metadata as any).task_description = description;
+    }
+
     const subSession = this.env.createSession({
       parentID: parentSessionId,
       title: title + ` (@${subagentType} subagent)`,
-      metadata: {
-        subagent_type: subagentType,
-        created_by: "subagent",
-        permissions,
-      },
+      metadata,
     });
 
-    let systemPrompt = subAgent?.promptOverride || getDefaultSubAgentPrompt(title);
-    if (description) {
-      systemPrompt = systemPrompt.replace(/\{task_description\}/g, description);
-    }
-    
-    const textPart: TextPart = {
-      id: ID.ascending("part"),
-      type: "text",
-      text: systemPrompt,
-    };
-    subSession.addMessage({
-      id: ID.ascending("message"),
-      sessionID: subSession.id,
-      role: "system",
-      timestamp: Date.now(),
-    }, [textPart as Part]);
+    // Note: system prompt is NOT added here
+    // It will be injected by Agent.run() based on agentType in context
 
     return subSession;
   }
@@ -65,10 +58,8 @@ export class SubAgentManager {
     taskPrompt: string,
     timeout?: number
   ): Promise<string> {
-    subSession.addUserMessage(taskPrompt);
-
-    const history = subSession.toHistory();
     const subAgent = getSubAgentSpec(subSession.info.metadata?.subagent_type as string || "general");
+    const history = subSession.toHistory();
 
     try {
       const timeoutMs = timeout || subAgent?.timeout || 300000;
@@ -77,15 +68,22 @@ export class SubAgentManager {
         subSession.id,
         taskPrompt,
         history,
-        timeoutMs
+        timeoutMs,
+        subSession
       );
 
-      subSession.addAssistantMessage(result);
+      subSession.addMessageFromModelMessage({
+        role: "assistant",
+        content: result,
+      });
 
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      subSession.addAssistantMessage(`Error: ${errorMessage}`);
+      subSession.addMessageFromModelMessage({
+        role: "assistant",
+        content: `Error: ${errorMessage}`,
+      });
       throw error;
     }
   }
@@ -94,17 +92,21 @@ export class SubAgentManager {
     sessionId: string,
     query: string,
     history: any[],
-    timeoutMs: number
+    timeoutMs: number,
+    subSession: Session
   ): Promise<string> {
     return new Promise((resolve: (value: string) => void, reject: (reason: any) => void) => {
       const timer = setTimeout(() => {
         reject(new Error(`Task execution timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
+      const agentType = subSession.info.metadata?.subagent_type as string || "general";
+
       this.env.handle_query(query, { 
         session_id: sessionId,
-        onMessageAdded: (message: any) => {
-          // Sub-agent messages are handled by the parent session
+        agentType,
+        onMessageAdded: (message: ModelMessage) => {
+          subSession.addMessageFromModelMessage(message);
         }
       }, history)
         .then((result: string) => {

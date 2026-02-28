@@ -743,7 +743,7 @@ export abstract class BaseEnvironment implements Environment {
 
     // 使用 getBehaviorSpec 获取行为规范
     // Agent 会在 run() 时自动调用 getBehaviorSpec
-    const agent = new Agent(event, this as Environment, this.listTools(), agentContext, { agentId: "system" }, history);
+    const agent = new Agent(event, this as Environment, this.listTools(), agentContext, {}, history);
     return agent.run();
   }
 
@@ -937,7 +937,10 @@ export abstract class BaseEnvironment implements Environment {
     context?: Context,
     options?: Omit<LLMOptions, "messages" | "tools">
   ): Promise<ToolResult> {
-    BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] Called");
+    BaseEnvironment.baseLogger.info(`[BaseEnvironment.invokeLLM] session_id=${context?.session_id}, messageCount=${messages.length}`);
+    for (let i = 0; i < Math.min(messages.length, 5); i++) {
+      BaseEnvironment.baseLogger.info(`  message[${i}]: role=${messages[i].role}, content type=${typeof messages[i].content}`);
+    }
     await this.ensureLLMInitialized();
     BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] LLM initialized", { hasConfig: !!this.llmConfig });
 

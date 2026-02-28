@@ -11,6 +11,11 @@ export interface Context {
   metadata?: Record<string, unknown>;
   env?: BaseEnvironment;
   /**
+   * Agent type for behavior spec selection.
+   * Used by subagents to load their specific prompts.
+   */
+  agentType?: string;
+  /**
    * Callback for storing intermediate messages during agent execution.
    * Called whenever the agent adds an assistant or tool message.
    * Useful for persisting messages to session history in real-time.
