@@ -28,6 +28,8 @@ import {
   ToolContext,
 } from "../../types/index.js";
 import { Agent } from "../../agent/index.js";
+
+declare const TONG_WORK_COMMIT: string;
 import {
   TimeoutManager,
   RetryManager,
@@ -236,6 +238,13 @@ export abstract class BaseEnvironment implements Environment {
     return this.listSkills()
       .map(s => `- ${s.name}: ${s.description}`)
       .join("\n");
+  }
+
+  getCommitVersion(): string {
+    if (typeof TONG_WORK_COMMIT !== "undefined") {
+      return TONG_WORK_COMMIT;
+    }
+    return "unknown";
   }
 
   /**

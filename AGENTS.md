@@ -21,6 +21,7 @@
 - **设计理念**：`docs/environment-design-philosophy.md`
 - **进度与路线图**：`docs/DEVELOPMENT_PROGRESS.md`
 - **配置系统设计**：`docs/config-design.md`
+- **运行时源码感知与 Help 机制**：`docs/commit-version-injection-and-help-mechanism-design.md`
 - **Command 开发规范**：`.opencode/skills/command-development/SKILL.md`
 
 ### 1.1 Command 设计文档参考
@@ -219,4 +220,45 @@ const invokeLLMLogger = createLogger("invoke:llm", "server.log");
 - Skills 加载/注册/隔离
 - Sub-agents 编排与权限收敛
 - 执行治理（超时/并发/重试/熔断/降级）及其可观测性
+
+---
+
+## 6. tong_work_help Skill 维护规范
+
+> tong_work_help 是 tong_work 的内置帮助 Skill，必须随着 agent-core 的演进持续更新，确保 Help 信息与代码保持同步。
+
+### 6.1 Skill 文件位置
+
+```
+packages/core/src/skills/tong_work_help/skill.md
+```
+
+### 6.2 必须同步更新的场景
+
+当实现以下变更时，必须同步更新 `skill.md`：
+
+| 变更类型 | 更新内容 |
+|----------|----------|
+| 新增配置项 | 在「配置指南」主题中添加新配置项说明 |
+| 新增 Environment 类型 | 在「环境机制」主题中添加新 Environment 说明 |
+| 新增工具/能力 | 在对应主题中添加工具使用说明 |
+| 新增 Command | 在「命令参考」主题中添加新命令说明 |
+| 新增 Skill 开发文档 | 在「Skill 开发」主题中添加开发指南 |
+| 重大架构变更 | 在对应主题中更新架构说明 |
+
+### 6.3 更新规范
+
+1. **保持与代码同步**：每次合并涉及上述变更的 PR 时，同步更新 skill.md
+2. **版本关联**：在 skill.md 开头注明当前适用的 agent-core 版本范围
+3. **可读性**：使用清晰的 Markdown 格式，便于用户阅读
+4. **示例丰富**：尽量包含实际使用示例，帮助用户快速上手
+
+### 6.4 自动更新机制（未来）
+
+> 长期目标是实现 skill.md 的自动更新，减少人工维护成本。
+
+可能的方案：
+- 解析代码注释/类型定义生成 API 文档
+- 从设计文档自动同步变更说明
+- CI 流水线检查 skill.md 与代码的一致性
 
