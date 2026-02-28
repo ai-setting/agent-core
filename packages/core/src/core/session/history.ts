@@ -149,9 +149,11 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
         const toolPart = part as ToolPart;
         // Assistant messages show tool calls as tool-call parts
         if (toolPart.state === "pending" || toolPart.state === "running") {
+          const normalizedCallId = normalizeToolCallId(toolPart.callID || `call_${Date.now()}`);
+          historyLogger.debug(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}`);
           parts.push({
             type: "tool-call",
-            toolCallId: normalizeToolCallId(toolPart.callID || `call_${Date.now()}`),
+            toolCallId: normalizedCallId,
             toolName: toolPart.tool,
             input: toolPart.input || {},
           });
@@ -207,6 +209,7 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   }
 
   const normalizedCallId = normalizeToolCallId(toolPart.callID || "");
+  historyLogger.debug(`convertToolMessage: tool-result callID=${toolPart.callID}, normalized=${normalizedCallId}, state=${toolPart.state}`);
 
   return {
     role: "tool",

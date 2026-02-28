@@ -1,4 +1,5 @@
 import type { BaseEnvironment } from "../environment/base/base-environment";
+import type { ModelMessage } from "ai";
 
 export interface Context {
   timestamp?: string;
@@ -13,6 +14,7 @@ export interface Context {
    * Callback for storing intermediate messages during agent execution.
    * Called whenever the agent adds an assistant or tool message.
    * Useful for persisting messages to session history in real-time.
+   * @param message - The message in AI SDK ModelMessage format
    */
-  onMessageAdded?: (message: { role: string; content: string; name?: string; tool_call_id?: string; assistantContent?: any[] }) => void;
+  onMessageAdded?: (message: ModelMessage) => void;
 }

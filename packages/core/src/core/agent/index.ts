@@ -62,19 +62,9 @@ export class Agent {
   private tools: import("../types").Tool[];
   private agentId: string;
 
-  private notifyMessageAdded(message: { role: string; content: string; toolCallId?: string; name?: string }, assistantContent?: any[]): void {
+  private notifyMessageAdded(message: ModelMessage): void {
     if (this.context.onMessageAdded) {
-      // Map camelCase to snake_case for tool messages to match expected format
-      const mappedMessage: any = { ...message };
-      if (message.toolCallId) {
-        mappedMessage.tool_call_id = message.toolCallId;
-        delete mappedMessage.toolCallId;
-      }
-      // Pass assistant content (including tool-calls) if available
-      if (assistantContent) {
-        mappedMessage.assistantContent = assistantContent;
-      }
-      this.context.onMessageAdded(mappedMessage);
+      this.context.onMessageAdded(message);
     }
   }
 
@@ -259,7 +249,10 @@ export class Agent {
         } as ModelMessage);
 
         // Notify about assistant message (pass full content including tool-calls)
-        this.notifyMessageAdded({ role: "assistant", content: output.content || "" }, assistantContent);
+        this.notifyMessageAdded({
+          role: "assistant",
+          content: assistantContent.length > 0 ? assistantContent : [{ type: "text", text: output.content || "" }]
+        });
 
         agentLogger.info(`Processing ${toolCalls.length} tool_calls from LLM`);
         agentLogger.info(`Assistant message built:`, JSON.stringify({
@@ -282,7 +275,10 @@ export class Agent {
               content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
               toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
+            this.notifyMessageAdded({ 
+              role: "tool", 
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+            });
             continue;
           }
 
@@ -294,7 +290,10 @@ export class Agent {
               content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
               toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
+            this.notifyMessageAdded({ 
+              role: "tool", 
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+            });
             // Clear the doom loop cache so next attempt can proceed
             this.doomLoopCache.clear();
             continue;
@@ -311,7 +310,10 @@ export class Agent {
               role: "tool",
               content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${errorMessage}`, toolCallId: toolCall.id, name: toolCall.function.name });
+            this.notifyMessageAdded({ 
+              role: "tool", 
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${errorMessage}` } }],
+            });
               continue;
             }
           }
@@ -342,7 +344,10 @@ export class Agent {
               content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${error}` } }],
               toolCallId: toolCall.id,  // Required by AI SDK at message level
             } as ModelMessage);
-            this.notifyMessageAdded({ role: "tool", content: `Error: ${error}`, toolCallId: toolCall.id, name: toolCall.function.name });
+            this.notifyMessageAdded({ 
+              role: "tool", 
+              content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: `Error: ${error}` } }],
+            });
             
             continue;
           }
@@ -357,9 +362,7 @@ export class Agent {
           } as ModelMessage);
           this.notifyMessageAdded({ 
             role: "tool", 
-            content: toolOutputText,
-            toolCallId: toolCall.id,
-            name: toolCall.function.name
+            content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
           });
 
           agentLogger.info(`Tool ${toolCall.function.name} completed successfully`);

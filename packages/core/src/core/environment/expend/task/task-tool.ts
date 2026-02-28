@@ -41,9 +41,9 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();
-      const { description, prompt, subagent_type, background, session_id, command, timeout, cleanup } = args;
+      const { description, prompt, subagent_type, background, command, timeout, cleanup } = args;
 
-      const parentSessionId = session_id || ctx.session_id || "default";
+      const parentSessionId = ctx.session_id || "default";
 
       const subAgent = getSubAgentSpec(subagent_type);
       if (!subAgent && subagent_type !== "general") {

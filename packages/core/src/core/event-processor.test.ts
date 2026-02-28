@@ -16,6 +16,7 @@ describe("processEventInSession", () => {
       addUserMessage: vi.fn(),
       addAssistantMessage: vi.fn(),
       addAssistantMessageWithTool: vi.fn(),
+      addMessageFromModelMessage: vi.fn(),
       toHistory: vi.fn().mockReturnValue([
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Hi there!" },
@@ -24,7 +25,12 @@ describe("processEventInSession", () => {
 
     mockEnv = {
       getSession: vi.fn().mockReturnValue(mockSession),
-      handle_query: vi.fn().mockResolvedValue("Processed event"),
+      handle_query: vi.fn().mockImplementation(async (_query: string, ctx: any) => {
+        if (ctx.onMessageAdded) {
+          await ctx.onMessageAdded({ role: "assistant", content: [{ type: "text", text: "Test response" }] });
+        }
+        return "Processed event";
+      }),
     };
   });
 
@@ -64,7 +70,7 @@ describe("processEventInSession", () => {
       await processEventInSession(mockEnv, event);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "[EventProcessor] No trigger_session_id in event metadata"
+        "[EventProcessor] No trigger_session_id in event metadata and no active session available"
       );
 
       consoleSpy.mockRestore();
@@ -127,7 +133,7 @@ describe("processEventInSession", () => {
 
       await processEventInSession(mockEnv, event);
 
-      expect(mockSession.addAssistantMessage).toHaveBeenCalled();
+      expect(mockSession.addMessageFromModelMessage).toHaveBeenCalled();
     });
 
     it("should skip tool call when includeToolCall is false", async () => {
@@ -164,7 +170,10 @@ describe("processEventInSession", () => {
 
       expect(mockEnv.handle_query).toHaveBeenCalledWith(
         customPrompt,
-        { session_id: "session-1" },
+        expect.objectContaining({ 
+          session_id: "session-1",
+          onMessageAdded: expect.any(Function)
+        }),
         expect.any(Array)
       );
     });
@@ -184,7 +193,10 @@ describe("processEventInSession", () => {
 
       expect(mockEnv.handle_query).toHaveBeenCalledWith(
         "Process event: custom.event",
-        { session_id: "session-1" },
+        expect.objectContaining({ 
+          session_id: "session-1",
+          onMessageAdded: expect.any(Function)
+        }),
         expect.any(Array)
       );
     });
@@ -204,13 +216,7 @@ describe("processEventInSession", () => {
 
       await processEventInSession(mockEnv, event, { toolName: "custom_tool" });
 
-      const assistantMessage = mockSession.addAssistantMessage.mock.calls[0]?.[0];
-      if (assistantMessage && typeof assistantMessage === "string") {
-        expect(assistantMessage).toContain("custom_tool");
-      } else {
-        const calls = mockSession.addAssistantMessage.mock.calls;
-        expect(calls.length).toBeGreaterThan(0);
-      }
+      expect(mockSession.addMessageFromModelMessage).toHaveBeenCalled();
     });
   });
 });

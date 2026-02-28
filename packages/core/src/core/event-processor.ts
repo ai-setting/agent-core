@@ -8,6 +8,7 @@
  */
 
 import type { EnvEvent } from "./types/event.js";
+import type { ModelMessage } from "ai";
 
 interface HistoryMessageWithTool {
   role: "system" | "user" | "assistant" | "tool";
@@ -31,6 +32,7 @@ export interface SessionLike {
   addUserMessage(content: string): void;
   addAssistantMessage(content: string): void;
   addAssistantMessageWithTool(toolCallId: string, toolName: string, toolArgs: Record<string, unknown>): void;
+  addMessageFromModelMessage(message: ModelMessage): string;
   toHistory(): HistoryMessageWithTool[];
 }
 
@@ -118,7 +120,12 @@ export async function processEventInSession<T>(
   
   await env.handle_query(
     query,
-    { session_id: sessionId },
+    { 
+      session_id: sessionId,
+      onMessageAdded: (message: ModelMessage) => {
+        session.addMessageFromModelMessage(message);
+      }
+    },
     history
   );
 }
