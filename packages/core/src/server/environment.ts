@@ -5,6 +5,7 @@
  */
 
 import path from "path";
+import { fileURLToPath } from "url";
 import {
   BaseEnvironment,
   BaseEnvironmentConfig,
@@ -727,6 +728,13 @@ export class ServerEnvironment extends BaseEnvironment {
 
   protected getSkillsDirectory(): string | undefined {
     return this.skillsDirectory;
+  }
+
+  protected getBuiltInSkillsDirectory(): string | undefined {
+    const currentDir = typeof import.meta.dirname !== "undefined" 
+      ? import.meta.dirname 
+      : path.dirname(fileURLToPath(import.meta.url));
+    return path.join(currentDir, "..", "skills");
   }
 
   protected getMcpserversDirectory(): string | undefined {

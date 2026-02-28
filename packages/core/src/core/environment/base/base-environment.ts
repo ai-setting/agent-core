@@ -1066,6 +1066,14 @@ export abstract class BaseEnvironment implements Environment {
   protected abstract getSkillsDirectory(): string | undefined;
 
   /**
+   * 获取内置 Skills 目录
+   * 子类可覆盖以提供不同的内置 Skills 路径
+   */
+  protected getBuiltInSkillsDirectory(): string | undefined {
+    return undefined;
+  }
+
+  /**
    * Skill 变动信息
    */
   protected lastLoadedSkills: Map<string, SkillInfo> = new Map();
@@ -1077,7 +1085,9 @@ export abstract class BaseEnvironment implements Environment {
    */
   public async loadSkills(): Promise<{ added: SkillInfo[]; removed: string[] }> {
     const skillsDir = this.getSkillsDirectory();
-    if (!skillsDir) {
+    const builtInSkillsDir = this.getBuiltInSkillsDirectory();
+    
+    if (!skillsDir && !builtInSkillsDir) {
       console.log("[BaseEnvironment] No skills directory configured");
       return { added: [], removed: [] };
     }
@@ -1086,14 +1096,38 @@ export abstract class BaseEnvironment implements Environment {
     const { createSkillToolWithDescription } = await import("../skills/skill-tool.js");
 
     try {
-      const loader = new SkillLoader(skillsDir);
-      const skillInfos = await loader.loadAll();
+      let allSkillInfos: SkillInfo[] = [];
+
+      // Load built-in skills first
+      if (builtInSkillsDir) {
+        const builtInLoader = new SkillLoader(builtInSkillsDir);
+        const builtInSkills = await builtInLoader.loadAll();
+        allSkillInfos.push(...builtInSkills);
+        console.log(`[BaseEnvironment] Loaded ${builtInSkills.length} built-in skills`);
+      }
+
+      // Load user skills (can override built-in skills)
+      if (skillsDir) {
+        const userLoader = new SkillLoader(skillsDir);
+        const userSkills = await userLoader.loadAll();
+        
+        // Merge: user skills override built-in skills with same ID
+        const existingIds = new Set(allSkillInfos.map(s => s.id));
+        for (const skill of userSkills) {
+          if (existingIds.has(skill.id)) {
+            // Override: remove built-in skill with same ID
+            allSkillInfos = allSkillInfos.filter(s => s.id !== skill.id);
+          }
+          allSkillInfos.push(skill);
+        }
+        console.log(`[BaseEnvironment] Loaded ${userSkills.length} user skills`);
+      }
 
       const added: SkillInfo[] = [];
       const removed: string[] = [];
 
       // Check for new skills
-      for (const skill of skillInfos) {
+      for (const skill of allSkillInfos) {
         if (!this.lastLoadedSkills.has(skill.id)) {
           added.push(skill);
         }
@@ -1101,25 +1135,25 @@ export abstract class BaseEnvironment implements Environment {
 
       // Check for removed skills
       for (const [id] of this.lastLoadedSkills) {
-        if (!skillInfos.find(s => s.id === id)) {
+        if (!allSkillInfos.find(s => s.id === id)) {
           removed.push(id);
         }
       }
 
       this.skills.clear();
-      for (const skill of skillInfos) {
+      for (const skill of allSkillInfos) {
         this.skills.set(skill.id, skill);
       }
 
-      if (skillInfos.length > 0) {
-        const skillToolWithDesc = createSkillToolWithDescription(skillInfos);
+      if (allSkillInfos.length > 0) {
+        const skillToolWithDesc = createSkillToolWithDescription(allSkillInfos);
         this.registerTool(skillToolWithDesc);
       }
 
       // Update last loaded skills
-      this.lastLoadedSkills = new Map(skillInfos.map(s => [s.id, s]));
+      this.lastLoadedSkills = new Map(allSkillInfos.map(s => [s.id, s]));
 
-      console.log(`[BaseEnvironment] Loaded ${this.skills.size} skills`);
+      console.log(`[BaseEnvironment] Loaded ${this.skills.size} skills total`);
       
       if (added.length > 0) {
         console.log(`[BaseEnvironment] Added skills: ${added.map(s => s.id).join(", ")}`);
