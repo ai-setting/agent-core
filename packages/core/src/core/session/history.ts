@@ -150,7 +150,7 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
         // Assistant messages show tool calls as tool-call parts
         if (toolPart.state === "pending" || toolPart.state === "running") {
           const normalizedCallId = normalizeToolCallId(toolPart.callID || `call_${Date.now()}`);
-          historyLogger.info(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}`);
+          historyLogger.debug(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}`);
           parts.push({
             type: "tool-call",
             toolCallId: normalizedCallId,
@@ -180,9 +180,9 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
 function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   const toolPart = msg.parts.find((p): p is ToolPart => p.type === "tool");
 
-  historyLogger.info(`convertToolMessage: messageId=${msg.info.id}, role=${msg.info.role}, parts.length=${msg.parts.length}`);
+  historyLogger.debug(`convertToolMessage: messageId=${msg.info.id}, role=${msg.info.role}, parts.length=${msg.parts.length}`);
   if (msg.parts.length > 0) {
-    historyLogger.info(`convertToolMessage: parts types = ${msg.parts.map(p => p.type).join(", ")}`);
+    historyLogger.debug(`convertToolMessage: parts types = ${msg.parts.map(p => p.type).join(", ")}`);
   }
 
   if (!toolPart) {
@@ -214,7 +214,7 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   }
 
   const normalizedCallId = normalizeToolCallId(toolPart.callID || "");
-  historyLogger.info(`convertToolMessage: returning tool-result with toolCallId=${normalizedCallId}, state=${toolPart.state}`);
+  historyLogger.debug(`convertToolMessage: returning tool-result with toolCallId=${normalizedCallId}, state=${toolPart.state}`);
 
   return {
     role: "tool",
