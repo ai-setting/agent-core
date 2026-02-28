@@ -15,6 +15,9 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 // XDG 标准数据目录: XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
 const LOG_DIR = join(xdgData || "", "tong_work", "logs");
 
+// 是否启用文件存储（默认启用，可通过 LOG_TO_FILE=false 禁用）
+const ENABLE_FILE_LOGGING = process.env.LOG_TO_FILE !== "false";
+
 interface LoggerConfig {
   level?: LogLevel;
   prefix?: string;
@@ -26,6 +29,7 @@ class Logger {
   private prefix: string;
   private filename: string;
   private logFile: string;
+  private enableFileLogging: boolean;
 
   private readonly levelPriority: Record<LogLevel, number> = {
     debug: 0,
@@ -39,9 +43,12 @@ class Logger {
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
     this.logFile = join(LOG_DIR, this.filename);
+    this.enableFileLogging = ENABLE_FILE_LOGGING;
 
     // 确保日志目录存在
-    this.ensureLogDirectory();
+    if (this.enableFileLogging) {
+      this.ensureLogDirectory();
+    }
   }
 
   private ensureLogDirectory(): void {
@@ -90,28 +97,36 @@ class Logger {
     if (!this.shouldLog("debug")) return;
     const formatted = this.formatMessage("debug", message, data);
     console.debug(formatted);
-    this.writeToFile(formatted);
+    if (this.enableFileLogging) {
+      this.writeToFile(formatted);
+    }
   }
 
   info(message: string, data?: unknown): void {
     if (!this.shouldLog("info")) return;
     const formatted = this.formatMessage("info", message, data);
     console.log(formatted);
-    this.writeToFile(formatted);
+    if (this.enableFileLogging) {
+      this.writeToFile(formatted);
+    }
   }
 
   warn(message: string, data?: unknown): void {
     if (!this.shouldLog("warn")) return;
     const formatted = this.formatMessage("warn", message, data);
     console.warn(formatted);
-    this.writeToFile(formatted);
+    if (this.enableFileLogging) {
+      this.writeToFile(formatted);
+    }
   }
 
   error(message: string, data?: unknown): void {
     if (!this.shouldLog("error")) return;
     const formatted = this.formatMessage("error", message, data);
     console.error(formatted);
-    this.writeToFile(formatted);
+    if (this.enableFileLogging) {
+      this.writeToFile(formatted);
+    }
   }
 
   // 创建带前缀的子 logger
