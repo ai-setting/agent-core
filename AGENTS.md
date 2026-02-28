@@ -145,15 +145,19 @@
 
 ### 4.2 日志输出规范（必须遵守）
 
-**必须使用项目内部的 Logger 类**，不要使用 `console.log`：
+**必须使用项目内部的 Logger 类，不要使用 `console.log`/`console.warn`/`console.error`：**
 
 ```typescript
-// ❌ 错误：不会写入日志文件
+// ❌ 错误：不会写入日志文件，无法在生产环境排查问题
 console.log("[InputBox] handleSubmit called");
+console.warn("[InputBox] something wrong");
+console.error("[InputBox] failed");
 
 // ✅ 正确：会同时输出到控制台和日志文件
 import { tuiLogger } from "../logger.js";
 tuiLogger.info("[InputBox] handleSubmit called", { content });
+tuiLogger.warn("[InputBox] something wrong", { detail });
+tuiLogger.error("[InputBox] failed", { error });
 ```
 
 **不同模块使用对应的 logger：**
