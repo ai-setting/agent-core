@@ -210,16 +210,24 @@ export class BackgroundTaskManager {
         });
       }
 
+      const history = subSession.toHistory();
+      logger.info(`executeWithAbort: history length=${history.length}`);
+      for (let i = 0; i < history.length; i++) {
+        const msg = history[i];
+        logger.info(`  history[${i}]: role=${msg.role}, content type=${typeof msg.content}, isArray=${Array.isArray(msg.content)}`);
+      }
+
       this.env.handle_query(prompt, { 
         session_id: subSession.id,
         onMessageAdded: (message: any) => {
           subSession.addMessageFromModelMessage(message);
         }
       }, subSession.toHistory())
-        .then((result) => {
-          clearTimeout(timer);
-          resolve(result);
-        })
+      .then((result) => {
+        clearTimeout(timer);
+        logger.info(`handle_query success, result length: ${result.length}`);
+        resolve(result);
+      })
         .catch((error) => {
           clearTimeout(timer);
           reject(error);

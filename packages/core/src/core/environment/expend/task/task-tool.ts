@@ -8,6 +8,9 @@ import { TaskToolParameters, type TaskToolParams } from "./types.js";
 import { SubAgentManager } from "./subagent-manager.js";
 import { BackgroundTaskManager } from "./background-task-manager.js";
 import { getSubAgentSpec, getSubAgentToolDescription } from "./agents.js";
+import { createLogger } from "../../../../utils/logger.js";
+
+const taskToolLogger = createLogger("task:tool", "server.log");
 
 function loadTaskDescription(): string {
   const __filename = fileURLToPath(import.meta.url);
@@ -41,16 +44,21 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();
-      const { description, prompt, subagent_type, background, command, timeout, cleanup } = args;
+      const { description, prompt, subagent_type = "general", background = false, command, timeout, cleanup } = args;
 
+      // TODO: 扩展更多 subagent_type，当前仅支持 general
+      const actualSubagentType = "general";
+      
       const parentSessionId = ctx.session_id || "default";
+      
+      taskToolLogger.debug(`Called with: description=${description}, subagent_type=${subagent_type}, background=${background}, parentSessionId=${parentSessionId}`);
 
-      const subAgent = getSubAgentSpec(subagent_type);
-      if (!subAgent && subagent_type !== "general") {
+      const subAgent = getSubAgentSpec(actualSubagentType);
+      if (!subAgent) {
         return {
           success: false,
           output: "",
-          error: `Unknown subagent type: ${subagent_type}`,
+          error: `Unknown subagent type: ${actualSubagentType}`,
           metadata: {
             execution_time_ms: Date.now() - startTime,
           },
@@ -58,24 +66,26 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
       }
 
       if (background) {
+        taskToolLogger.info(`Starting background task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}`);
         return await handleBackgroundTask(
           env,
           backgroundTaskManager,
           parentSessionId,
           description,
           prompt,
-          subagent_type,
+          actualSubagentType,
           timeout,
           cleanup
         );
       } else {
+        taskToolLogger.info(`Starting sync task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}`);
         return await handleSyncTask(
           env,
           subAgentManager,
           parentSessionId,
           description,
           prompt,
-          subagent_type,
+          actualSubagentType,
           timeout
         );
       }

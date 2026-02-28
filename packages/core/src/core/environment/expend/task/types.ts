@@ -4,7 +4,7 @@ export const TaskToolParameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string()
-    .describe("The type of specialized agent to use for this task (e.g., 'general', 'explore', 'affair_agent', 'file_agent', 'web_search_agent')")
+    .describe("The type of specialized agent to use for this task (currently only 'general' is available)")
     .default("general"),
   background: z.boolean()
     .describe("Whether to run the task in background. If true, returns immediately and notifies when complete (default: false)")

@@ -6,8 +6,10 @@
  */
 
 import type { EnvEvent } from "../types/event.js";
-import type { TextContent } from "../environment/index.js";
 import type { ModelMessage } from "ai";
+import { createLogger } from "../../utils/logger.js";
+
+const eventHandlerLogger = createLogger("event:handler", "server.log");
 
 interface HistoryMessageWithTool {
   role: "system" | "user" | "assistant" | "tool";
@@ -35,6 +37,8 @@ export class EventHandlerAgent {
   ) {}
 
   async handle<T>(event: EnvEvent<T>): Promise<void> {
+    eventHandlerLogger.info(`Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
+    
     let sessionId = event.metadata.trigger_session_id;
     
     // Fallback: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
@@ -43,52 +47,50 @@ export class EventHandlerAgent {
       if (clientId && this.env.getActiveSessionManager) {
         sessionId = this.env.getActiveSessionManager().getActiveSession(clientId);
         if (sessionId) {
-          console.log(`[EventHandlerAgent] Using active session from clientId ${clientId}: ${sessionId}`);
+          eventHandlerLogger.info(`Using active session from clientId ${clientId}: ${sessionId}`);
         }
       }
     }
     
     if (!sessionId) {
-      console.warn("[EventHandlerAgent] No trigger_session_id in event metadata and no active session available");
+      eventHandlerLogger.warn("No trigger_session_id in event metadata and no active session available");
       return;
     }
 
     const session = await this.env.getSession?.(sessionId);
     if (!session) {
-      console.warn(`[EventHandlerAgent] Session not found: ${sessionId}`);
+      eventHandlerLogger.warn(`Session not found: ${sessionId}`);
       return;
     }
 
     const messages = this.constructMessages(event);
+    eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
 
-    messages.forEach((msg) => {
-      if (msg.role === "user") {
-        const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-        session.addUserMessage(content);
-      } else if (msg.role === "assistant") {
-        if (msg.toolCallId && msg.toolName) {
-          session.addAssistantMessageWithTool(
-            msg.toolCallId,
-            msg.toolName,
-            msg.toolArgs || {}
-          );
-        } else {
-          session.addAssistantMessage(msg.content as string);
-        }
-      } else if (msg.role === "tool") {
-        const toolContent = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-        const toolName = msg.toolName || "get_event_info";
-        const toolCallId = msg.tool_call_id || `call_${event.id}`;
-        session.addToolMessage(toolName, toolCallId, toolContent);
+    for (const msg of messages) {
+      const msgStr = JSON.stringify(msg).substring(0, 200);
+      eventHandlerLogger.info(`Adding message: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
+      if ((msg as any).role === "assistant" && Array.isArray((msg as any).content)) {
+        const toolCalls = (msg as any).content.filter((p: any) => p.type === "tool-call");
+        eventHandlerLogger.info(`  assistant message has ${toolCalls.length} tool-calls`);
       }
-    });
+      if ((msg as any).role === "tool" && Array.isArray((msg as any).content)) {
+        const toolResults = (msg as any).content.filter((p: any) => p.type === "tool-result");
+        eventHandlerLogger.info(`  tool message has ${toolResults.length} tool-results`);
+      }
+      
+      const modelMessage: ModelMessage = msg as any;
+      session.addMessageFromModelMessage(modelMessage);
+    }
 
     const history = session.toHistory();
+    eventHandlerLogger.info(`toHistory returned ${history.length} messages`);
+    
     await this.env.handle_query(
       `Process event: ${event.type}`,
       {
         session_id: sessionId,
         onMessageAdded: (message: ModelMessage) => {
+          eventHandlerLogger.info(`onMessageAdded: role=${message.role}`);
           session.addMessageFromModelMessage(message);
         },
       },
@@ -119,17 +121,21 @@ export class EventHandlerAgent {
 
     const toolCallId = `call_${event.id}`;
 
-    return [
+    const messages: HistoryMessageWithTool[] = [
       {
         role: "user",
         content: userText,
       },
       {
         role: "assistant",
-        content: "",
-        toolCallId,
-        toolName: "get_event_info",
-        toolArgs: { event_ids: [event.id] },
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: toolCallId,
+            toolName: "get_event_info",
+            input: { event_ids: [event.id] },
+          },
+        ],
       },
       {
         role: "tool",
@@ -141,8 +147,22 @@ export class EventHandlerAgent {
             output: { type: "text", value: toolResult },
           },
         ],
-        toolCallId: toolCallId,
       },
     ];
+
+    eventHandlerLogger.info(`constructMessages returning ${messages.length} messages`);
+    messages.forEach((msg: HistoryMessageWithTool, i: number) => {
+      eventHandlerLogger.info(`  [${i}] role=${msg.role}`);
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const toolCalls = (msg.content as any[]).filter((p) => p.type === "tool-call");
+        eventHandlerLogger.info(`    tool-calls: ${JSON.stringify(toolCalls.map((t) => t.toolCallId))}`);
+      }
+      if (msg.role === "tool" && Array.isArray(msg.content)) {
+        const toolResults = (msg.content as any[]).filter((p) => p.type === "tool-result");
+        eventHandlerLogger.info(`    tool-results: ${JSON.stringify(toolResults.map((t) => t.toolCallId))}`);
+      }
+    });
+
+    return messages;
   }
 }
