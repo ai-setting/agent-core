@@ -42,8 +42,8 @@ async function main() {
     }
   });
 
-  // 等待事件处理
-  await new Promise(r => setTimeout(r, 2000));
+  // 等待事件处理（60秒）
+  await new Promise(r => setTimeout(r, 60000));
 
   // 检查父 session 的消息
   console.log("\n【父 Session 消息列表】");
