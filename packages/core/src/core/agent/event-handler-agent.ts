@@ -39,6 +39,9 @@ export class EventHandlerAgent {
   async handle<T>(event: EnvEvent<T>): Promise<void> {
     eventHandlerLogger.debug(`[EventHandler] Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
     
+    // Resolve prompt with event data (support {{payload.xxx}} template)
+    const resolvedPrompt = this.resolveTemplate(this.prompt, event);
+    
     let sessionId = event.metadata.trigger_session_id;
     
     // Fallback: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
@@ -90,7 +93,7 @@ export class EventHandlerAgent {
     eventHandlerLogger.debug(`[EventHandler] Now calling handle_query for session ${sessionId}`);
     
     await this.env.handle_query(
-      `Process event: ${event.type}`,
+      resolvedPrompt,
       {
         session_id: sessionId,
         onMessageAdded: (message: ModelMessage) => {
@@ -100,6 +103,17 @@ export class EventHandlerAgent {
       },
       history
     );
+  }
+
+  private resolveTemplate<T>(template: string, event: EnvEvent<T>): string {
+    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+      const keys = path.trim().split(".");
+      let value: any = event;
+      for (const key of keys) {
+        value = value?.[key];
+      }
+      return value !== undefined ? String(value) : match;
+    });
   }
 
   private constructMessages<T>(event: EnvEvent<T>): HistoryMessageWithTool[] {

@@ -32,6 +32,7 @@ export interface SessionLike {
   addUserMessage(content: string): void;
   addAssistantMessage(content: string): void;
   addAssistantMessageWithTool(toolCallId: string, toolName: string, toolArgs: Record<string, unknown>): void;
+  addToolMessage(toolName: string, callID: string, output: string, input: Record<string, unknown>): void;
   addMessageFromModelMessage(message: ModelMessage): string;
   toHistory(): HistoryMessageWithTool[];
 }
@@ -111,6 +112,22 @@ export async function processEventInSession<T>(
         );
       } else {
         session.addAssistantMessage(msg.content as string);
+      }
+    } else if (msg.role === "tool") {
+      const toolContent = msg.content as Array<any>;
+      if (toolContent && Array.isArray(toolContent) && toolContent[0]) {
+        const toolResult = toolContent[0];
+        const toolCallId = toolResult.toolCallId || msg.toolCallId;
+        const toolName = toolResult.toolName || msg.toolName;
+        const output = typeof toolResult.output === "string" 
+          ? toolResult.output 
+          : JSON.stringify(toolResult.output);
+        session.addToolMessage(toolName, toolCallId, output, toolResult.input || {});
+      } else {
+        const toolCallId = msg.toolCallId || "";
+        const toolName = msg.toolName || "";
+        const output = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+        session.addToolMessage(toolName, toolCallId, output, {});
       }
     }
   });
