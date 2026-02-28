@@ -131,9 +131,9 @@ export class Agent {
     }
     prompt = prompt ?? "You are a helpful assistant.";
     
-    agentLogger.info(`Starting run with query: "${query.substring(0, 50)}..."`);
-    agentLogger.info(`Available tools: ${this.tools.map(t => t.name).join(", ")}`);
-    agentLogger.info(`History count: ${this._history.length}`);
+    agentLogger.debug(`Starting run with query: "${query.substring(0, 50)}..."`);
+    agentLogger.debug(`Available tools: ${this.tools.map(t => t.name).join(", ")}`);
+    agentLogger.debug(`History count: ${this._history.length}`);
     
     const messages: ModelMessage[] = [
       { role: "system", content: prompt },
@@ -141,19 +141,19 @@ export class Agent {
       { role: "user", content: query },
     ];
 
-    agentLogger.info(`===== FINAL MESSAGES FOR LLM =====`);
+    agentLogger.debug(`===== FINAL MESSAGES FOR LLM =====`);
     for (let i = 0; i < messages.length; i++) {
       const m = messages[i];
-      agentLogger.info(`Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
+      agentLogger.debug(`Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
       if (typeof m.content === 'string') {
-        agentLogger.info(`  content: ${m.content.substring(0, 100)}`);
+        agentLogger.debug(`  content: ${m.content.substring(0, 100)}`);
       } else if (Array.isArray(m.content)) {
-        agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
+        agentLogger.debug(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
       } else {
-        agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
+        agentLogger.debug(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
       }
     }
-    agentLogger.info(`=========================================`);
+    agentLogger.debug(`=========================================`);
 
     let iteration = 0;
     let consecutiveErrors = 0;
@@ -165,15 +165,15 @@ export class Agent {
     }
 
     iteration++;
-    agentLogger.info(`Iteration ${iteration}/${this.config.maxIterations}`);
+    agentLogger.debug(`Iteration ${iteration}/${this.config.maxIterations}`);
 
       try {
-        agentLogger.info(`===== INVOKING LLM (iteration ${iteration}) =====`);
+        agentLogger.debug(`===== INVOKING LLM (iteration ${iteration}) =====`);
         for (let i = 0; i < messages.length; i++) {
           const m = messages[i];
-          agentLogger.info(`LLM Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
+          agentLogger.debug(`LLM Message ${i}: role=${m.role}, contentType=${typeof m.content}, isArray=${Array.isArray(m.content)}`);
           if (typeof m.content === 'string') {
-            agentLogger.info(`  content: ${m.content.substring(0, 100)}`);
+            agentLogger.debug(`  content: ${m.content.substring(0, 100)}`);
           } else if (Array.isArray(m.content)) {
             agentLogger.info(`  content: ${JSON.stringify(m.content).substring(0, 200)}`);
           }
@@ -194,7 +194,7 @@ export class Agent {
         }
 
         const output = llmResult.output as unknown as LLMOutput;
-        agentLogger.info(`LLM output received`, {
+        agentLogger.debug(`LLM output received`, {
           contentLength: output.content?.length || 0,
           hasToolCalls: !!(output.tool_calls && output.tool_calls.length > 0),
           toolCallsCount: output.tool_calls?.length || 0,
@@ -203,13 +203,13 @@ export class Agent {
         const hasToolCalls = output.tool_calls && output.tool_calls.length > 0;
 
         if (!hasToolCalls) {
-          agentLogger.info(`No tool calls, returning content: "${output.content}"`);
+          agentLogger.debug(`No tool calls, returning content: "${output.content}"`);
           this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
           return output.content || "(no response)";
         }
 
         const toolCalls = output.tool_calls!;
-        console.log(`[Agent] Processing ${toolCalls.length} tool_calls: ${toolCalls.map(tc => tc.function.name).join(", ")}`);
+        agentLogger.debug(`Processing ${toolCalls.length} tool_calls: ${toolCalls.map(tc => tc.function.name).join(", ")}`);
 
         // Build assistant message with content array containing text and tool-call parts
         const assistantContent: any[] = [];
@@ -252,8 +252,8 @@ export class Agent {
           content: assistantContent.length > 0 ? assistantContent : [{ type: "text", text: output.content || "" }]
         });
 
-        agentLogger.info(`Processing ${toolCalls.length} tool_calls from LLM`);
-        agentLogger.info(`Assistant message built:`, JSON.stringify({
+        agentLogger.debug(`Processing ${toolCalls.length} tool_calls from LLM`);
+        agentLogger.debug(`Assistant message built:`, JSON.stringify({
           role: "assistant",
           content: assistantContent,
         }, null, 2));
@@ -261,7 +261,7 @@ export class Agent {
         for (const toolCall of toolCalls) {
           let toolArgs: Record<string, unknown> = {};
 
-          agentLogger.info(`Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
+          agentLogger.debug(`Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
 
           try {
             toolArgs = JSON.parse(toolCall.function.arguments);
@@ -300,9 +300,9 @@ export class Agent {
           // Check if tool is allowed (if tools list is provided)
           if (this.tools.length > 0) {
             const isAllowed = this.tools.some(t => t.name === toolCall.function.name);
-            agentLogger.info(`Tool ${toolCall.function.name} allowed: ${isAllowed}`);
+            agentLogger.debug(`Tool ${toolCall.function.name} allowed: ${isAllowed}`);
             if (!isAllowed) {
-              agentLogger.info(`Rejecting tool call for ${toolCall.function.name}`);
+              agentLogger.debug(`Rejecting tool call for ${toolCall.function.name}`);
               const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`;
             messages.push({
               role: "tool",
@@ -363,14 +363,14 @@ export class Agent {
             content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
           });
 
-          agentLogger.info(`Tool ${toolCall.function.name} completed successfully`);
-          agentLogger.info(`Tool message built:`, JSON.stringify({
+          agentLogger.debug(`Tool ${toolCall.function.name} completed successfully`);
+          agentLogger.debug(`Tool message built:`, JSON.stringify({
             role: "tool",
             content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
           }, null, 2));
         }
 
-        agentLogger.info(`Completed processing all tool_calls, continuing to next iteration`);
+        agentLogger.debug(`Completed processing all tool_calls, continuing to next iteration`);
 
       } catch (error) {
         consecutiveErrors++;
@@ -388,7 +388,7 @@ export class Agent {
         }
 
         const delay = this.getRetryDelay(consecutiveErrors - 1);
-        agentLogger.info(`Retrying after ${delay}ms (attempt ${consecutiveErrors}/${this.config.maxErrorRetries})`);
+        agentLogger.debug(`Retrying after ${delay}ms (attempt ${consecutiveErrors}/${this.config.maxErrorRetries})`);
         await this.delay(delay);
       }
     }
