@@ -37,7 +37,7 @@ export class EventHandlerAgent {
   ) {}
 
   async handle<T>(event: EnvEvent<T>): Promise<void> {
-    eventHandlerLogger.info(`[EventHandler] Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
+    eventHandlerLogger.debug(`[EventHandler] Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
     
     let sessionId = event.metadata.trigger_session_id;
     
@@ -47,7 +47,7 @@ export class EventHandlerAgent {
       if (clientId && this.env.getActiveSessionManager) {
         sessionId = this.env.getActiveSessionManager().getActiveSession(clientId);
         if (sessionId) {
-          eventHandlerLogger.info(`Using active session from clientId ${clientId}: ${sessionId}`);
+          eventHandlerLogger.debug(`Using active session from clientId ${clientId}: ${sessionId}`);
         }
       }
     }
@@ -57,7 +57,7 @@ export class EventHandlerAgent {
       return;
     }
 
-    eventHandlerLogger.info(`[EventHandler] Using session: ${sessionId}`);
+    eventHandlerLogger.debug(`[EventHandler] Using session: ${sessionId}`);
     
     const session = await this.env.getSession?.(sessionId);
     if (!session) {
@@ -65,20 +65,20 @@ export class EventHandlerAgent {
       return;
     }
 
-    eventHandlerLogger.info(`[EventHandler] Session found, constructing messages for event ${event.type}`);
+    eventHandlerLogger.debug(`[EventHandler] Session found, constructing messages for event ${event.type}`);
     const messages = this.constructMessages(event);
-    eventHandlerLogger.info(`[EventHandler] Constructed ${messages.length} messages for event ${event.id}`);
+    eventHandlerLogger.debug(`[EventHandler] Constructed ${messages.length} messages for event ${event.id}`);
 
     for (const msg of messages) {
       const msgStr = JSON.stringify(msg).substring(0, 200);
-      eventHandlerLogger.info(`[EventHandler] Adding message to session: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
+      eventHandlerLogger.debug(`[EventHandler] Adding message to session: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
       if ((msg as any).role === "assistant" && Array.isArray((msg as any).content)) {
         const toolCalls = (msg as any).content.filter((p: any) => p.type === "tool-call");
-        eventHandlerLogger.info(`[EventHandler]   assistant message has ${toolCalls.length} tool-calls: ${JSON.stringify(toolCalls.map((t: any) => t.toolCallId))}`);
+        eventHandlerLogger.debug(`[EventHandler]   assistant message has ${toolCalls.length} tool-calls: ${JSON.stringify(toolCalls.map((t: any) => t.toolCallId))}`);
       }
       if ((msg as any).role === "tool" && Array.isArray((msg as any).content)) {
         const toolResults = (msg as any).content.filter((p: any) => p.type === "tool-result");
-        eventHandlerLogger.info(`[EventHandler]   tool message has ${toolResults.length} tool-results`);
+        eventHandlerLogger.debug(`[EventHandler]   tool message has ${toolResults.length} tool-results`);
       }
       
       const modelMessage: ModelMessage = msg as any;
@@ -86,8 +86,8 @@ export class EventHandlerAgent {
     }
 
     const history = session.toHistory();
-    eventHandlerLogger.info(`[EventHandler] toHistory returned ${history.length} messages`);
-    eventHandlerLogger.info(`[EventHandler] Now calling handle_query for session ${sessionId}`);
+    eventHandlerLogger.debug(`[EventHandler] toHistory returned ${history.length} messages`);
+    eventHandlerLogger.debug(`[EventHandler] Now calling handle_query for session ${sessionId}`);
     
     await this.env.handle_query(
       `Process event: ${event.type}`,
