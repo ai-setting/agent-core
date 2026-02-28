@@ -1079,24 +1079,18 @@ export class ServerEnvironment extends BaseEnvironment {
     bus.registerRule({
       eventType: EventTypes.BACKGROUND_TASK_COMPLETED,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          const payload = event.payload as any;
-          await processEventInSession(this, event, {
-            prompt: `A background task has completed.
+        type: "agent",
+        prompt: `A background task has completed.
 
-Task Description: ${payload.description}
-SubAgent Type: ${payload.subagentType}
-Execution Time: ${payload.execution_time_ms}ms
-Sub Session ID: ${payload.sub_session_id}
+Task Description: {{payload.description}}
+SubAgent Type: {{payload.subagentType}}
+Execution Time: {{payload.execution_time_ms}}ms
+Sub Session ID: {{payload.sub_session_id}}
 
 Result:
-${payload.result}
+{{payload.result}}
 
 Analyze this result and provide a clear summary to the user. If there are any errors, explain them and suggest next steps.`,
-          });
-        }
       },
       options: { priority: 80 }
     });
@@ -1104,20 +1098,14 @@ Analyze this result and provide a clear summary to the user. If there are any er
     bus.registerRule({
       eventType: EventTypes.BACKGROUND_TASK_FAILED,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          const payload = event.payload as any;
-          await processEventInSession(this, event, {
-            prompt: `A background task has failed.
+        type: "agent",
+        prompt: `A background task has failed.
 
-Task Description: ${payload.description}
-SubAgent Type: ${payload.subagentType}
-Error: ${payload.error}
+Task Description: {{payload.description}}
+SubAgent Type: {{payload.subagentType}}
+Error: {{payload.error}}
 
 The task failed to complete. Explain the error to the user and suggest possible next steps (retry, different approach, etc.).`,
-          });
-        }
       },
       options: { priority: 80 }
     });
@@ -1125,21 +1113,15 @@ The task failed to complete. Explain the error to the user and suggest possible 
     bus.registerRule({
       eventType: EventTypes.BACKGROUND_TASK_PROGRESS,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          const payload = event.payload as any;
-          await processEventInSession(this, event, {
-            prompt: `后台任务正在执行中。
+        type: "agent",
+        prompt: `后台任务正在执行中。
 
-📋 任务: ${payload.description}
-🔄 类型: ${payload.subagentType}
-⏱️ 已执行: ${payload.elapsed_time_human}
-📌 Task ID: ${payload.taskId}
+📋 任务: {{payload.description}}
+🔄 类型: {{payload.subagentType}}
+⏱️ 已执行: {{payload.elapsed_time_human}}
+📌 Task ID: {{payload.taskId}}
 
-请简短告知用户任务仍在进行中，预计需要一些时间完成。`,
-          });
-        }
+Please briefly inform the user that the task is still in progress.`,
       },
       options: { priority: 80 }
     });
@@ -1147,24 +1129,18 @@ The task failed to complete. Explain the error to the user and suggest possible 
     bus.registerRule({
       eventType: EventTypes.BACKGROUND_TASK_TIMEOUT,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          const payload = event.payload as any;
-          await processEventInSession(this, event, {
-            prompt: `后台任务执行超时，已暂停。
+        type: "agent",
+        prompt: `后台任务执行超时，已暂停。
 
-📋 任务: ${payload.description}
-🔄 类型: ${payload.subagentType}
-⏱️ 执行时长: ${Math.round(payload.execution_time_ms / 1000)}秒
-📌 Task ID: ${payload.taskId}
-📝 Sub Session ID: ${payload.sub_session_id}
+📋 任务: {{payload.description}}
+🔄 类型: {{payload.subagentType}}
+⏱️ 执行时长: {{payload.execution_time_ms}}秒
+📌 Task ID: {{payload.taskId}}
+📝 Sub Session ID: {{payload.sub_session_id}}
 
-${payload.message}
+{{payload.message}}
 
-请告知用户任务因超时暂停，可询问是否需要继续或调整方案。`,
-          });
-        }
+Please inform the user that the task has timed out and ask if they want to continue or adjust the approach.`,
       },
       options: { priority: 80 }
     });
@@ -1172,21 +1148,15 @@ ${payload.message}
     bus.registerRule({
       eventType: EventTypes.BACKGROUND_TASK_STOPPED,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          const payload = event.payload as any;
-          await processEventInSession(this, event, {
-            prompt: `后台任务已被用户停止。
+        type: "agent",
+        prompt: `后台任务已被用户停止。
 
-📋 任务: ${payload.description}
-🔄 类型: ${payload.subagentType}
-⏱️ 执行时长: ${Math.round(payload.execution_time_ms / 1000)}秒
-📌 Task ID: ${payload.taskId}
+📋 任务: {{payload.description}}
+🔄 类型: {{payload.subagentType}}
+⏱️ 执行时长: {{payload.execution_time_ms}}秒
+📌 Task ID: {{payload.taskId}}
 
-请确认任务已停止，并询问用户是否需要其他帮助。`,
-          });
-        }
+Please confirm the task has been stopped and ask if the user needs any other help.`,
       },
       options: { priority: 80 }
     });
@@ -1194,13 +1164,8 @@ ${payload.message}
     bus.registerRule({
       eventType: EventTypes.ENVIRONMENT_SWITCHED,
       handler: {
-        type: "function",
-        fn: async (event: EnvEvent) => {
-          const { processEventInSession } = await import("../core/event-processor.js");
-          await processEventInSession(this, event, {
-            prompt: "You are an environment switching experts. The environment has been switched. Analyze the change and decide how to proceed with the current task.",
-          });
-        }
+        type: "agent",
+        prompt: "You are an environment switching expert. The environment has been switched. Analyze the change and decide how to proceed with the current task.",
       },
       options: { priority: 80 }
     });
