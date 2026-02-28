@@ -12,6 +12,7 @@ import eventsRoute from "./routes/events.js";
 import sessionsRoute from "./routes/sessions.js";
 import commandsRoute from "./routes/commands.js";
 import type { ServerEnvironment } from "./environment.js";
+import { getTraceContext } from "../utils/trace-context.js";
 
 type Variables = {
   env: ServerEnvironment;
@@ -57,6 +58,17 @@ export class AgentServer {
     if (this.config.enableLogger !== false) {
       this.app.use(logger());
     }
+
+    // Trace Context middleware - 注入 requestId
+    this.app.use("*", async (c, next) => {
+      const trace = getTraceContext();
+      const requestId = c.req.header("X-Request-Id") || trace.generateRequestId();
+      const sessionId = c.req.header("X-Session-Id");
+      
+      trace.runWithNewContext(requestId, sessionId || undefined, async () => {
+        return next();
+      });
+    });
 
     // Set environment in context for routes that need it
     this.app.use("/sessions/*", async (c, next) => {

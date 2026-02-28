@@ -4,11 +4,14 @@
  * 遵循 XDG Base Directory Specification:
  * - 日志存储在 XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
  * 无需配置，自动创建目录
+ * 
+ * 支持 requestId 追踪：通过 trace-context 模块自动注入
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { xdgData } from "xdg-basedir";
+import { getTraceContext } from "./trace-context.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -65,10 +68,46 @@ class Logger {
     return this.levelPriority[level] >= this.levelPriority[this.level];
   }
 
+  private getCallerLocation(): { file: string; line: number } | null {
+    const originalLimit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 10;
+    
+    const err = new Error();
+    Error.captureStackTrace(err, this.formatMessage);
+    
+    const stack = err.stack?.split("\n") || [];
+    Error.stackTraceLimit = originalLimit;
+
+    for (let i = 1; i < stack.length; i++) {
+      const line = stack[i];
+      if (line.includes("at ") && !line.includes("logger.ts") && !line.includes("formatMessage")) {
+        const match = line.match(/at\s+.+\s+\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
+        if (match) {
+          const filePath = match[1];
+          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "unknown";
+          return {
+            file: fileName,
+            line: parseInt(match[2], 10),
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const timestamp = new Date().toISOString();
+    const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}.${String(now.getMilliseconds()).padStart(3, "0")}`;
     const prefix = this.prefix ? `[${this.prefix}]` : "";
-    let formatted = `${timestamp} [${level.toUpperCase()}]${prefix} ${message}`;
+    
+    const trace = getTraceContext();
+    const requestId = trace.getRequestId();
+    const requestIdStr = requestId ? `[requestId=${requestId}]` : "";
+
+    const location = this.getCallerLocation();
+    const locationStr = location ? `${location.file}:${location.line}` : "";
+    
+    let formatted = `${timestamp} [${level.toUpperCase()}]${requestIdStr}${locationStr ? ` [${locationStr}]` : ""}${prefix} ${message}`;
     
     if (data !== undefined) {
       if (typeof data === "object") {

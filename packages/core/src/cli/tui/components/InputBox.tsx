@@ -4,13 +4,14 @@
  * 使用 textarea + CommandPalette ref 模式
  */
 
-import { createSignal, onCleanup, createEffect, Show, For, type JSX } from "solid-js";
+import { createSignal, onCleanup, createEffect, createMemo, Show, For, type JSX } from "solid-js";
 import { useStore, useEventStream, useTheme, useCommand, useDialog } from "../contexts/index.js";
 import { tuiLogger } from "../logger.js";
 import { CommandPalette, type CommandPaletteRef } from "./CommandPalette.js";
 import { CommandDialog } from "./CommandDialog.js";
 import { ConnectDialog } from "./ConnectDialog.js";
 import { EchoDialog } from "./EchoDialog.js";
+import { createApiClient } from "../utils/api-client.js";
 
 const STREAMING_DOT_COUNT = 5;
 const STREAMING_DOT_TICK_MS = 120;
@@ -39,6 +40,9 @@ export function InputBox(props: InputBoxProps) {
   const [isSubmitting, setIsSubmitting] = createSignal(false);
   const [streamingDotIndex, setStreamingDotIndex] = createSignal(0);
   const [pendingResult, setPendingResult] = createSignal<PendingCommandResult | null>(null);
+
+  // API Client
+  const apiClient = createMemo(() => createApiClient({ baseUrl: eventStream.url() }));
 
   // 双按 ESC 中断 session
   let lastEscPress = 0;
@@ -346,8 +350,7 @@ export function InputBox(props: InputBoxProps) {
                   if (now - lastEscPress < DOUBLE_ESC_WINDOW_MS) {
                     // 第二次按 ESC，触发中断
                     tuiLogger.info("[InputBox] Double ESC pressed, interrupting session", { sessionId });
-                    const serverUrl = eventStream.url();
-                    fetch(`${serverUrl}/sessions/${sessionId}/interrupt`, {
+                    apiClient().apiCall(`/sessions/${sessionId}/interrupt`, {
                       method: "POST",
                     }).catch((err) => {
                       tuiLogger.error("[InputBox] Failed to interrupt session", { error: String(err) });
