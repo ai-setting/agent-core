@@ -209,6 +209,7 @@ function createMockEnv(): any {
     addMessage: vi.fn().mockReturnValue("msg_123"),
     addUserMessage: vi.fn().mockReturnValue("msg_user"),
     addAssistantMessage: vi.fn().mockReturnValue("msg_assistant"),
+    addMessageFromModelMessage: vi.fn().mockReturnValue("msg_model"),
     toHistory: vi.fn().mockReturnValue([
       { role: "system", content: "You are a subagent" },
     ]),

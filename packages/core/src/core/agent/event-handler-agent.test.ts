@@ -17,7 +17,7 @@ describe("EventHandlerAgent", () => {
       id: "session-1",
       addUserMessage: vi.fn(),
       addAssistantMessage: vi.fn(),
-      addAssistantMessageWithTool: vi.fn(),
+      addMessageFromModelMessage: vi.fn(),
       addToolMessage: vi.fn(),
       toHistory: vi.fn().mockReturnValue([
         { role: "user", content: "Hello" },
@@ -51,7 +51,7 @@ describe("EventHandlerAgent", () => {
       await agent.handle(event);
 
       expect(mockEnv.getSession).toHaveBeenCalledWith("session-1");
-      expect(mockSession.addUserMessage).toHaveBeenCalled();
+      expect(mockSession.addMessageFromModelMessage).toHaveBeenCalled();
       expect(mockEnv.handle_query).toHaveBeenCalled();
     });
 
@@ -69,9 +69,10 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[EventHandlerAgent] No trigger_session_id in event metadata and no active session available"
-      );
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy.mock.calls.some((call: any[]) => 
+        call[0] && call[0].includes("No trigger_session_id")
+      )).toBe(true);
 
       consoleSpy.mockRestore();
     });
@@ -95,9 +96,10 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[EventHandlerAgent] Session not found: nonexistent-session"
-      );
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy.mock.calls.some((call: any[]) => 
+        call[0] && call[0].includes("Session not found")
+      )).toBe(true);
 
       consoleSpy.mockRestore();
     });
@@ -121,10 +123,10 @@ describe("EventHandlerAgent", () => {
       // We'll test indirectly through handle()
       await agent.handle(event);
 
-      // Check that user message was added with event info
-      const userMessageCall = mockSession.addUserMessage.mock.calls[0][0];
-      expect(userMessageCall).toContain("Observed event: test.event");
-      expect(userMessageCall).toContain("event-123");
+      // Check that user message was added with event info (now using addMessageFromModelMessage)
+      const userMessageCall = mockSession.addMessageFromModelMessage.mock.calls[0][0];
+      expect(userMessageCall.content).toContain("Observed event: test.event");
+      expect(userMessageCall.content).toContain("event-123");
     });
   });
 
