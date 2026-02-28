@@ -252,6 +252,12 @@ export interface Environment {
    * 获取 Skills 元信息用于 Tool Description
    */
   getSkillsInfoForToolDescription(): string;
+
+  /**
+   * 获取当前 agent-core 的 Git Commit 版本
+   * 在构建时通过 TONG_WORK_COMMIT 注入
+   */
+  getCommitVersion(): string;
 }
 
 export interface Prompt {

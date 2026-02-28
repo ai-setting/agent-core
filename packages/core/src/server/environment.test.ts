@@ -49,6 +49,11 @@ describe("ServerEnvironment", () => {
     expect(typeof (env as any).onStreamEvent).toBe("function");
   });
 
+  it("should return commit version", () => {
+    const commitVersion = env.getCommitVersion();
+    expect(typeof commitVersion).toBe("string");
+  });
+
   it("should handle stream events and publish to EventBus", async () => {
     const received: any[] = [];
     const sessionId = "test-session-123";

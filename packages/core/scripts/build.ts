@@ -17,6 +17,7 @@ const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8")
 const VERSION = PKG.version || "0.1.0";
 const CHANNEL = process.env.CHANNEL || "dev";
 const RELEASE = process.env.RELEASE === "1";
+const COMMIT_HASH = (await $`git rev-parse HEAD`.text()).trim();
 
 const SINGLE_FLAG = process.argv.includes("--single");
 const BASELINE_FLAG = process.argv.includes("--baseline");
@@ -139,6 +140,7 @@ async function build() {
         define: {
           TONG_WORK_VERSION: `"${VERSION}"`,
           TONG_WORK_CHANNEL: `"${CHANNEL}"`,
+          TONG_WORK_COMMIT: `"${COMMIT_HASH}"`,
         },
       });
 

@@ -679,8 +679,27 @@ export class ServerEnvironment extends BaseEnvironment {
       const { createLSPTool } = await import("../core/environment/lsp/lsp-tool.js");
       const lspTool = createLSPTool();
 
+      // Import and create fetch_agent_core_source tool
+      const { fetchAgentCoreSourceTool } = await import("../tools/github/index.js");
+
+      // Import and create search_logs tool
+      const { createSearchLogsTool } = await import("../tools/trace/search-logs.js");
+      const searchLogsTool = createSearchLogsTool();
+
+      // Import and create get_trace tool
+      const { createGetTraceTool } = await import("../tools/trace/get-trace.js");
+      const getTraceTool = createGetTraceTool();
+
       // All tools are external - LLM capabilities are native to Environment
-      const allTools = [...osTools, ...todoTools, webFetchTool, lspTool];
+      const allTools = [
+        ...osTools,
+        ...todoTools,
+        webFetchTool,
+        lspTool,
+        fetchAgentCoreSourceTool,
+        searchLogsTool,
+        getTraceTool,
+      ];
 
       for (const tool of allTools) {
         this.registerTool(tool);
