@@ -44,6 +44,8 @@ import { configRegistry } from "../config/registry.js";
 import { createEnvironmentSource } from "../config/sources/environment.js";
 import { ConfigPaths } from "../config/paths.js";
 import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
+import { SpanCollector, setSpanCollector } from "../utils/span-collector.js";
+import { InMemorySpanStorage } from "../utils/span-storage.js";
 import { serverLogger } from "./logger.js";
 import type { BackgroundTaskManager } from "../core/environment/expend/task/background-task-manager.js";
 import { EventMcpManager } from "./env_spec/mcp/event-source/manager.js";
@@ -147,6 +149,17 @@ export class ServerEnvironment extends BaseEnvironment {
         autoSave: config.session?.persistence?.autoSave ?? true,
       });
       serverLogger.info(`[ServerEnvironment] Session storage initialized: mode=${Storage.currentMode}`);
+
+      // 1.4. Initialize trace collector if enabled
+      const traceConfig = config.trace;
+      if (traceConfig?.enabled) {
+        const storage = new InMemorySpanStorage();
+        const collector = new SpanCollector(storage);
+        setSpanCollector(collector);
+        serverLogger.info(`[ServerEnvironment] Trace collector initialized (recordParams=${traceConfig.recordParams ?? true}, recordResult=${traceConfig.recordResult ?? false}, log=${traceConfig.log ?? false})`);
+      } else {
+        serverLogger.info(`[ServerEnvironment] Trace collector disabled`);
+      }
 
       // 1.5. Set skills directory and load skills
       if (config.activeEnvironment) {

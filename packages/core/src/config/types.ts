@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TraceConfig } from "./trace-config.js";
 
 // Provider 配置 (providers.jsonc)
 const ProviderConfig = z.object({
@@ -98,6 +99,16 @@ export const ConfigInfo = z.object({
   session: z.object({
     persistence: SessionPersistenceConfig.optional().describe("Session persistence configuration"),
   }).optional().describe("Session management configuration"),
+  
+  // === Trace 配置 ===
+  trace: z.object({
+    enabled: z.boolean().optional().describe("Enable trace/span collection"),
+    storagePath: z.string().optional().describe("Custom storage path for traces"),
+    recordResult: z.boolean().optional().describe("Record function results in traces"),
+    recordParams: z.boolean().optional().describe("Record function parameters in traces"),
+    log: z.boolean().optional().describe("Log trace events to server.log"),
+    maxLogSize: z.number().optional().describe("Max log size for trace parameters/results"),
+  }).optional().describe("Trace configuration for span collection"),
   
   // === MCP 配置（从 environments/{env}/config.jsonc 加载）===
   mcp: z.object({

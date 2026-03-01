@@ -73,3 +73,6 @@ export {
   type PromptContext,
   type LoadedPrompt,
 } from "./prompts/index.js";
+
+// Trace configuration loader
+export { type TraceConfig } from "./trace-config.js";
