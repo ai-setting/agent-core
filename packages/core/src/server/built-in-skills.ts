@@ -12,7 +12,14 @@ export const BUILT_IN_SKILLS: SkillInfo[] = [
   {
     id: "tong_work_help",
     name: "tong_work_help",
-    description: "Get help on tong_work or agent-core configuration, usage, and architecture. Includes troubleshooting, debugging tools, and how to read source code for analysis.",
+    description: `Get help on tong_work or agent-core. Use this skill when users ask about:
+- Configuration: MCP servers, providers, Environment settings, auth
+- Usage: how to use features, commands, workflows
+- Architecture: how the system works, Environment layers, tool registration
+- Development: debugging, troubleshooting, source code analysis
+- Questions about tong_work product or agent-core core engine
+
+This skill provides configuration guide, environment mechanism explanation, skill development guide, command reference, troubleshooting help, and source code reading capabilities (fetch_agent_core_source).`,
     content: `---
 name: tong_work_help
 description: Get help on tong_work or agent-core configuration, usage, and architecture. Includes troubleshooting, debugging tools, and how to read source code for analysis.
