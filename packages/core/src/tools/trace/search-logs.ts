@@ -15,8 +15,9 @@ const SearchLogsParamsSchema = z.object({
   traceFilter: z.enum(["all", "enter", "quit", "error"]).default("all")
     .describe("Filter by TRACE tag: enter (>>>), quit (<<<), error (!!!)"),
   keyword: z.string().optional().describe("Additional keyword to search"),
-  offset: z.number().optional().default(0).describe("Line offset to start from"),
+  offset: z.number().optional().default(0).describe("Line offset to start from (from beginning of file)"),
   limit: z.number().optional().default(100).describe("Maximum lines to return"),
+  tail: z.number().optional().describe("Get last N lines of log (mutually exclusive with offset/limit)"),
 });
 
 export type SearchLogsParams = z.infer<typeof SearchLogsParamsSchema>;
@@ -36,7 +37,7 @@ export function createSearchLogsTool(config?: SearchLogsConfig): ToolInfo {
       args: SearchLogsParams,
       _ctx: ToolContext,
     ): Promise<ToolResult> {
-      const { filename, requestId, traceFilter, keyword, offset, limit } = args;
+      const { filename, requestId, traceFilter, keyword, offset, limit, tail } = args;
       
       const logFile = path.join(logDir, filename);
       
@@ -47,7 +48,8 @@ export function createSearchLogsTool(config?: SearchLogsConfig): ToolInfo {
         traceFilter,
         keyword,
         offset,
-        limit
+        limit,
+        tail
       });
 
       // Check if file exists
@@ -97,10 +99,18 @@ export function createSearchLogsTool(config?: SearchLogsConfig): ToolInfo {
           searchLogsLogger.debug("[search_logs] Filtered by keyword", { keyword, count: filteredLines.length });
         }
         
-        // Apply offset and limit
-        const startIndex = offset || 0;
-        const endIndex = startIndex + (limit || 100);
-        const limitedLines = filteredLines.slice(startIndex, endIndex);
+        // Get last N lines (tail mode)
+        let limitedLines: string[];
+        if (tail !== undefined && tail > 0) {
+          // tail 模式：从过滤后的结果中取最后 N 行
+          limitedLines = filteredLines.slice(-tail);
+          searchLogsLogger.debug("[search_logs] Using tail mode", { tail, returnedLines: limitedLines.length });
+        } else {
+          // 常规模式：offset + limit
+          const startIndex = offset || 0;
+          const endIndex = startIndex + (limit || 100);
+          limitedLines = filteredLines.slice(startIndex, endIndex);
+        }
         
         const output = limitedLines.join("\n");
         
