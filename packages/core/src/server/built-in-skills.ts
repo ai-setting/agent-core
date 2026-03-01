@@ -102,7 +102,11 @@ Get trace/call chain for a requestId
 skill(skill="tong_work_help")
 \`\`\`
 
-Or ask questions naturally.`,
+Or ask questions naturally.
+
+---
+
+*Current agent-core version info: Version 0.1.0 (dev), Commit: d912ead3d34d7c73177c0d523de3c31ecccccf64*`,
   },
 ];
 

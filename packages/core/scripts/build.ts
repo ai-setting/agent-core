@@ -144,6 +144,21 @@ async function build() {
         },
       });
 
+      // Inject version info into built-in skills
+      const builtInSkillsPath = path.join(ROOT, "src/server/built-in-skills.ts");
+      if (fs.existsSync(builtInSkillsPath)) {
+        try {
+          let skillsContent = await fs.promises.readFile(builtInSkillsPath, "utf-8");
+          skillsContent = skillsContent.replace(/{COMMIT}/g, COMMIT_HASH);
+          skillsContent = skillsContent.replace(/{VERSION}/g, VERSION);
+          skillsContent = skillsContent.replace(/{CHANNEL}/g, CHANNEL);
+          await fs.promises.writeFile(builtInSkillsPath, skillsContent, "utf-8");
+          console.log(`  ✓ Injected version info into built-in skills`);
+        } catch (e) {
+          console.log(`  Note: Could not inject version info into skills`);
+        }
+      }
+
       // Make executable on Unix
       if (item.os !== "win32") {
         await $`chmod +x ${outfile}`;
