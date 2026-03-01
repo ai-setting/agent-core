@@ -5,7 +5,7 @@ export interface SpanContext {
 }
 
 export interface SpanAttributes {
-  [key: string]: string | number | boolean | undefined;
+  [key: string]: string | number | boolean | undefined | Record<string, unknown>;
 }
 
 export interface Span {

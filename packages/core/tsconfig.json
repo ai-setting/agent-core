@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "experimentalDecorators": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]
