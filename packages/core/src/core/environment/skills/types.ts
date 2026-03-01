@@ -6,7 +6,8 @@ export interface SkillInfo {
   id: string;
   name: string;
   description: string;
-  path: string;
+  path?: string;
+  content?: string;
 }
 
 export interface SkillFrontmatter {

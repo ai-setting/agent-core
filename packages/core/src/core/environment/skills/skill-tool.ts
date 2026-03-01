@@ -64,13 +64,29 @@ export const baseSkillTool: ToolInfo = {
 
     try {
       // Return skill.md content as the skill specification
-      // Agent should read this and execute any scripts (e.g., index.js) as needed
-      const fs = await import("fs/promises");
-      const content = await fs.readFile(skillInfo.path, "utf-8");
+      // Support two ways: 1) content in SkillInfo 2) read from path
+      let content: string;
+      let skillDir: string;
+      
+      if (skillInfo.content) {
+        // Built-in skill: content is already in SkillInfo
+        content = skillInfo.content;
+        skillDir = "built-in";
+      } else if (skillInfo.path) {
+        // User skill: read from file
+        const fs = await import("fs/promises");
+        content = await fs.readFile(skillInfo.path, "utf-8");
+        skillDir = path.dirname(skillInfo.path);
+      } else {
+        return {
+          success: false,
+          output: "",
+          error: `Skill ${skillId} has no content or path`,
+        };
+      }
+      
       const bodyMatch = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
       const output = bodyMatch ? bodyMatch[1] : content;
-
-      const skillDir = path.dirname(skillInfo.path);
 
       // Wrap output with skill_content block
       const skillContent = SKILL_CONTENT_TEMPLATE

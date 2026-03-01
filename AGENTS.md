@@ -225,17 +225,19 @@ const invokeLLMLogger = createLogger("invoke:llm", "server.log");
 
 ## 6. tong_work_help Skill 维护规范
 
-> tong_work_help 是 tong_work 的内置帮助 Skill，必须随着 agent-core 的演进持续更新，确保 Help 信息与代码保持同步。
+> tong_work_help 是 tong_work 的内置帮助 Skill，用于帮助用户、开发者和运维人员了解 tong_work 和 agent-core 的配置、使用、架构等。用户可以通过调用此 Skill 来获取相关帮助信息。
 
 ### 6.1 Skill 文件位置
 
+内置 Skill 内容存储在 TypeScript 文件中：
+
 ```
-packages/core/src/skills/tong_work_help/skill.md
+packages/core/src/server/built-in-skills.ts
 ```
 
 ### 6.2 必须同步更新的场景
 
-当实现以下变更时，必须同步更新 `skill.md`：
+当实现以下变更时，必须同步更新 `built-in-skills.ts` 中的 tong_work_help 内容：
 
 | 变更类型 | 更新内容 |
 |----------|----------|
@@ -248,17 +250,17 @@ packages/core/src/skills/tong_work_help/skill.md
 
 ### 6.3 更新规范
 
-1. **保持与代码同步**：每次合并涉及上述变更的 PR 时，同步更新 skill.md
-2. **版本关联**：在 skill.md 开头注明当前适用的 agent-core 版本范围
-3. **可读性**：使用清晰的 Markdown 格式，便于用户阅读
-4. **示例丰富**：尽量包含实际使用示例，帮助用户快速上手
+1. **保持与代码同步**：每次合并涉及上述变更的 PR 时，同步更新 tong_work_help 的内容
+2. **格式**：在 `content` 字段中使用 Markdown 格式
+3. **描述**：在 `description` 字段中提供简洁描述（用于 Tool description）
+4. **可读性**：使用清晰的 Markdown 格式，便于用户阅读
 
 ### 6.4 自动更新机制（未来）
 
-> 长期目标是实现 skill.md 的自动更新，减少人工维护成本。
+> 长期目标是实现 skill 内容的自动更新，减少人工维护成本。
 
 可能的方案：
 - 解析代码注释/类型定义生成 API 文档
 - 从设计文档自动同步变更说明
-- CI 流水线检查 skill.md 与代码的一致性
+- CI 流水线检查 skill 内容与代码的一致性
 
