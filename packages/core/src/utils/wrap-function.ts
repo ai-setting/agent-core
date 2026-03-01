@@ -8,6 +8,7 @@ export interface TracedOptions {
   recordError?: boolean;
   log?: boolean;
   maxLogSize?: number;
+  paramFilter?: (args: any[], argNames?: string[]) => Record<string, any>;
 }
 
 export function Traced(options?: TracedOptions) {
@@ -25,6 +26,7 @@ export function Traced(options?: TracedOptions) {
       recordError: options?.recordError ?? true,
       log: options?.log ?? false,
       maxLogSize: options?.maxLogSize ?? 500,
+      paramFilter: options?.paramFilter,
     }) as T;
 
     return descriptor;
@@ -48,6 +50,7 @@ export function wrapFunction<T extends (...args: any[]) => any>(
     recordError?: boolean;
     log?: boolean;
     maxLogSize?: number;
+    paramFilter?: (args: any[], argNames?: string[]) => Record<string, any>;
   }
 ): T {
   const collector = getSpanCollector();
@@ -89,44 +92,50 @@ export function wrapFunction<T extends (...args: any[]) => any>(
     }
   };
 
-  if (!collector) {
-    return fn;
-  }
+  // Always wrap the function, but check collector at call time to support late initialization
+  return function(this: any, ...args: any[]) {
+    const currentCollector = getSpanCollector();
+    if (!currentCollector) {
+      return fn.call(this, ...args);
+    }
 
-  return ((...args: any[]) => {
     const attributes: Record<string, any> = {};
 
     if (options?.recordParams !== false) {
-      attributes["params"] = truncate(args);
+      if (options?.paramFilter) {
+        attributes["params"] = truncate(options.paramFilter(args));
+      } else {
+        attributes["params"] = truncate(args);
+      }
     }
 
     logFn("enter", args);
 
-    const context = collector.startSpan(name, attributes);
+    const context = currentCollector.startSpan(name, attributes);
 
     try {
-      const result = fn(...args);
+      const result = fn.call(this, ...args);
 
       if (result instanceof Promise) {
         return result.then((resolved) => {
-          collector.endSpan(context, options?.recordResult ? truncate(resolved) : undefined);
+          currentCollector.endSpan(context, options?.recordResult ? truncate(resolved) : undefined);
           logFn("quit", options?.recordResult ? resolved : undefined);
           return resolved;
         }).catch((error) => {
-          collector.endSpan(context, undefined, error as Error);
+          currentCollector.endSpan(context, undefined, error as Error);
           logFn("error", (error as Error).message);
           throw error;
         });
       }
 
-      collector.endSpan(context, options?.recordResult ? truncate(result) : undefined);
+      currentCollector.endSpan(context, options?.recordResult ? truncate(result) : undefined);
       logFn("quit", options?.recordResult ? result : undefined);
       return result;
 
     } catch (error) {
-      collector.endSpan(context, undefined, error as Error);
+      currentCollector.endSpan(context, undefined, error as Error);
       logFn("error", (error as Error).message);
       throw error;
     }
-  }) as T;
+  } as T;
 }

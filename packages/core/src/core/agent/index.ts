@@ -12,6 +12,7 @@
  */
 
 import { createLogger } from "../../utils/logger.js";
+import { Traced } from "../../utils/wrap-function.js";
 import type { Environment, MessageContent, BehaviorSpec } from "../environment";
 import type { ModelMessage } from "ai";
 import { Event, Context } from "../types";
@@ -111,6 +112,7 @@ export class Agent {
     return count >= this.config.doomLoopThreshold;
   }
 
+  @Traced({ name: "agent.run", recordParams: true, recordResult: false })
   async run(systemPrompt?: string, userQuery?: string): Promise<string> {
     // Extract user query from event content if not provided
     const query = userQuery ?? (typeof this.event.content === "string" ? this.event.content : JSON.stringify(this.event.content));
