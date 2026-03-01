@@ -200,14 +200,17 @@ Arguments:
 
 #### 3.3.1 Skill File Location
 
+Built-in skill content is stored in TypeScript file:
+
 ```
-packages/core/src/skills/tong_work_help/
-└── skill.md
+packages/core/src/server/built-in-skills.ts
 ```
 
-#### 3.3.2 skill.md Content
+The skill content is stored as a template literal string in the `content` field of `BUILT_IN_SKILLS` array.
 
-The skill.md contains comprehensive help content:
+#### 3.3.2 Skill Content
+
+The built-in skills contain comprehensive help content:
 
 - **Configuration Guide**: User-level and environment-level configuration
 - **Environment Mechanism**: BaseEnvironment, ServerEnvironment design
@@ -240,7 +243,7 @@ Or ask questions naturally:
 | 3 | Implement getCommitVersion in BaseEnvironment | `packages/core/src/core/environment/base/base-environment.ts` |
 | 4 | Create GitHub source fetching Tool | `packages/core/src/tools/github/fetch-agent-core-source.ts` |
 | 5 | Register fetch_agent_core_source Tool | `packages/core/src/server/environment.ts` |
-| 6 | Create tong_work_help Skill | `packages/core/src/skills/tong_work_help/skill.md` |
+| 6 | Create tong_work_help built-in skill | `packages/core/src/server/built-in-skills.ts` |
 | 7 | Update buildEnvInfo to show version | `packages/core/src/config/prompts/variables.ts` |
 | 8 | Update documentation | `docs/DEVELOPMENT_PROGRESS.md` |
 
@@ -319,7 +322,7 @@ Agent calls fetch_agent_core_source Tool
 | BaseEnvironment | `packages/core/src/core/environment/base/base-environment.ts` |
 | ServerEnvironment | `packages/core/src/server/environment.ts` |
 | GitHub source Tool | `packages/core/src/tools/github/fetch-agent-core-source.ts` |
-| tong_work_help Skill | `packages/core/src/skills/tong_work_help/skill.md` |
+| Built-in skills | `packages/core/src/server/built-in-skills.ts` |
 | EnvInfo builder | `packages/core/src/config/prompts/variables.ts` |
 
 ---

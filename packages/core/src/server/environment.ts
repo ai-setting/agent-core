@@ -11,6 +11,9 @@ import {
   BaseEnvironmentConfig,
   type SessionEvent,
 } from "../core/environment/base/base-environment.js";
+import type { SkillInfo } from "../core/environment/skills/types.js";
+import { BUILT_IN_SKILLS } from "./built-in-skills.js";
+
 import type { Context } from "../core/types/context.js";
 import type { Action } from "../core/types/action.js";
 import type { StreamEvent } from "../core/environment/index.js";
@@ -730,11 +733,8 @@ export class ServerEnvironment extends BaseEnvironment {
     return this.skillsDirectory;
   }
 
-  protected getBuiltInSkillsDirectory(): string | undefined {
-    const currentDir = typeof import.meta.dirname !== "undefined" 
-      ? import.meta.dirname 
-      : path.dirname(fileURLToPath(import.meta.url));
-    return path.join(currentDir, "..", "skills");
+  protected getBuiltInSkills(): SkillInfo[] {
+    return BUILT_IN_SKILLS;
   }
 
   protected getMcpserversDirectory(): string | undefined {

@@ -1066,11 +1066,12 @@ export abstract class BaseEnvironment implements Environment {
   protected abstract getSkillsDirectory(): string | undefined;
 
   /**
-   * 获取内置 Skills 目录
-   * 子类可覆盖以提供不同的内置 Skills 路径
+   * 获取内置 Skills 列表
+   * 子类可覆盖以提供不同的内置 Skills
+   * 返回 SkillInfo 数组，每个 SkillInfo 需要包含 id, name, description, path
    */
-  protected getBuiltInSkillsDirectory(): string | undefined {
-    return undefined;
+  protected getBuiltInSkills(): SkillInfo[] {
+    return [];
   }
 
   /**
@@ -1085,10 +1086,10 @@ export abstract class BaseEnvironment implements Environment {
    */
   public async loadSkills(): Promise<{ added: SkillInfo[]; removed: string[] }> {
     const skillsDir = this.getSkillsDirectory();
-    const builtInSkillsDir = this.getBuiltInSkillsDirectory();
+    const builtInSkills = this.getBuiltInSkills();
     
-    if (!skillsDir && !builtInSkillsDir) {
-      console.log("[BaseEnvironment] No skills directory configured");
+    if (!skillsDir && builtInSkills.length === 0) {
+      console.log("[BaseEnvironment] No skills directory configured and no built-in skills");
       return { added: [], removed: [] };
     }
 
@@ -1099,9 +1100,7 @@ export abstract class BaseEnvironment implements Environment {
       let allSkillInfos: SkillInfo[] = [];
 
       // Load built-in skills first
-      if (builtInSkillsDir) {
-        const builtInLoader = new SkillLoader(builtInSkillsDir);
-        const builtInSkills = await builtInLoader.loadAll();
+      if (builtInSkills.length > 0) {
         allSkillInfos.push(...builtInSkills);
         console.log(`[BaseEnvironment] Loaded ${builtInSkills.length} built-in skills`);
       }
