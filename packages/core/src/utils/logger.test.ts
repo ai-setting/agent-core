@@ -141,4 +141,19 @@ describe("Logger", () => {
     const content = readFileSync(logFile, "utf-8");
     expect(content).toContain("[test:module]");
   });
+
+  test("log location should show module path format (module/file.ts:line)", async () => {
+    const { Logger } = await import("./logger.js");
+    const logFile = join(tempDir, "test-location.log");
+    
+    const logger = new Logger({ level: "debug", filename: "test-location.log" });
+    (logger as any).logFile = logFile;
+    
+    logger.info("Test message");
+    
+    const content = readFileSync(logFile, "utf-8");
+    const locationMatch = content.match(/\[(.*?\.ts:\d+)\]/);
+    expect(locationMatch).not.toBeNull();
+    expect(locationMatch![1]).toContain("logger.test.ts");
+  });
 });
