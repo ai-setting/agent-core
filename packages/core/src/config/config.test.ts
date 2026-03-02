@@ -251,4 +251,76 @@ describe("Config", () => {
       expect(config.providers?.openai?.baseURL).toBe("https://api.openai.com");
     });
   });
+
+  describe("Logging Configuration from JSONC", () => {
+    let loggingTestDir: string;
+
+    afterEach(async () => {
+      if (loggingTestDir) {
+        await fs.rm(loggingTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should load logging config from tong_work.jsonc file", async () => {
+      loggingTestDir = await fs.mkdtemp(path.join(os.tmpdir(), "logging-config-test-"));
+      
+      const configFile = path.join(loggingTestDir, "tong_work.jsonc");
+      const jsoncContent = `{
+        // Logging configuration
+        "logging": {
+          "path": "/custom/logs/path",
+          "level": "debug",
+          "enableFile": false
+        }
+      }`;
+      await fs.writeFile(configFile, jsoncContent);
+      
+      configRegistry.register(createFileSource(configFile, 0));
+      const config = await loadConfig();
+      
+      expect(config.logging).toBeDefined();
+      expect(config.logging?.path).toBe("/custom/logs/path");
+      expect(config.logging?.level).toBe("debug");
+      expect(config.logging?.enableFile).toBe(false);
+    });
+
+    it("should load logging config from tong_work.json file", async () => {
+      loggingTestDir = await fs.mkdtemp(path.join(os.tmpdir(), "logging-json-test-"));
+      
+      const configFile = path.join(loggingTestDir, "tong_work.json");
+      const jsonContent = JSON.stringify({
+        logging: {
+          path: "/var/log/tong_work",
+          level: "warn",
+          enableFile: true
+        }
+      });
+      await fs.writeFile(configFile, jsonContent);
+      
+      configRegistry.register(createFileSource(configFile, 0));
+      const config = await loadConfig();
+      
+      expect(config.logging).toBeDefined();
+      expect(config.logging?.path).toBe("/var/log/tong_work");
+      expect(config.logging?.level).toBe("warn");
+    });
+
+    it("should allow partial logging config", async () => {
+      loggingTestDir = await fs.mkdtemp(path.join(os.tmpdir(), "logging-partial-test-"));
+      
+      const configFile = path.join(loggingTestDir, "tong_work.json");
+      await fs.writeFile(configFile, JSON.stringify({
+        logging: {
+          level: "error"
+        }
+      }));
+      
+      configRegistry.register(createFileSource(configFile, 0));
+      const config = await loadConfig();
+      
+      expect(config.logging).toBeDefined();
+      expect(config.logging?.level).toBe("error");
+      expect(config.logging?.path).toBeUndefined();
+    });
+  });
 });
