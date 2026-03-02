@@ -40,17 +40,6 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
   const port = options.port ?? (parseInt(process.env.PORT || "3000"));
   const hostname = options.hostname ?? (process.env.HOSTNAME || "0.0.0.0");
 
-  // 优先加载配置并设置日志目录（在任何日志输出之前）
-  try {
-    const rawConfig = await Config_get();
-    const config = await resolveConfig(rawConfig);
-    if (config.logging?.path) {
-      setLogDirOverride(config.logging.path);
-    }
-  } catch (error) {
-    // 配置加载失败不影响启动
-  }
-
   // 注册内置 Commands（如果尚未注册）
   const commandRegistry = CommandRegistry.getInstance();
   if (commandRegistry.list().length === 0) {
@@ -72,6 +61,11 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
   try {
     const rawConfig = await Config_get();
     const config = await resolveConfig(rawConfig);
+    
+    // 应用 logging 配置
+    if (config.logging?.path) {
+      setLogDirOverride(config.logging.path);
+    }
     
     if (!model && config.defaultModel) model = config.defaultModel;
     if (!apiKey && config.apiKey) apiKey = config.apiKey;

@@ -36,7 +36,16 @@ class Logger {
   private level: LogLevel;
   private prefix: string;
   private filename: string;
-  private logFile: string;
+  private currentLogDir: string = "";
+
+  private get logFile(): string {
+    const dir = getLogDir();
+    if (dir !== this.currentLogDir) {
+      this.currentLogDir = dir;
+      this.ensureLogDirectory();
+    }
+    return join(this.currentLogDir, this.filename);
+  }
 
   private readonly levelPriority: Record<LogLevel, number> = {
     debug: 0,
@@ -49,7 +58,7 @@ class Logger {
     this.level = (config.level || (process.env.LOG_LEVEL as LogLevel) || "info").toLowerCase() as LogLevel;
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
-    this.logFile = join(getLogDir(), this.filename);
+    this.currentLogDir = getLogDir();
 
     // 确保日志目录存在
     this.ensureLogDirectory();
