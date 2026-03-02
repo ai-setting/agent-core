@@ -9,6 +9,9 @@
 
 import type { EnvEvent } from "./types/event.js";
 import type { ModelMessage } from "ai";
+import { createLogger } from "../utils/logger.js";
+
+const eventProcessorLogger = createLogger("event:processor", "server.log");
 
 interface HistoryMessageWithTool {
   role: "system" | "user" | "assistant" | "tool";
@@ -80,19 +83,19 @@ export async function processEventInSession<T>(
       const activeSessionManager = env.getActiveSessionManager();
       sessionId = activeSessionManager.getActiveSession(clientId);
       if (sessionId) {
-        console.log(`[EventProcessor] Using active session from clientId ${clientId}: ${sessionId}`);
+        eventProcessorLogger.debug(`Using active session from clientId ${clientId}: ${sessionId}`);
       }
     }
   }
   
   if (!sessionId) {
-    console.warn("[EventProcessor] No trigger_session_id in event metadata and no active session available");
+    eventProcessorLogger.debug("No trigger_session_id in event metadata and no active session available");
     return;
   }
 
   const session = await env.getSession?.(sessionId);
   if (!session) {
-    console.warn(`[EventProcessor] Session not found: ${sessionId}`);
+    eventProcessorLogger.warn(`Session not found: ${sessionId}`);
     return;
   }
 
