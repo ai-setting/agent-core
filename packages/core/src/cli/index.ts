@@ -13,6 +13,7 @@ import { ServeCommand } from "./commands/serve.js";
 import { RunCommand } from "./commands/run.js";
 import { AttachCommand } from "./commands/attach.js";
 import { TuiCommand } from "./commands/tui.js";
+import { EnvCommand } from "./commands/env.js";
 
 async function main() {
   const pkg = await import("../../package.json", { with: { type: "json" } });
@@ -26,6 +27,7 @@ async function main() {
     .command(ServeCommand)
     .command(RunCommand)
     .command(AttachCommand)
+    .command(EnvCommand)
     .demandCommand()
     .strict()
     .help()
