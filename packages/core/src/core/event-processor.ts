@@ -34,7 +34,7 @@ interface HistoryMessageWithTool {
 export interface SessionLike {
   addUserMessage(content: string): void;
   addAssistantMessage(content: string): void;
-  addToolMessage(toolName: string, callID: string, output: string, input: Record<string, unknown>): void;
+  addAssistantMessageWithTool(toolCallId: string, toolName: string, toolArgs: Record<string, unknown>): void;
   addMessageFromModelMessage(message: ModelMessage): string;
   toHistory(): HistoryMessageWithTool[];
 }
@@ -101,56 +101,21 @@ export async function processEventInSession<T>(
 
   const messages = constructEventMessages(event, { includeToolCall, toolName });
 
-  const modelMessages: ModelMessage[] = messages.map((msg): ModelMessage => {
+  messages.forEach((msg) => {
     if (msg.role === "user") {
       const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-      return { role: "user", content };
+      session.addUserMessage(content);
     } else if (msg.role === "assistant") {
       if (msg.toolCallId && msg.toolName) {
-        return {
-          role: "assistant",
-          content: [{
-            type: "tool-call",
-            toolCallId: msg.toolCallId,
-            toolName: msg.toolName,
-            input: msg.toolArgs || {},
-          }],
-        };
+        session.addAssistantMessageWithTool(
+          msg.toolCallId,
+          msg.toolName,
+          msg.toolArgs || {}
+        );
       } else {
-        return { role: "assistant", content: msg.content as string || "" };
+        session.addAssistantMessage(msg.content as string);
       }
-    } else if (msg.role === "tool") {
-      const toolContent = msg.content as Array<any>;
-      let toolCallId = msg.toolCallId || "";
-      let toolName = msg.toolName || "";
-      let output = "";
-      
-      if (toolContent && Array.isArray(toolContent) && toolContent[0]) {
-        const toolResult = toolContent[0];
-        toolCallId = toolResult.toolCallId || toolCallId;
-        toolName = toolResult.toolName || toolName;
-        output = typeof toolResult.output === "string" 
-          ? toolResult.output 
-          : JSON.stringify(toolResult.output);
-      } else {
-        output = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-      }
-      
-      return {
-        role: "tool",
-        content: [{
-          type: "tool-result",
-          toolCallId,
-          toolName,
-          output: { type: "text", value: output },
-        }],
-      };
     }
-    return { role: "user", content: "" };
-  });
-
-  modelMessages.forEach((msg) => {
-    session.addMessageFromModelMessage(msg);
   });
 
   const history = session.toHistory();
