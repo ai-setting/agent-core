@@ -156,4 +156,70 @@ describe("Logger", () => {
     expect(locationMatch).not.toBeNull();
     expect(locationMatch![1]).toContain("logger.test.ts");
   });
+
+  test("LOG_DIR env var should override default log directory", async () => {
+    const originalLogDir = process.env.LOG_DIR;
+    const customLogDir = join(tempDir, "custom-logs");
+    
+    process.env.LOG_DIR = customLogDir;
+    
+    const { getLogDir, DEFAULT_LOG_DIR, Logger } = await import("./logger.js");
+    
+    expect(getLogDir()).toBe(customLogDir);
+    expect(getLogDir()).not.toBe(DEFAULT_LOG_DIR);
+    
+    const logger = new Logger({ level: "debug", filename: "env-override.log" });
+    expect(logger.getLogFile()).toBe(join(customLogDir, "env-override.log"));
+    
+    if (originalLogDir === undefined) {
+      delete process.env.LOG_DIR;
+    } else {
+      process.env.LOG_DIR = originalLogDir;
+    }
+  });
+
+  test("setLogDirOverride should override log directory", async () => {
+    const { setLogDirOverride, getLogDir, DEFAULT_LOG_DIR, Logger } = await import("./logger.js");
+    
+    const overridePath = join(tempDir, "override-logs");
+    setLogDirOverride(overridePath);
+    
+    expect(getLogDir()).toBe(overridePath);
+    expect(getLogDir()).not.toBe(DEFAULT_LOG_DIR);
+    
+    const logger = new Logger({ level: "debug", filename: "override.log" });
+    expect(logger.getLogFile()).toBe(join(overridePath, "override.log"));
+    
+    setLogDirOverride(null as any);
+  });
+
+  test("LOG_DIR env var should have higher priority than setLogDirOverride", async () => {
+    const originalLogDir = process.env.LOG_DIR;
+    const { setLogDirOverride, getLogDir, Logger } = await import("./logger.js");
+    
+    const overridePath = join(tempDir, "override");
+    setLogDirOverride(overridePath);
+    
+    const envPath = join(tempDir, "env-path");
+    process.env.LOG_DIR = envPath;
+    
+    expect(getLogDir()).toBe(envPath);
+    
+    const logger = new Logger({ level: "debug", filename: "priority-test.log" });
+    expect(logger.getLogFile()).toBe(join(envPath, "priority-test.log"));
+    
+    setLogDirOverride(null as any);
+    if (originalLogDir === undefined) {
+      delete process.env.LOG_DIR;
+    } else {
+      process.env.LOG_DIR = originalLogDir;
+    }
+  });
+
+  test("DEFAULT_LOG_DIR should be XDG compatible default path", async () => {
+    const { DEFAULT_LOG_DIR } = await import("./logger.js");
+    
+    expect(DEFAULT_LOG_DIR).toContain("tong_work");
+    expect(DEFAULT_LOG_DIR).toContain("logs");
+  });
 });
