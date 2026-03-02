@@ -125,14 +125,7 @@ export const TuiCommand: CommandModule<object, TuiOptions> = {
     const stopServer = async () => {
       console.log("\n🛑 正在停止服务器...");
       
-      // 先断开 EventMcpManager（关闭 MCP 子进程）
-      const eventMcpManager = env?.getEventMcpManager?.();
-      if (eventMcpManager) {
-        await eventMcpManager.disconnectAll();
-        console.log("✓ EventSource 连接已断开");
-      }
-      
-      // 然后停止 HTTP 服务器
+      // 停止 HTTP 服务器（内部会自动断开 EventSource）
       await server.stop();
       console.log("✓ 服务器已停止");
     };
