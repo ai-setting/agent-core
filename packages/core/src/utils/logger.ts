@@ -22,7 +22,7 @@ let logDirOverride: string | null = null;
 const DEFAULT_LOG_DIR = join(xdgData || "", "tong_work", "logs");
 
 function getLogDir(): string {
-  return logDirOverride || process.env.LOG_DIR || DEFAULT_LOG_DIR;
+  return process.env.LOG_DIR || logDirOverride || DEFAULT_LOG_DIR;
 }
 
 export function setLogDirOverride(path: string): void {
