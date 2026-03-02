@@ -159,6 +159,9 @@ export const ConfigInfo = z.object({
   
   // === 其他配置（预留扩展）===
   metadata: z.record(z.unknown()).optional().describe("Additional metadata"),
+  
+  // === 内部字段（不通过配置文件设置）===
+  _environmentPath: z.string().optional().describe("Environment directory path (internal)"),
 });
 
 export namespace Config {

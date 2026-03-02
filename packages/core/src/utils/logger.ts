@@ -4,11 +4,14 @@
  * 遵循 XDG Base Directory Specification:
  * - 日志存储在 XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
  * 无需配置，自动创建目录
+ * 
+ * 支持 requestId 追踪：通过 trace-context 模块自动注入
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { basename, dirname, join } from "path";
 import { xdgData } from "xdg-basedir";
+import { getTraceContext } from "./trace-context.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -78,8 +81,46 @@ class Logger {
     return this.levelPriority[level] >= this.levelPriority[this.level];
   }
 
+  private getCallerLocation(): { file: string; line: number } | null {
+    const originalLimit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 10;
+    
+    const err = new Error();
+    Error.captureStackTrace(err, this.formatMessage);
+    
+    const stack = err.stack?.split("\n") || [];
+    Error.stackTraceLimit = originalLimit;
+
+    for (let i = 1; i < stack.length; i++) {
+      const line = stack[i];
+      if (line.includes("at ") && !line.includes("logger.ts") && !line.includes("formatMessage")) {
+        const match = line.match(/at\s+.+\s+\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
+        if (match) {
+          const filePath = match[1];
+          const relativePath = this.getRelativePath(filePath);
+          return {
+            file: relativePath,
+            line: parseInt(match[2], 10),
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  private getRelativePath(fullPath: string): string {
+    const srcPath = "packages/core/src";
+    const normalizedPath = fullPath.replace(/\\/g, "/");
+    const idx = normalizedPath.indexOf(srcPath);
+    if (idx !== -1) {
+      return normalizedPath.substring(idx + srcPath.length + 1);
+    }
+    return basename(fullPath);
+  }
+
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const timestamp = new Date().toLocaleString("zh-CN", {
+    const now = new Date();
+    const timestamp = now.toLocaleString("zh-CN", {
       timeZone: "Asia/Shanghai",
       year: "numeric",
       month: "2-digit",
@@ -88,9 +129,17 @@ class Logger {
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
-    }).replace(/\//g, "-");
+    }).replace(/\//g, "-") + "." + String(now.getMilliseconds()).padStart(3, "0");
     const prefix = this.prefix ? `[${this.prefix}]` : "";
-    let formatted = `${timestamp} [${level.toUpperCase()}]${prefix} ${message}`;
+    
+    const trace = getTraceContext();
+    const requestId = trace.getRequestId();
+    const requestIdStr = requestId ? `[requestId=${requestId}]` : "";
+
+    const location = this.getCallerLocation();
+    const locationStr = location ? `${location.file}:${location.line}` : "";
+    
+    let formatted = `${timestamp} [${level.toUpperCase()}]${requestIdStr}${locationStr ? ` [${locationStr}]` : ""}${prefix} ${message}`;
     
     if (data !== undefined) {
       if (typeof data === "object") {
@@ -171,5 +220,8 @@ export function createLogger(module: string, filename?: string): Logger {
 
 // 导出日志目录路径
 export { DEFAULT_LOG_DIR, getLogDir };
+
+// 导出 LOG_DIR 供外部使用
+export const LOG_DIR = DEFAULT_LOG_DIR;
 
 export { Logger };

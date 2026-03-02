@@ -28,22 +28,67 @@ function parseJsoncFile(content: string, filepath: string): unknown {
   return result;
 }
 
-export async function loadEnvironmentConfig(
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface EnvironmentSearchConfig {
+  searchPaths: ("local" | "global")[];
+  overrides?: Record<string, string>;
+}
+
+export async function findEnvironmentPath(
   envName: string,
-  basePath?: string
+  searchConfig?: EnvironmentSearchConfig
+): Promise<{ path: string; source: "local" | "global" } | null> {
+  const searchPaths = searchConfig?.searchPaths || ["local", "global"];
+
+  // 1. 检查 overrides（优先级最高）
+  if (searchConfig?.overrides?.[envName]) {
+    const overridePath = searchConfig.overrides[envName];
+    if (await pathExists(overridePath)) {
+      return { path: overridePath, source: "local" };
+    }
+  }
+
+  // 2. 按 searchPaths 顺序搜索
+  for (const sourceType of searchPaths) {
+    let envPath: string;
+
+    if (sourceType === "local") {
+      envPath = path.join(ConfigPaths.projectEnvironments, envName);
+    } else {
+      envPath = path.join(ConfigPaths.environments, envName);
+    }
+
+    if (await pathExists(envPath)) {
+      return { path: envPath, source: sourceType };
+    }
+  }
+
+  return null;
+}
+
+export async function loadEnvironmentConfigFromPath(
+  envPath: string,
+  _source: "local" | "global" = "global"
 ): Promise<Config.Info | null> {
-  // 使用传入的 basePath 或默认的 ConfigPaths.environments
-  const environmentsDir = basePath || ConfigPaths.environments;
-  const envDir = path.join(environmentsDir, envName);
-  
   try {
     // 1. 加载主配置
-    const configPath = path.join(envDir, ENV_CONFIG_FILENAME);
+    const configPath = path.join(envPath, ENV_CONFIG_FILENAME);
     const configContent = await fs.readFile(configPath, "utf-8");
     const config = parseJsoncFile(configContent, configPath) as Config.Info;
     
+    // 设置环境路径（内部字段）
+    config._environmentPath = envPath;
+    
     // 2. 加载 Agents 配置（可选）
-    const agentsPath = path.join(envDir, ENV_AGENTS_FILENAME);
+    const agentsPath = path.join(envPath, ENV_AGENTS_FILENAME);
     try {
       const agentsContent = await fs.readFile(agentsPath, "utf-8");
       const agents = parseJsoncFile(agentsContent, agentsPath);
@@ -57,12 +102,33 @@ export async function loadEnvironmentConfig(
     return config;
   } catch (error) {
     if (error instanceof Error && "code" in error && (error as { code: string }).code === "ENOENT") {
-      console.warn(`[Config] Environment "${envName}" not found at ${envDir}`);
+      console.warn(`[Config] Environment not found at ${envPath}`);
       return null;
     }
     console.warn(`[Config] Failed to read environment config:`, error);
     return null;
   }
+}
+
+export async function loadEnvironmentConfig(
+  envName: string,
+  basePath?: string
+): Promise<Config.Info | null> {
+  // 如果传入 basePath，使用旧的单路径模式（向后兼容）
+  if (basePath) {
+    const envDir = path.join(basePath, envName);
+    return loadEnvironmentConfigFromPath(envDir);
+  }
+
+  // 新模式：多路径搜索
+  const envInfo = await findEnvironmentPath(envName);
+  
+  if (!envInfo) {
+    console.warn(`[Config] Environment "${envName}" not found`);
+    return null;
+  }
+
+  return loadEnvironmentConfigFromPath(envInfo.path, envInfo.source);
 }
 
 export function createEnvironmentSource(
@@ -74,5 +140,23 @@ export function createEnvironmentSource(
     name: `environment:${envName}`,
     priority,
     load: () => loadEnvironmentConfig(envName, basePath),
+  };
+}
+
+export function createEnvironmentSourceWithSearch(
+  envName: string,
+  priority: number = 10,
+  searchConfig?: EnvironmentSearchConfig
+): ConfigSource {
+  return {
+    name: `environment:${envName}`,
+    priority,
+    load: async () => {
+      const envInfo = await findEnvironmentPath(envName, searchConfig);
+      if (!envInfo) {
+        return null;
+      }
+      return loadEnvironmentConfigFromPath(envInfo.path, envInfo.source);
+    },
   };
 }
