@@ -15,8 +15,19 @@ import { getTraceContext } from "./trace-context.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+// 日志目录优先级：环境变量 LOG_DIR > 配置 (通过 setLogDirOverride) > XDG 默认
+let logDirOverride: string | null = null;
+
 // XDG 标准数据目录: XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
-const LOG_DIR = join(xdgData || "", "tong_work", "logs");
+const DEFAULT_LOG_DIR = join(xdgData || "", "tong_work", "logs");
+
+function getLogDir(): string {
+  return logDirOverride || process.env.LOG_DIR || DEFAULT_LOG_DIR;
+}
+
+export function setLogDirOverride(path: string): void {
+  logDirOverride = path;
+}
 
 // 是否启用文件存储（默认启用，可通过 LOG_TO_FILE=false 禁用）
 const ENABLE_FILE_LOGGING = process.env.LOG_TO_FILE !== "false";
@@ -45,7 +56,7 @@ class Logger {
     this.level = (config.level || (process.env.LOG_LEVEL as LogLevel) || "info").toLowerCase() as LogLevel;
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
-    this.logFile = join(LOG_DIR, this.filename);
+    this.logFile = join(getLogDir(), this.filename);
     this.enableFileLogging = ENABLE_FILE_LOGGING;
 
     // 确保日志目录存在
@@ -55,11 +66,11 @@ class Logger {
   }
 
   private ensureLogDirectory(): void {
-    if (!existsSync(LOG_DIR)) {
+    if (!existsSync(getLogDir())) {
       try {
-        mkdirSync(LOG_DIR, { recursive: true });
+        mkdirSync(getLogDir(), { recursive: true });
       } catch (err) {
-        console.error("[Logger] Failed to create log directory:", LOG_DIR, err);
+        console.error("[Logger] Failed to create log directory:", getLogDir(), err);
       }
     }
   }
@@ -142,8 +153,8 @@ class Logger {
   private writeToFile(formattedMessage: string): void {
     try {
       // 确保目录存在
-      if (!existsSync(LOG_DIR)) {
-        mkdirSync(LOG_DIR, { recursive: true });
+      if (!existsSync(getLogDir())) {
+        mkdirSync(getLogDir(), { recursive: true });
       }
       appendFileSync(this.logFile, formattedMessage + "\n");
     } catch (err) {
@@ -214,6 +225,6 @@ export function createLogger(module: string, filename?: string): Logger {
 }
 
 // 导出日志目录路径
-export { LOG_DIR };
+export { DEFAULT_LOG_DIR, getLogDir };
 
 export { Logger };
