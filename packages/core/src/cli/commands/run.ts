@@ -12,6 +12,7 @@ import { AgentServer } from "../../server/server.js";
 import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
 import { Config_get, resolveConfig } from "../../config/index.js";
+import { setLogDirOverride } from "../../utils/logger.js";
 
 interface RunOptions {
   message?: string;
@@ -114,6 +115,12 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     try {
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
+      
+      // Apply logging configuration
+      if (config.logging?.path) {
+        setLogDirOverride(config.logging.path);
+        console.log(`📝 日志目录: ${config.logging.path}`);
+      }
       
       if (config.defaultModel && config.apiKey) {
         configModel = config.defaultModel;
