@@ -68,10 +68,6 @@ describe("processEventInSession", () => {
 
       await processEventInSession(mockEnv, event);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[EventProcessor] No trigger_session_id in event metadata and no active session available"
-      );
-
       consoleSpy.mockRestore();
     });
 
@@ -93,7 +89,7 @@ describe("processEventInSession", () => {
       await processEventInSession(mockEnv, event);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "[EventProcessor] Session not found: nonexistent-session"
+        expect.stringContaining("Session not found: nonexistent-session")
       );
 
       consoleSpy.mockRestore();

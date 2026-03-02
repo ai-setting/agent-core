@@ -56,7 +56,7 @@ export class EventHandlerAgent {
     }
     
     if (!sessionId) {
-      eventHandlerLogger.warn("No trigger_session_id in event metadata and no active session available");
+      eventHandlerLogger.debug("No trigger_session_id in event metadata and no active session available");
       return;
     }
 
