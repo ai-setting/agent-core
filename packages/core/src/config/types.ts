@@ -110,6 +110,13 @@ export const ConfigInfo = z.object({
     maxLogSize: z.number().optional().describe("Max log size for trace parameters/results"),
   }).optional().describe("Trace configuration for span collection"),
   
+  // === 日志配置 ===
+  logging: z.object({
+    path: z.string().optional().describe("Custom log directory path (overrides default XDG path)"),
+    level: z.enum(["debug", "info", "warn", "error"]).optional().describe("Log level"),
+    enableFile: z.boolean().optional().describe("Enable file logging (default: true)"),
+  }).optional().describe("Logging configuration"),
+  
   // === MCP 配置（从 environments/{env}/config.jsonc 加载）===
   mcp: z.object({
     server: z.object({
