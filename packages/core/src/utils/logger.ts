@@ -4,14 +4,11 @@
  * 遵循 XDG Base Directory Specification:
  * - 日志存储在 XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
  * 无需配置，自动创建目录
- * 
- * 支持 requestId 追踪：通过 trace-context 模块自动注入
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
-import { basename, dirname, join } from "path";
+import { dirname, join } from "path";
 import { xdgData } from "xdg-basedir";
-import { getTraceContext } from "./trace-context.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -29,9 +26,6 @@ export function setLogDirOverride(path: string): void {
   logDirOverride = path;
 }
 
-// 是否启用文件存储（默认启用，可通过 LOG_TO_FILE=false 禁用）
-const ENABLE_FILE_LOGGING = process.env.LOG_TO_FILE !== "false";
-
 interface LoggerConfig {
   level?: LogLevel;
   prefix?: string;
@@ -43,7 +37,6 @@ class Logger {
   private prefix: string;
   private filename: string;
   private logFile: string;
-  private enableFileLogging: boolean;
 
   private readonly levelPriority: Record<LogLevel, number> = {
     debug: 0,
@@ -57,12 +50,9 @@ class Logger {
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
     this.logFile = join(getLogDir(), this.filename);
-    this.enableFileLogging = ENABLE_FILE_LOGGING;
 
     // 确保日志目录存在
-    if (this.enableFileLogging) {
-      this.ensureLogDirectory();
-    }
+    this.ensureLogDirectory();
   }
 
   private ensureLogDirectory(): void {
@@ -79,65 +69,10 @@ class Logger {
     return this.levelPriority[level] >= this.levelPriority[this.level];
   }
 
-  private getCallerLocation(): { file: string; line: number } | null {
-    const originalLimit = Error.stackTraceLimit;
-    Error.stackTraceLimit = 10;
-    
-    const err = new Error();
-    Error.captureStackTrace(err, this.formatMessage);
-    
-    const stack = err.stack?.split("\n") || [];
-    Error.stackTraceLimit = originalLimit;
-
-    for (let i = 1; i < stack.length; i++) {
-      const line = stack[i];
-      if (line.includes("at ") && !line.includes("logger.ts") && !line.includes("formatMessage")) {
-        const match = line.match(/at\s+.+\s+\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
-        if (match) {
-          const filePath = match[1];
-          const relativePath = this.getRelativePath(filePath);
-          return {
-            file: relativePath,
-            line: parseInt(match[2], 10),
-          };
-        }
-      }
-    }
-    return null;
-  }
-
-  private getRelativePath(fullPath: string): string {
-    const srcPath = "packages/core/src";
-    const normalizedPath = fullPath.replace(/\\/g, "/");
-    const idx = normalizedPath.indexOf(srcPath);
-    if (idx !== -1) {
-      return normalizedPath.substring(idx + srcPath.length + 1);
-    }
-    return basename(fullPath);
-  }
-
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const now = new Date();
-    const timestamp = now.toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).replace(/\//g, "-") + "." + String(now.getMilliseconds()).padStart(3, "0");
+    const timestamp = new Date().toISOString();
     const prefix = this.prefix ? `[${this.prefix}]` : "";
-    
-    const trace = getTraceContext();
-    const requestId = trace.getRequestId();
-    const requestIdStr = requestId ? `[requestId=${requestId}]` : "";
-
-    const location = this.getCallerLocation();
-    const locationStr = location ? `${location.file}:${location.line}` : "";
-    
-    let formatted = `${timestamp} [${level.toUpperCase()}]${requestIdStr}${locationStr ? ` [${locationStr}]` : ""}${prefix} ${message}`;
+    let formatted = `${timestamp} [${level.toUpperCase()}]${prefix} ${message}`;
     
     if (data !== undefined) {
       if (typeof data === "object") {
@@ -166,36 +101,28 @@ class Logger {
     if (!this.shouldLog("debug")) return;
     const formatted = this.formatMessage("debug", message, data);
     console.debug(formatted);
-    if (this.enableFileLogging) {
-      this.writeToFile(formatted);
-    }
+    this.writeToFile(formatted);
   }
 
   info(message: string, data?: unknown): void {
     if (!this.shouldLog("info")) return;
     const formatted = this.formatMessage("info", message, data);
     console.log(formatted);
-    if (this.enableFileLogging) {
-      this.writeToFile(formatted);
-    }
+    this.writeToFile(formatted);
   }
 
   warn(message: string, data?: unknown): void {
     if (!this.shouldLog("warn")) return;
     const formatted = this.formatMessage("warn", message, data);
     console.warn(formatted);
-    if (this.enableFileLogging) {
-      this.writeToFile(formatted);
-    }
+    this.writeToFile(formatted);
   }
 
   error(message: string, data?: unknown): void {
     if (!this.shouldLog("error")) return;
     const formatted = this.formatMessage("error", message, data);
     console.error(formatted);
-    if (this.enableFileLogging) {
-      this.writeToFile(formatted);
-    }
+    this.writeToFile(formatted);
   }
 
   // 创建带前缀的子 logger
