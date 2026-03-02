@@ -84,15 +84,25 @@ class Logger {
         const match = line.match(/at\s+.+\s+\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
         if (match) {
           const filePath = match[1];
-          const fileName = basename(filePath);
+          const relativePath = this.getRelativePath(filePath);
           return {
-            file: fileName,
+            file: relativePath,
             line: parseInt(match[2], 10),
           };
         }
       }
     }
     return null;
+  }
+
+  private getRelativePath(fullPath: string): string {
+    const srcPath = "packages/core/src";
+    const normalizedPath = fullPath.replace(/\\/g, "/");
+    const idx = normalizedPath.indexOf(srcPath);
+    if (idx !== -1) {
+      return normalizedPath.substring(idx + srcPath.length + 1);
+    }
+    return basename(fullPath);
   }
 
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
