@@ -80,6 +80,17 @@ function getPaths() {
   };
 }
 
+function getProjectPaths() {
+  const cwd = process.cwd();
+  return {
+    projectConfig: path.join(cwd, ".tong_work"),
+    projectTongWorkConfig: path.join(cwd, ".tong_work", "tong_work.jsonc"),
+    projectEnvironments: path.join(cwd, ".tong_work", "environments"),
+    projectAuth: path.join(cwd, ".tong_work", "auth.json"),
+    projectPrompts: path.join(cwd, ".tong_work", "prompts"),
+  };
+}
+
 class ConfigPathsClass {
   get home() { return getPaths().home; }
   get config() { return getPaths().config; }
@@ -97,6 +108,17 @@ class ConfigPathsClass {
   get sessionStorage() { return getPaths().sessionStorage; }
   get messageStorage() { return getPaths().messageStorage; }
   get traces() { return getPaths().traces; }
+
+  // Project-level paths (based on current working directory)
+  get projectConfig() { return getProjectPaths().projectConfig; }
+  get projectTongWorkConfig() { return getProjectPaths().projectTongWorkConfig; }
+  get projectEnvironments() { return getProjectPaths().projectEnvironments; }
+  get projectAuth() { return getProjectPaths().projectAuth; }
+  get projectPrompts() { return getProjectPaths().projectPrompts; }
+
+  // Global paths (aliases for clarity)
+  get globalConfig() { return getPaths().config; }
+  get globalEnvironments() { return getPaths().environments; }
 }
 
 export const ConfigPaths = new ConfigPathsClass();

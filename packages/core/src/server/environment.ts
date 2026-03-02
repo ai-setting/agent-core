@@ -41,7 +41,7 @@ import { Providers_getAll, type ProviderInfo } from "../config/providers.js";
 import { Auth_getProvider } from "../config/auth.js";
 import { ModelsConfig_getAll, type ModelEntry } from "../config/models-config.js";
 import { configRegistry } from "../config/registry.js";
-import { createEnvironmentSource } from "../config/sources/environment.js";
+import { createEnvironmentSource, findEnvironmentPath } from "../config/sources/environment.js";
 import { ConfigPaths } from "../config/paths.js";
 import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
 import { SpanCollector, setSpanCollector } from "../utils/span-collector.js";
@@ -186,20 +186,24 @@ export class ServerEnvironment extends BaseEnvironment {
         
         // 加载行为规范（env rules + agent prompts）
         await this.loadBehaviorSpec();
+
+        // 获取环境目录路径（优先使用配置中的路径，否则搜索）
+        const envBasePath = config._environmentPath || (await findEnvironmentPath(config.activeEnvironment || ""))?.path;
         
+        // 使用环境目录路径，不需要再加 activeEnvironment
         this.skillsDirectory = path.join(
-          ConfigPaths.environments,
-          config.activeEnvironment,
+          envBasePath || ConfigPaths.environments,
           "skills"
         );
+        serverLogger.info(`[ServerEnvironment] skillsDirectory: ${this.skillsDirectory}`);
         await this.loadSkills();
 
         // 1.6. Set mcpservers directory and load MCP clients
         this.mcpserversDirectory = path.join(
-          ConfigPaths.environments,
-          config.activeEnvironment,
+          envBasePath || ConfigPaths.environments,
           "mcpservers"
         );
+        serverLogger.info(`[ServerEnvironment] Using environment path: ${envBasePath || ConfigPaths.environments}`);
         await this.initializeMcp(config.mcp);
 
         // 1.6.1 Initialize EventSource MCP clients
@@ -210,7 +214,10 @@ export class ServerEnvironment extends BaseEnvironment {
 
         // 1.7. Load prompts from environment config
         serverLogger.info(`[ServerEnvironment] activeEnvironment: ${config.activeEnvironment}`);
-        const loadedPrompts = await loadPromptsFromEnvironment(config.activeEnvironment);
+        const loadedPrompts = await loadPromptsFromEnvironment(
+          config.activeEnvironment || "",
+          envBasePath || ConfigPaths.environments
+        );
         serverLogger.info(`[ServerEnvironment] loadedPrompts count: ${loadedPrompts.length}`);
         
         if (loadedPrompts.length > 0) {

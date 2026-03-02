@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, rmSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -27,134 +27,168 @@ describe("Logger", () => {
   test("debug logs should NOT be written when level is info (default)", async () => {
     delete process.env.LOG_LEVEL;
     
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-info.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "info", filename: "test-info.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("This is a debug message");
     logger.info("This is an info message");
     
+    const logFile = join(tempDir, "test-info.log");
     const content = existsSync(logFile) ? readFileSync(logFile, "utf-8") : "";
     
     expect(content).not.toContain("This is a debug message");
     expect(content).toContain("This is an info message");
+    
+    setLogDirOverride(null as any);
   });
 
   test("debug logs should be written when level is debug", async () => {
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-debug.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "debug", filename: "test-debug.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("This is a debug message");
     logger.info("This is an info message");
     
+    const logFile = join(tempDir, "test-debug.log");
     const content = readFileSync(logFile, "utf-8");
     
     expect(content).toContain("This is a debug message");
     expect(content).toContain("This is an info message");
+    
+    setLogDirOverride(null as any);
   });
 
   test("debug logs with data should be written correctly", async () => {
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-debug-data.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "debug", filename: "test-debug-data.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("Debug with data", { key: "value", count: 42 });
     
+    const logFile = join(tempDir, "test-debug-data.log");
     const content = readFileSync(logFile, "utf-8");
     
     expect(content).toContain("Debug with data");
     expect(content).toContain('"key": "value"');
     expect(content).toContain('"count": 42');
+    
+    setLogDirOverride(null as any);
   });
 
   test("LOG_LEVEL=debug env variable should enable debug logs", async () => {
     process.env.LOG_LEVEL = "debug";
     
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-env-debug.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ filename: "test-env-debug.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("Debug from env");
     
+    const logFile = join(tempDir, "test-env-debug.log");
     const content = readFileSync(logFile, "utf-8");
     expect(content).toContain("Debug from env");
+    
+    setLogDirOverride(null as any);
   });
 
   test("all log levels should be written when level is debug", async () => {
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-all-levels.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "debug", filename: "test-all-levels.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("Debug message");
     logger.info("Info message");
     logger.warn("Warn message");
     logger.error("Error message");
     
+    const logFile = join(tempDir, "test-all-levels.log");
     const content = readFileSync(logFile, "utf-8");
     
     expect(content).toContain("[DEBUG]");
     expect(content).toContain("[INFO]");
     expect(content).toContain("[WARN]");
     expect(content).toContain("[ERROR]");
+    
+    setLogDirOverride(null as any);
   });
 
   test("only error logs when level is error", async () => {
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-error-only.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "error", filename: "test-error-only.log" });
-    (logger as any).logFile = logFile;
     
     logger.debug("Debug message");
     logger.info("Info message");
     logger.warn("Warn message");
     logger.error("Error message");
     
+    const logFile = join(tempDir, "test-error-only.log");
     const content = existsSync(logFile) ? readFileSync(logFile, "utf-8") : "";
     
     expect(content).not.toContain("Debug message");
     expect(content).not.toContain("Info message");
     expect(content).not.toContain("Warn message");
     expect(content).toContain("Error message");
+    
+    setLogDirOverride(null as any);
   });
 
   test("createLogger should create logger with prefix", async () => {
-    const { createLogger, Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-prefix.log");
+    const { createLogger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = createLogger("test:module", "test-prefix.log");
-    (logger as any).logFile = logFile;
     
     logger.info("Test message");
     
+    const logFile = join(tempDir, "test-prefix.log");
     const content = readFileSync(logFile, "utf-8");
     expect(content).toContain("[test:module]");
+    
+    setLogDirOverride(null as any);
   });
 
   test("log location should show module path format (module/file.ts:line)", async () => {
-    const { Logger } = await import("./logger.js");
-    const logFile = join(tempDir, "test-location.log");
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(tempDir);
     
     const logger = new Logger({ level: "debug", filename: "test-location.log" });
-    (logger as any).logFile = logFile;
     
     logger.info("Test message");
     
+    const logFile = join(tempDir, "test-location.log");
     const content = readFileSync(logFile, "utf-8");
     const locationMatch = content.match(/\[(.*?\.ts:\d+)\]/);
     expect(locationMatch).not.toBeNull();
     expect(locationMatch![1]).toContain("logger.test.ts");
+    
+    setLogDirOverride(null as any);
+  });
+
+  test("log should include requestId when trace context is set", async () => {
+    const { Logger, setLogDirOverride } = await import("./logger.js");
+    const { getTraceContext } = await import("./trace-context.js");
+    setLogDirOverride(tempDir);
+    
+    const trace = getTraceContext();
+    trace.runWithNewContext("test-request-123", undefined, () => {
+      const logger = new Logger({ level: "debug", filename: "test-requestid.log" });
+      logger.info("Test message with requestId");
+    });
+    
+    const logFile = join(tempDir, "test-requestid.log");
+    const content = readFileSync(logFile, "utf-8");
+    expect(content).toContain("requestId=test-request-123");
+    
+    setLogDirOverride(null as any);
   });
 
   test("LOG_DIR env var should override default log directory", async () => {
@@ -163,7 +197,8 @@ describe("Logger", () => {
     
     process.env.LOG_DIR = customLogDir;
     
-    const { getLogDir, DEFAULT_LOG_DIR, Logger } = await import("./logger.js");
+    const { getLogDir, DEFAULT_LOG_DIR, Logger, setLogDirOverride } = await import("./logger.js");
+    setLogDirOverride(null as any);
     
     expect(getLogDir()).toBe(customLogDir);
     expect(getLogDir()).not.toBe(DEFAULT_LOG_DIR);
