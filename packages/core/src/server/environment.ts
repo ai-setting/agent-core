@@ -500,12 +500,12 @@ export class ServerEnvironment extends BaseEnvironment {
         await this.mcpManager.disconnectAll();
       }
       
-      // 5. Update mcpservers directory for new environment
-      this.mcpserversDirectory = path.join(
-        ConfigPaths.environments,
-        envName,
-        "mcpservers"
-      );
+      // 5. Update mcpservers directory for new environment - use actual env path
+      const envInfo = await findEnvironmentPath(envName);
+      const envBasePath = envInfo?.path || ConfigPaths.environments;
+      this.mcpserversDirectory = path.join(envBasePath, "mcpservers");
+      
+      serverLogger.info(`[ServerEnvironment] switchEnvironment: using env path: ${envBasePath}`);
       
       // 6. Get new config and create new MCP manager with new directory
       const newConfig = await Config_get();
@@ -521,25 +521,14 @@ export class ServerEnvironment extends BaseEnvironment {
         }
       }
 
-      // 7.5. Update skills directory and reload skills
-      this.skillsDirectory = path.join(
-        ConfigPaths.environments,
-        envName,
-        "skills"
-      );
+      // 7.5. Update skills directory and reload skills - use actual env path
+      this.skillsDirectory = path.join(envBasePath, "skills");
       await this.loadSkills();
       
       // 7.6. Update behavior spec for new environment
       this.envName = envName;
-      this.rulesDirectory = path.join(
-        ConfigPaths.environments,
-        envName
-      );
-      this.promptsDirectory = path.join(
-        ConfigPaths.environments,
-        envName,
-        "prompts"
-      );
+      this.rulesDirectory = envBasePath;
+      this.promptsDirectory = path.join(envBasePath, "prompts");
       await this.refreshBehaviorSpec();
 
       // 8. Re-initialize LLM with new config (but skip MCP since already initialized above)
