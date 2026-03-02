@@ -114,17 +114,54 @@ async function handleInstall(args: any): Promise<void> {
   const targetParent = path.dirname(targetDir);
   await fs.mkdir(targetParent, { recursive: true });
 
-  // 6. Copy folder
+  // 6. Copy folder (filter out problematic files on Windows)
   console.log(`Copying files...`);
-  await fs.cp(sourcePath, targetDir, { recursive: true });
+  
+  // On Windows, some filenames are reserved (nul, con, prn, etc.)
+  // We need to handle this by copying manually or using a filter
+  try {
+    await fs.cp(sourcePath, targetDir, { 
+      recursive: true,
+      filter: (src) => {
+        const basename = path.basename(src).toLowerCase();
+        // Skip reserved Windows filenames
+        if (["nul", "con", "prn", "aux", "com1", "lpt1"].includes(basename)) {
+          return false;
+        }
+        // Skip .git directory
+        if (basename === ".git") {
+          return false;
+        }
+        return true;
+      }
+    });
+  } catch (error) {
+    // Fallback: copy without filter (might fail on Windows reserved names)
+    console.log(`⚠️  Some files could not be copied, trying basic copy...`);
+    await fs.cp(sourcePath, targetDir, { recursive: true });
+  }
+
+  // 7. Check for and run install.ts
+  const installScript = path.join(targetDir, "install.ts");
+  if (await pathExists(installScript)) {
+    console.log(`\n🔧 Running environment setup script...`);
+    try {
+      const { execSync } = await import("child_process");
+      execSync(`bun run "${installScript}"`, {
+        cwd: targetDir,
+        stdio: "inherit",
+      });
+      console.log(`✅ Setup script completed`);
+    } catch (error) {
+      console.warn(`⚠️  Setup script failed or was skipped: ${error}`);
+    }
+  } else {
+    console.log(`\n📝 Note: If your environment uses MCP servers with relative paths,`);
+    console.log(`   make sure the command paths are relative to the environment root.`);
+    console.log(`   Example: "mcpservers/my-mcp/server.js" instead of "src/index.js"`);
+  }
 
   console.log(`\n✅ Environment "${envName}" installed successfully!`);
-  console.log(`   Location: ${targetDir}`);
-  console.log(`\n📝 Note: If your environment uses MCP servers with relative paths,`);
-  console.log(`   make sure the command paths are relative to the environment root.`);
-  console.log(`   Example: "mcpservers/my-mcp/server.js" instead of "src/index.js"`);
-  
-  // 7. Prompt to switch
   console.log(`\nTo use this environment, run:`);
   console.log(`   tong_work env switch ${envName}`);
 }
