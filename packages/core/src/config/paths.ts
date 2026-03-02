@@ -70,6 +70,7 @@ function getPaths() {
     environments: path.join(xdg.config, _appDir, "environments"),
     modelsCache: path.join(xdg.cache, _appDir, "models.json"),
     modelStore: path.join(xdg.state, _appDir, "model.json"),
+    envStore: path.join(xdg.state, _appDir, "env.json"),
     kvStore: path.join(xdg.state, _appDir, "kv.json"),
     authStore: path.join(xdg.data, _appDir, "auth.json"),
     mcpAuthStore: path.join(xdg.data, _appDir, "mcp-auth.json"),
@@ -101,6 +102,7 @@ class ConfigPathsClass {
   get environments() { return getPaths().environments; }
   get modelsCache() { return getPaths().modelsCache; }
   get modelStore() { return getPaths().modelStore; }
+  get envStore() { return getPaths().envStore; }
   get kvStore() { return getPaths().kvStore; }
   get authStore() { return getPaths().authStore; }
   get mcpAuthStore() { return getPaths().mcpAuthStore; }
