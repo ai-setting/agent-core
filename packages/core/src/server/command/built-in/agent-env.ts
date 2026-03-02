@@ -13,6 +13,7 @@ import { Config_get, Config_reload } from "../../../config/config.js";
 import { loadEnvironmentConfig, createEnvironmentSource } from "../../../config/sources/environment.js";
 import { configRegistry } from "../../../config/registry.js";
 import { EventTypes, type EnvEvent } from "../../../core/types/event.js";
+import { getEnvironmentStore } from "../../../config/state/env-store.js";
 
 // Action types
 interface AgentEnvAction {
@@ -44,6 +45,7 @@ interface EnvironmentInfo {
   displayName: string;
   description?: string;
   isActive: boolean;
+  source: "global" | "local";  // 新增：环境来源
   configPath: string;
   createdAt?: string;
   updatedAt?: string;
@@ -102,7 +104,7 @@ export const agentEnvCommand: Command = {
 };
 
 /**
- * Handle list action - return all environments
+ * Handle list action - return all environments from global and local paths
  */
 async function handleListAction(): Promise<CommandResult> {
   try {
@@ -113,47 +115,83 @@ async function handleListAction(): Promise<CommandResult> {
     const activeEnv = config.activeEnvironment;
     console.log("[AgentEnvCommand] activeEnvironment:", activeEnv);
 
-    // Scan environments directory
-    const envsDir = ConfigPaths.environments;
     const environments: EnvironmentInfo[] = [];
+    const seenEnvs = new Set<string>();  // Track seen env IDs to avoid duplicates
 
-    try {
-      const entries = await fs.readdir(envsDir, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const envConfigPath = path.join(envsDir, entry.name, "config.jsonc");
-          try {
-            const envConfig = await loadEnvironmentConfig(entry.name);
-            const stat = await fs.stat(envConfigPath);
-            
-            environments.push({
-              id: entry.name,
-              displayName: envConfig?.environment?.displayName || entry.name,
-              description: envConfig?.environment?.description,
-              isActive: entry.name === activeEnv,
-              configPath: envConfigPath,
-              createdAt: stat.birthtime.toISOString(),
-              updatedAt: stat.mtime.toISOString(),
-            });
-          } catch {
-            // If can't read config, still list the directory
-            environments.push({
-              id: entry.name,
-              displayName: entry.name,
-              isActive: entry.name === activeEnv,
-              configPath: envConfigPath,
-            });
+    // Helper function to scan a directory
+    const scanDirectory = async (envsDir: string, source: "global" | "local") => {
+      try {
+        const entries = await fs.readdir(envsDir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          if (entry.isDirectory() && !seenEnvs.has(entry.name)) {
+            seenEnvs.add(entry.name);
+            const envConfigPath = path.join(envsDir, entry.name, "config.jsonc");
+            try {
+              const envConfig = await loadEnvironmentConfig(entry.name);
+              const stat = await fs.stat(envConfigPath);
+              
+              environments.push({
+                id: entry.name,
+                displayName: envConfig?.environment?.displayName || envConfig?.displayName || entry.name,
+                description: envConfig?.environment?.description || envConfig?.description,
+                isActive: entry.name === activeEnv,
+                source,
+                configPath: envConfigPath,
+                createdAt: stat.birthtime.toISOString(),
+                updatedAt: stat.mtime.toISOString(),
+              });
+            } catch {
+              // If can't read config, still list the directory
+              environments.push({
+                id: entry.name,
+                displayName: entry.name,
+                isActive: entry.name === activeEnv,
+                source,
+                configPath: envConfigPath,
+              });
+            }
           }
         }
+      } catch {
+        // Directory might not exist
       }
-    } catch {
-      // Directory might not exist
+    };
+
+    // Scan local environments first (project-level)
+    await scanDirectory(ConfigPaths.projectEnvironments, "local");
+    
+    // Then scan global environments
+    await scanDirectory(ConfigPaths.environments, "global");
+
+    // Get recent environments
+    const envStore = getEnvironmentStore();
+    const recent = await envStore.getRecent();
+
+    // Add isRecent flag to environments
+    const recentIds = new Set(recent.map(r => r.id));
+    for (const env of environments) {
+      (env as any).isRecent = recentIds.has(env.id);
     }
+
+    // Sort: active first, then recent, then by source (local before global), then by name
+    environments.sort((a, b) => {
+      if (a.isActive && !b.isActive) return -1;
+      if (!a.isActive && b.isActive) return 1;
+      const aIsRecent = (a as any).isRecent;
+      const bIsRecent = (b as any).isRecent;
+      if (aIsRecent && !bIsRecent) return -1;
+      if (!aIsRecent && bIsRecent) return 1;
+      if (a.source !== b.source) {
+        return a.source === "local" ? -1 : 1;
+      }
+      return a.id.localeCompare(b.id);
+    });
 
     console.log("[AgentEnvCommand] Returning list result:", { 
       envCount: environments.length, 
       activeEnv,
+      recentCount: recent.length,
       success: true 
     });
     
@@ -163,6 +201,7 @@ async function handleListAction(): Promise<CommandResult> {
       data: {
         mode: "dialog",
         environments,
+        recent,
         activeEnvironment: activeEnv,
       },
     };
@@ -189,37 +228,57 @@ async function handleSelectAction(
     };
   }
 
-  const envDir = path.join(ConfigPaths.environments, action.envName);
+  // Check if environment exists in local or global path
+  let envDir = path.join(ConfigPaths.projectEnvironments, action.envName);
+  let source: "local" | "global" = "local";
   
   try {
     await fs.access(envDir);
   } catch {
-    return {
-      success: false,
-      message: `Environment "${action.envName}" not found`,
-    };
+    // Try global path
+    envDir = path.join(ConfigPaths.environments, action.envName);
+    source = "global";
+    try {
+      await fs.access(envDir);
+    } catch {
+      return {
+        success: false,
+        message: `Environment "${action.envName}" not found`,
+      };
+    }
   }
 
   const config = await Config_get();
   const fromEnv = config.activeEnvironment || "unknown";
 
   try {
-    const globalConfigPath = path.join(ConfigPaths.config, "tong_work.jsonc");
-    let globalConfig: any = {};
+    // Update config in the corresponding location
+    const configPath = source === "local" 
+      ? ConfigPaths.projectTongWorkConfig 
+      : path.join(ConfigPaths.config, "tong_work.jsonc");
+    
+    let configData: any = {};
     
     try {
-      const content = await fs.readFile(globalConfigPath, "utf-8");
-      globalConfig = JSON.parse(content);
+      const content = await fs.readFile(configPath, "utf-8");
+      configData = JSON.parse(content);
     } catch {
+      // File doesn't exist or invalid, use empty object
     }
 
-    globalConfig.activeEnvironment = action.envName;
+    configData.activeEnvironment = action.envName;
     
     await fs.writeFile(
-      globalConfigPath,
-      JSON.stringify(globalConfig, null, 2),
+      configPath,
+      JSON.stringify(configData, null, 2),
       "utf-8"
     );
+
+    console.log(`[AgentEnvCommand] Updated ${source} config at ${configPath}`);
+
+    // Add to recent environments
+    const envStore = getEnvironmentStore();
+    await envStore.addRecent(action.envName, source);
 
     if (context.env && "switchEnvironment" in context.env) {
       try {

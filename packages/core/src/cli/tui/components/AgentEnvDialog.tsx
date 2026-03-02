@@ -11,6 +11,8 @@ interface EnvironmentInfo {
   displayName: string;
   description?: string;
   isActive: boolean;
+  source: "local" | "global";
+  isRecent?: boolean;
   configPath: string;
   createdAt?: string;
   updatedAt?: string;
@@ -18,6 +20,7 @@ interface EnvironmentInfo {
 
 interface AgentEnvDialogData {
   environments: EnvironmentInfo[];
+  recent?: { id: string; source: "local" | "global"; selectedAt: number }[];
   activeEnvironment?: string;
 }
 
@@ -325,7 +328,15 @@ export function AgentEnvDialog(props: AgentEnvDialogProps) {
                       ★
                     </text>
                   </Show>
-                  <Show when={!env.isActive}>
+                  <Show when={!env.isActive && env.isRecent}>
+                    <text
+                      fg={isSelected() ? theme.theme().background : "yellow"}
+                      marginRight={1}
+                    >
+                      ☆
+                    </text>
+                  </Show>
+                  <Show when={!env.isActive && !env.isRecent}>
                     <text marginRight={1}> </text>
                   </Show>
                   <text
@@ -337,7 +348,7 @@ export function AgentEnvDialog(props: AgentEnvDialogProps) {
                   <text
                     fg={isSelected() ? theme.theme().background : theme.theme().muted}
                   >
-                    {env.isActive ? "active" : env.id}
+                    {env.isActive ? "active" : env.source === "local" ? "[local]" : ""} {env.id}
                   </text>
                 </box>
               );
