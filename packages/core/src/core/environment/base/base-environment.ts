@@ -1217,7 +1217,9 @@ export abstract class BaseEnvironment implements Environment {
 
     // 动态导入 MCP 管理器
     const { McpManager } = await import("../../../env_spec/mcp/manager.js");
-    this.mcpManager = new McpManager(mcpserversDir);
+    // 传入 env 根目录用于相对路径解析
+    const envRoot = mcpserversDir ? path.dirname(mcpserversDir) : undefined;
+    this.mcpManager = new McpManager(mcpserversDir, envRoot);
 
     // 加载 MCP Clients（即使没有显式配置，也会扫描 mcpservers 目录）
     BaseEnvironment.baseLogger.info("[BaseEnvironment] Loading MCP clients", { clients: mcpConfig?.clients || {} });

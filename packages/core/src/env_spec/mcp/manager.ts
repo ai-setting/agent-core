@@ -36,9 +36,11 @@ export class McpManager {
   private tools: Map<string, ToolInfo> = new Map()
   private status: Map<string, McpClientStatus> = new Map()
   private mcpserversDir?: string
+  private envRoot?: string  // Environment root directory for path resolution
 
-  constructor(mcpserversDir?: string) {
+  constructor(mcpserversDir?: string, envRoot?: string) {
     this.mcpserversDir = mcpserversDir
+    this.envRoot = envRoot
   }
 
   // ========== MCP Client 方法 ==========
@@ -221,11 +223,36 @@ export class McpManager {
   }
 
   /**
+   * 解析 command 中的相对路径
+   * 将相对于 PROJECT_ROOT 的路径转换为绝对路径
+   */
+  private resolveCommandPath(command: string[]): string[] {
+    if (!this.envRoot) {
+      return command;
+    }
+
+    return command.map((arg) => {
+      // 检查是否是相对路径（以 ./ 或 ../ 开头，或者是相对路径）
+      if (this.envRoot && (arg.startsWith("./") || arg.startsWith("../") || 
+          (!arg.startsWith("/") && !arg.match(/^[a-zA-Z]:/)))) {
+        // 转换为绝对路径
+        return path.resolve(this.envRoot, arg);
+      }
+      return arg;
+    });
+  }
+
+  /**
    * 创建传输层
    */
   private createTransport(config: McpClientConfig, cwd?: string): StdioClientTransport | StreamableHTTPClientTransport {
     if (config.type === "local") {
-      const [cmd, ...args] = config.command!
+      // 解析 command 中的相对路径
+      const resolvedCommand = this.resolveCommandPath(config.command!);
+      const [cmd, ...args] = resolvedCommand;
+      if (!cmd) {
+        throw new Error("MCP command is empty");
+      }
       const env: Record<string, string> = {}
       for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined) {
