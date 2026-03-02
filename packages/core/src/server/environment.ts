@@ -134,12 +134,7 @@ export class ServerEnvironment extends BaseEnvironment {
 
       // 1. Load config file first (this loads auth.json into env vars)
       const rawConfig = await Config_get();
-      
-      // Get environment root path for variable resolution
-      const envRootPath = rawConfig._environmentPath || 
-        (await findEnvironmentPath(rawConfig.activeEnvironment || ""))?.path;
-      
-      const config = await resolveConfig(rawConfig, envRootPath);
+      const config = await resolveConfig(rawConfig);
 
       // Apply logging configuration
       const { setLogDirOverride } = await import("../utils/logger.js");
@@ -538,7 +533,7 @@ export class ServerEnvironment extends BaseEnvironment {
 
       // 8. Re-initialize LLM with new config (but skip MCP since already initialized above)
       const rawConfig = await Config_get();
-      const config = await resolveConfig(rawConfig, envBasePath);
+      const config = await resolveConfig(rawConfig);
       await this.modelStore.load();
       const recent = await this.modelStore.getRecent();
       const providers = await Providers_getAll();

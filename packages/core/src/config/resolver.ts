@@ -7,42 +7,22 @@
  * Supported variables:
  * - ${auth:provider-name} -> Resolve from auth.json
  * - ${ENV_VAR} -> Resolve from environment variables
- * - ${PROJECT_ROOT} -> Environment root directory
- * - ${HOME} -> User home directory
  */
 
 import type { Config } from "./types.js";
 import { Auth_getProvider } from "./auth.js";
-import path from "path";
-import os from "os";
 
 // Variable reference pattern: ${auth:provider-name} or ${ENV_VAR}
 const VAR_PATTERN = /\$\{([^}]+)\}/g;
-
-interface ResolveOptions {
-  projectRoot?: string;  // Environment root directory
-}
 
 /**
  * Resolve a single variable reference
  * Supported formats:
  * - ${auth:provider-name} -> Resolve from auth.json
  * - ${ENV_VAR} -> Resolve from environment variables
- * - ${PROJECT_ROOT} -> Environment root directory
- * - ${HOME} -> User home directory
  */
-async function resolveVariable(ref: string, options?: ResolveOptions): Promise<string | undefined> {
+async function resolveVariable(ref: string): Promise<string | undefined> {
   const trimmed = ref.trim();
-
-  // PROJECT_ROOT: Environment root directory
-  if (trimmed === "PROJECT_ROOT") {
-    return options?.projectRoot;
-  }
-
-  // HOME: User home directory
-  if (trimmed === "HOME") {
-    return os.homedir();
-  }
 
   // Auth reference: ${auth:provider-name}
   if (trimmed.startsWith("auth:")) {
@@ -68,7 +48,7 @@ async function resolveVariable(ref: string, options?: ResolveOptions): Promise<s
 /**
  * Resolve all variable references in a string value
  */
-export async function resolveValue(value: string, options?: ResolveOptions): Promise<string> {
+export async function resolveValue(value: string): Promise<string> {
   if (!value.includes("${")) {
     return value;
   }
@@ -85,7 +65,7 @@ export async function resolveValue(value: string, options?: ResolveOptions): Pro
   // Resolve each reference
   let result = value;
   for (const { full, ref } of matches) {
-    const resolved = await resolveVariable(ref, options);
+    const resolved = await resolveVariable(ref);
     if (resolved !== undefined) {
       result = result.replace(full, resolved);
     }
@@ -97,25 +77,25 @@ export async function resolveValue(value: string, options?: ResolveOptions): Pro
 /**
  * Recursively resolve all variable references in an object
  */
-export async function resolveObject<T extends Record<string, unknown>>(obj: T, options?: ResolveOptions): Promise<T> {
+export async function resolveObject<T extends Record<string, unknown>>(obj: T): Promise<T> {
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === "string") {
-      result[key] = await resolveValue(value, options);
+      result[key] = await resolveValue(value);
     } else if (Array.isArray(value)) {
       result[key] = await Promise.all(
         value.map(async (item) => {
           if (typeof item === "string") {
-            return await resolveValue(item, options);
+            return await resolveValue(item);
           } else if (typeof item === "object" && item !== null) {
-            return await resolveObject(item as Record<string, unknown>, options);
+            return await resolveObject(item as Record<string, unknown>);
           }
           return item;
         })
       );
     } else if (typeof value === "object" && value !== null) {
-      result[key] = await resolveObject(value as Record<string, unknown>, options);
+      result[key] = await resolveObject(value as Record<string, unknown>);
     } else {
       result[key] = value;
     }
@@ -127,29 +107,26 @@ export async function resolveObject<T extends Record<string, unknown>>(obj: T, o
 /**
  * Resolve variable references in Config.Info
  * Specifically handles apiKey, baseURL, and providers configurations
- * 
- * @param projectRoot - Environment root directory for ${PROJECT_ROOT} resolution
  */
-export async function resolveConfig(config: Config.Info, projectRoot?: string): Promise<Config.Info> {
-  const options: ResolveOptions = { projectRoot };
+export async function resolveConfig(config: Config.Info): Promise<Config.Info> {
   const resolved = { ...config };
 
   // Resolve top-level apiKey and baseURL
   if (resolved.apiKey) {
-    resolved.apiKey = await resolveValue(resolved.apiKey, options);
+    resolved.apiKey = await resolveValue(resolved.apiKey);
   }
   if (resolved.baseURL) {
-    resolved.baseURL = await resolveValue(resolved.baseURL, options);
+    resolved.baseURL = await resolveValue(resolved.baseURL);
   }
 
   // Resolve providers configurations (providers.jsonc)
   if (resolved.providers) {
     for (const [name, provider] of Object.entries(resolved.providers)) {
       if (provider.apiKey) {
-        provider.apiKey = await resolveValue(provider.apiKey, options);
+        provider.apiKey = await resolveValue(provider.apiKey);
       }
       if (provider.baseURL) {
-        provider.baseURL = await resolveValue(provider.baseURL, options);
+        provider.baseURL = await resolveValue(provider.baseURL);
       }
     }
   }
