@@ -7,7 +7,7 @@
 import { AgentServer } from "./server.js";
 import { ServerEnvironment } from "./environment.js";
 import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
-import { getLogDir } from "../utils/logger.js";
+import { getLogDir, setLogDirOverride } from "../utils/logger.js";
 import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
 import { connectCommand } from "./command/built-in/connect.js";
@@ -61,6 +61,11 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
   try {
     const rawConfig = await Config_get();
     const config = await resolveConfig(rawConfig);
+    
+    // 应用 logging 配置
+    if (config.logging?.path) {
+      setLogDirOverride(config.logging.path);
+    }
     
     if (!model && config.defaultModel) model = config.defaultModel;
     if (!apiKey && config.apiKey) apiKey = config.apiKey;

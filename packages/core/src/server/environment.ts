@@ -127,7 +127,7 @@ export class ServerEnvironment extends BaseEnvironment {
    * Load configuration from config files and initialize LLM
    * Supports fallback chain: current > config > recent > provider default
    * Can be called multiple times to reload configuration (e.g., after environment switch)
-   */
+    */
   async loadFromConfig(): Promise<void> {
     try {
       serverLogger.info("[ServerEnvironment] Loading configuration...");
@@ -135,6 +135,13 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1. Load config file first (this loads auth.json into env vars)
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
+
+      // Apply logging configuration
+      const { setLogDirOverride } = await import("../utils/logger.js");
+      if (config.logging?.path) {
+        setLogDirOverride(config.logging.path);
+        serverLogger.info(`[ServerEnvironment] Logging path set to: ${config.logging.path}`);
+      }
 
       // 0. Initialize ProviderManager for AI SDK integration (AFTER auth is loaded)
       const { providerManager } = await import("../llm/provider-manager.js");
