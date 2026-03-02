@@ -37,10 +37,7 @@ export class EventHandlerAgent {
   ) {}
 
   async handle<T>(event: EnvEvent<T>): Promise<void> {
-    eventHandlerLogger.debug(`[EventHandler] Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
-    
-    // Resolve prompt with event data (support {{payload.xxx}} template)
-    const resolvedPrompt = this.resolveTemplate(this.prompt, event);
+    eventHandlerLogger.info(`Handling event: type=${event.type}, id=${event.id}, trigger_session_id=${event.metadata.trigger_session_id}`);
     
     let sessionId = event.metadata.trigger_session_id;
     
@@ -50,7 +47,7 @@ export class EventHandlerAgent {
       if (clientId && this.env.getActiveSessionManager) {
         sessionId = this.env.getActiveSessionManager().getActiveSession(clientId);
         if (sessionId) {
-          eventHandlerLogger.debug(`Using active session from clientId ${clientId}: ${sessionId}`);
+          eventHandlerLogger.info(`Using active session from clientId ${clientId}: ${sessionId}`);
         }
       }
     }
@@ -60,28 +57,25 @@ export class EventHandlerAgent {
       return;
     }
 
-    eventHandlerLogger.debug(`[EventHandler] Using session: ${sessionId}`);
-    
     const session = await this.env.getSession?.(sessionId);
     if (!session) {
       eventHandlerLogger.warn(`Session not found: ${sessionId}`);
       return;
     }
 
-    eventHandlerLogger.debug(`[EventHandler] Session found, constructing messages for event ${event.type}`);
     const messages = this.constructMessages(event);
-    eventHandlerLogger.debug(`[EventHandler] Constructed ${messages.length} messages for event ${event.id}`);
+    eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
 
     for (const msg of messages) {
       const msgStr = JSON.stringify(msg).substring(0, 200);
-      eventHandlerLogger.debug(`[EventHandler] Adding message to session: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
+      eventHandlerLogger.info(`Adding message: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
       if ((msg as any).role === "assistant" && Array.isArray((msg as any).content)) {
         const toolCalls = (msg as any).content.filter((p: any) => p.type === "tool-call");
-        eventHandlerLogger.debug(`[EventHandler]   assistant message has ${toolCalls.length} tool-calls: ${JSON.stringify(toolCalls.map((t: any) => t.toolCallId))}`);
+        eventHandlerLogger.info(`  assistant message has ${toolCalls.length} tool-calls`);
       }
       if ((msg as any).role === "tool" && Array.isArray((msg as any).content)) {
         const toolResults = (msg as any).content.filter((p: any) => p.type === "tool-result");
-        eventHandlerLogger.debug(`[EventHandler]   tool message has ${toolResults.length} tool-results`);
+        eventHandlerLogger.info(`  tool message has ${toolResults.length} tool-results`);
       }
       
       const modelMessage: ModelMessage = msg as any;
@@ -89,11 +83,10 @@ export class EventHandlerAgent {
     }
 
     const history = session.toHistory();
-    eventHandlerLogger.debug(`[EventHandler] toHistory returned ${history.length} messages`);
-    eventHandlerLogger.debug(`[EventHandler] Now calling handle_query for session ${sessionId}`);
+    eventHandlerLogger.info(`toHistory returned ${history.length} messages`);
     
     await this.env.handle_query(
-      resolvedPrompt,
+      `Process event: ${event.type}`,
       {
         session_id: sessionId,
         onMessageAdded: (message: ModelMessage) => {
@@ -103,17 +96,6 @@ export class EventHandlerAgent {
       },
       history
     );
-  }
-
-  private resolveTemplate<T>(template: string, event: EnvEvent<T>): string {
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-      const keys = path.trim().split(".");
-      let value: any = event;
-      for (const key of keys) {
-        value = value?.[key];
-      }
-      return value !== undefined ? String(value) : match;
-    });
   }
 
   private constructMessages<T>(event: EnvEvent<T>): HistoryMessageWithTool[] {
