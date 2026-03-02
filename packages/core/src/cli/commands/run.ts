@@ -116,7 +116,7 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
       
-      // Apply logging configuration
+      // 应用 logging 配置
       if (config.logging?.path) {
         setLogDirOverride(config.logging.path);
         console.log(`📝 日志目录: ${config.logging.path}`);
