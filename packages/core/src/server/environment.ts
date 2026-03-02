@@ -209,7 +209,7 @@ export class ServerEnvironment extends BaseEnvironment {
         // 1.6.1 Initialize EventSource MCP clients
         this.eventSourceConfig = (config.mcp as any)?.eventSources;
         if (this.eventSourceConfig?.enabled) {
-          await this.initEventSources(config.mcp?.clients);
+          await this.initEventSources(config.mcp?.clients, envBasePath);
         }
 
         // 1.7. Load prompts from environment config
@@ -760,7 +760,7 @@ export class ServerEnvironment extends BaseEnvironment {
   /**
    * 初始化 EventSource MCP Clients
    */
-  private async initEventSources(mcpClientsConfig?: Record<string, any>): Promise<void> {
+  private async initEventSources(mcpClientsConfig?: Record<string, any>, envRoot?: string): Promise<void> {
     if (!mcpClientsConfig) {
       serverLogger.info("[ServerEnvironment] No MCP clients config for EventSources");
       return;
@@ -770,6 +770,9 @@ export class ServerEnvironment extends BaseEnvironment {
       serverLogger.warn("[ServerEnvironment] EventMcpManager not initialized");
       return;
     }
+
+    // Set envRoot for path resolution
+    (this.eventMcpManager as any).envRoot = envRoot;
 
     try {
       await this.eventMcpManager.loadClients(
@@ -812,7 +815,7 @@ export class ServerEnvironment extends BaseEnvironment {
    */
   async addEventSource(name: string, config: any): Promise<void> {
     if (!this.eventMcpManager) {
-      this.eventMcpManager = new EventMcpManager(this);
+      this.eventMcpManager = new EventMcpManager(this, this.mcpserversDirectory ? path.dirname(this.mcpserversDirectory) : undefined);
     }
     await this.eventMcpManager.loadClients({ [name]: config }, {
       [name]: { name, client: config, enabled: true }

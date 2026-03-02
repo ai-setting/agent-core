@@ -180,6 +180,18 @@ export class McpManager {
       // 创建传输层并连接
       const transport = this.createTransport(config, cwd)
       serverLogger.debug(`[MCP] Transport created for ${name}`)
+
+      // 设置 stderr 监听器来捕获错误
+      if (config.type === "local" && (transport as any).stderr) {
+        const stdioTransport = transport as StdioClientTransport;
+        stdioTransport.stderr?.on("data", (data: Buffer) => {
+          const str = data.toString();
+          serverLogger.info(`[MCP:${name}] stderr: ${str.substring(0, 500)}`);
+        });
+        stdioTransport.stderr?.on("end", () => {
+          serverLogger.info(`[MCP:${name}] stderr stream ended`);
+        });
+      }
       
       const client = new Client({ name: "agent-core", version: "1.0.0" })
       serverLogger.debug(`[MCP] Connecting client for ${name}...`)
@@ -224,19 +236,27 @@ export class McpManager {
 
   /**
    * 解析 command 中的相对路径
-   * 将相对于 PROJECT_ROOT 的路径转换为绝对路径
+   * 将相对于 envRoot 的路径转换为绝对路径
+   * 只解析看起来像文件路径的参数（如 ./xxx, ../xxx, xxx.js 等）
    */
   private resolveCommandPath(command: string[]): string[] {
     if (!this.envRoot) {
+      serverLogger.info(`[MCP] resolveCommandPath: envRoot is undefined, skipping`);
       return command;
     }
 
+    serverLogger.info(`[MCP] resolveCommandPath: envRoot=${this.envRoot}`);
+
+    const envRoot = this.envRoot;
     return command.map((arg) => {
-      // 检查是否是相对路径（以 ./ 或 ../ 开头，或者是相对路径）
-      if (this.envRoot && (arg.startsWith("./") || arg.startsWith("../") || 
-          (!arg.startsWith("/") && !arg.match(/^[a-zA-Z]:/)))) {
+      // 只解析以 ./ ../ 开头，或者包含路径分隔符 / \ 的参数
+      // 不解析纯命令名如 bun, node, npm 等
+      if (arg.startsWith("./") || arg.startsWith("../") || 
+          arg.includes("/") || arg.includes("\\")) {
         // 转换为绝对路径
-        return path.resolve(this.envRoot, arg);
+        const resolved = path.resolve(envRoot, arg);
+        serverLogger.info(`[MCP] Resolved path: ${arg} -> ${resolved}`);
+        return resolved;
       }
       return arg;
     });

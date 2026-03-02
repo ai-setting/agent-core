@@ -10,6 +10,7 @@
  * 3. 直接调用 env.publishEvent() 发布到 EnvEventBus
  */
 
+import path from "path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -32,17 +33,38 @@ export class EventMcpClient {
   private pollInterval?: ReturnType<typeof setInterval>;
   private eventCount = 0;
   private trace = getTraceContext();
+  private envRoot?: string;
 
   constructor(
     env: ServerEnvironment,
     name: string,
     config: McpClientConfig,
-    options?: EventSourceOptions
+    options?: EventSourceOptions,
+    envRoot?: string
   ) {
     this.env = env;
     this.name = name;
     this.config = config;
     this.options = options;
+    this.envRoot = envRoot;
+  }
+
+  /**
+   * 解析 command 中的相对路径
+   */
+  private resolveCommandPath(command: string[]): string[] {
+    if (!this.envRoot) {
+      return command;
+    }
+
+    const envRoot = this.envRoot;
+    return command.map((arg) => {
+      if (arg.startsWith("./") || arg.startsWith("../") || 
+          arg.includes("/") || arg.includes("\\")) {
+        return path.resolve(envRoot, arg);
+      }
+      return arg;
+    });
   }
 
   /**
@@ -97,7 +119,8 @@ export class EventMcpClient {
    */
   private createTransport(): StdioClientTransport | StreamableHTTPClientTransport {
     if (this.config.type === "local") {
-      const [cmd, ...args] = this.config.command!;
+      const resolvedCommand = this.resolveCommandPath(this.config.command!);
+      const [cmd, ...args] = resolvedCommand;
       const transport = new StdioClientTransport({
         command: cmd,
         args,

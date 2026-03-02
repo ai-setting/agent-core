@@ -33,9 +33,11 @@ export class EventMcpManager {
   private clients: Map<string, EventMcpClient> = new Map();
   private status: Map<string, EventSourceStatus> = new Map();
   private tools: Map<string, ToolInfo> = new Map();
+  private envRoot?: string;
 
-  constructor(env: ServerEnvironment) {
+  constructor(env: ServerEnvironment, envRoot?: string) {
     this.env = env;
+    this.envRoot = envRoot;
   }
 
   /**
@@ -76,7 +78,7 @@ export class EventMcpManager {
       }
 
       try {
-        const client = new EventMcpClient(this.env, name, clientConfig, config.options);
+        const client = new EventMcpClient(this.env, name, clientConfig, config.options, this.envRoot);
         await client.connect();
         
         this.clients.set(name, client);

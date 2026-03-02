@@ -52,7 +52,7 @@ export class McpServerLoader {
 
         const serverDir = path.join(this.mcpserversDir, entry.name)
 
-        // 查找入口脚本 (server.mjs, server.ts, index.mjs, index.ts)
+        // 查找入口脚本
         const entryPath = await this.findEntryScript(serverDir)
         if (!entryPath) continue
 
@@ -78,8 +78,8 @@ export class McpServerLoader {
    */
   private async findEntryScript(serverDir: string): Promise<string | null> {
     const candidates = [
-      "server.mjs", "server.ts", "index.mjs", "index.ts", "index.js",
-      "src/server.mjs", "src/server.ts", "src/index.mjs", "src/index.ts", "src/index.js"
+      "server.mjs", "server.ts", "server.js", "index.mjs", "index.ts", "index.js",
+      "src/server.mjs", "src/server.ts", "src/server.js", "src/index.mjs", "src/index.ts", "src/index.js"
     ]
 
     for (const candidate of candidates) {
