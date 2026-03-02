@@ -5,7 +5,7 @@
  */
 
 import { render } from "@opentui/solid";
-import { App } from "./components/index.js";
+import { App, getRenderer } from "./components/index.js";
 import { StoreProvider, ThemeProvider, MarkdownStyleProvider, EventStreamProvider, CommandProvider, DialogProvider } from "./contexts/index.js";
 
 export interface TUIOptions {
@@ -37,6 +37,15 @@ export async function startTUI(options: TUIOptions): Promise<void> {
     console.log = originalConsoleLog;
     console.debug = originalConsoleDebug;
     console.warn = originalConsoleWarn;
+
+    // 调用 renderer.destroy() 清理终端状态
+    try {
+      const renderer = getRenderer();
+      if (renderer?.destroy) {
+        renderer.destroy();
+      }
+    } catch {}
+
     await options.onExit?.();
     process.exit(0);
   };

@@ -4,7 +4,8 @@
  * TUI 应用的主入口，组合所有子组件
  */
 
-import { onMount } from "solid-js";
+import { onMount, createSignal, createContext, useContext, type Accessor, type Setter } from "solid-js";
+import { useRenderer } from "@opentui/solid";
 import { Header } from "./Header.js";
 import { MessageList } from "./MessageList.js";
 import { InputBox } from "./InputBox.js";
@@ -15,6 +16,18 @@ import { tuiLogger } from "../logger.js";
 interface AppProps {
   sessionId?: string;
   onExit?: () => void;
+}
+
+const [rendererInstance, setRendererInstance] = createSignal<ReturnType<typeof useRenderer> | null>(null);
+
+function RendererCapture() {
+  const renderer = useRenderer();
+  setRendererInstance(renderer);
+  return null;
+}
+
+export function getRenderer() {
+  return rendererInstance();
 }
 
 export function App(props: AppProps) {
@@ -39,14 +52,17 @@ export function App(props: AppProps) {
   });
 
   return (
-    <box flexDirection="column" width="100%" height="100%">
-      <Header />
-      <box flexGrow={1} minHeight={0} overflow="hidden">
-        <MessageList />
+    <>
+      <RendererCapture />
+      <box flexDirection="column" width="100%" height="100%">
+        <Header />
+        <box flexGrow={1} minHeight={0} overflow="hidden">
+          <MessageList />
+        </box>
+        <InputBox onExit={props.onExit} />
+        {/* Dialog 栈渲染 */}
+        <DialogStack />
       </box>
-      <InputBox onExit={props.onExit} />
-      {/* Dialog 栈渲染 */}
-      <DialogStack />
-    </box>
+    </>
   );
 }
