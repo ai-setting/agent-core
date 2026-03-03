@@ -1,6 +1,7 @@
 export * from "./paths.js";
 export * from "./source.js";
 export * from "./types.js";
+export type { SandboxConfig } from "./types.js";
 export { loadConfig } from "./loader.js";
 export { initDefaultSources, initWithEnvOverrides } from "./default-sources.js";
 export { configRegistry } from "./registry.js";

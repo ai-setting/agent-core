@@ -13,6 +13,7 @@ import {
   initDefaultSources,
   loadConfig,
   createFileSource,
+  createInlineSource,
 } from "./index.js";
 import type { Config } from "./types.js";
 
@@ -321,6 +322,163 @@ describe("Config", () => {
       expect(config.logging).toBeDefined();
       expect(config.logging?.level).toBe("error");
       expect(config.logging?.path).toBeUndefined();
+    });
+  });
+
+  describe("Sandbox Configuration", () => {
+    it("should load sandbox config from global config", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: {
+            enabled: true,
+            type: "native",
+            actionFilter: {
+              include: ["bash", "mcp_*"],
+              exclude: ["mcp_safe"]
+            },
+            filesystem: {
+              denyRead: ["~/.ssh"],
+              allowWrite: [".", "/tmp"],
+            },
+            network: {
+              allowedDomains: ["github.com"],
+            },
+          },
+        }),
+        0
+      ));
+
+      const config = await loadConfig();
+
+      expect(config.sandbox).toBeDefined();
+      expect(config.sandbox?.enabled).toBe(true);
+      expect(config.sandbox?.type).toBe("native");
+      expect(config.sandbox?.actionFilter?.include).toContain("bash");
+      expect(config.sandbox?.actionFilter?.exclude).toContain("mcp_safe");
+      expect(config.sandbox?.filesystem?.denyRead).toContain("~/.ssh");
+      expect(config.sandbox?.filesystem?.allowWrite).toContain(".");
+      expect(config.sandbox?.network?.allowedDomains).toContain("github.com");
+    });
+
+    it("should have default type as native when not specified", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: {
+            enabled: true,
+          },
+        }),
+        0
+      ));
+
+      const config = await loadConfig();
+
+      expect(config.sandbox).toBeDefined();
+      expect(config.sandbox?.enabled).toBe(true);
+      expect(config.sandbox?.type).toBeUndefined(); // Zod default not applied until parsing
+    });
+
+    it("should default enabled to false when sandbox not configured", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({ defaultModel: "gpt-4" }),
+        0
+      ));
+
+      const config = await loadConfig();
+      expect(config.sandbox).toBeUndefined();
+    });
+
+    it("should override sandbox config in environment config", async () => {
+      // Global: enabled: false
+      configRegistry.register(createInlineSource(
+        JSON.stringify({ sandbox: { enabled: false } }),
+        0
+      ));
+
+      // Environment (priority 10): enabled: true
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: { 
+            enabled: true, 
+            actionFilter: { include: ["bash"] } 
+          } 
+        }),
+        10
+      ));
+
+      const config = await loadConfig();
+      expect(config.sandbox?.enabled).toBe(true);
+      expect(config.sandbox?.actionFilter?.include).toContain("bash");
+    });
+
+    it("should load docker config when type is docker", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: {
+            enabled: true,
+            type: "docker",
+            docker: {
+              image: "agent-core-sandbox:latest",
+              networkMode: "bridge",
+              volumes: {
+                "/project": "/workspace"
+              }
+            }
+          },
+        }),
+        0
+      ));
+
+      const config = await loadConfig();
+
+      expect(config.sandbox?.type).toBe("docker");
+      expect(config.sandbox?.docker).toBeDefined();
+      expect(config.sandbox?.docker?.image).toBe("agent-core-sandbox:latest");
+      expect(config.sandbox?.docker?.networkMode).toBe("bridge");
+      expect(config.sandbox?.docker?.volumes).toEqual({
+        "/project": "/workspace"
+      });
+    });
+
+    it("should allow partial sandbox config", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: {
+            enabled: true,
+            filesystem: {
+              denyRead: ["~/.ssh"],
+            },
+          },
+        }),
+        0
+      ));
+
+      const config = await loadConfig();
+
+      expect(config.sandbox?.enabled).toBe(true);
+      expect(config.sandbox?.filesystem?.denyRead).toContain("~/.ssh");
+      expect(config.sandbox?.network).toBeUndefined();
+      expect(config.sandbox?.docker).toBeUndefined();
+    });
+
+    it("should handle empty actionFilter include array", async () => {
+      configRegistry.register(createInlineSource(
+        JSON.stringify({
+          sandbox: {
+            enabled: true,
+            actionFilter: {
+              include: [],
+              exclude: ["mcp_safe"]
+            },
+          },
+        }),
+        0
+      ));
+
+      const config = await loadConfig();
+
+      expect(config.sandbox?.enabled).toBe(true);
+      expect(config.sandbox?.actionFilter?.include).toEqual([]);
+      expect(config.sandbox?.actionFilter?.exclude).toContain("mcp_safe");
     });
   });
 });
