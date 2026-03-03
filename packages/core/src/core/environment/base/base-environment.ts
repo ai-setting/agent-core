@@ -51,6 +51,8 @@ import { Session } from "../../session/index.js";
 import { sessionAbortManager } from "../../session/abort-manager.js";
 import type { SessionCreateOptions } from "../../session/types.js";
 import { withEventHook, withEventHookVoid } from "./with-event-hook.js";
+import { SandboxProviderFactory } from "../../sandbox/sandbox-factory.js";
+import type { ISandboxProvider, SandboxConfig } from "../../sandbox/types.js";
 
 /** Session lifecycle events for subscribers */
 export type SessionEvent =
@@ -115,6 +117,9 @@ export abstract class BaseEnvironment implements Environment {
   protected envRules: string | null = null;
   protected agentPrompts: Map<string, string> = new Map();
   protected agentSpecs: Map<string, EnvironmentAgentSpec> = new Map();
+
+  protected sandboxConfig: SandboxConfig | undefined = undefined;
+  protected sandboxProvider: ISandboxProvider | null = null;
 
   constructor(config?: BaseEnvironmentConfig) {
     this.timeoutManager = config?.timeoutManager ?? TimeoutManager.default();
@@ -900,6 +905,24 @@ export abstract class BaseEnvironment implements Environment {
     });
   }
 
+  protected setSandboxConfig(config: SandboxConfig | undefined): void {
+    this.sandboxConfig = config;
+  }
+
+  protected async getSandboxProvider(): Promise<ISandboxProvider | null> {
+    if (!this.sandboxConfig?.enabled) {
+      return null;
+    }
+
+    if (!this.sandboxProvider) {
+      const type = this.sandboxConfig.type ?? "native";
+      this.sandboxProvider = SandboxProviderFactory.create(type);
+      await this.sandboxProvider.initialize(this.sandboxConfig);
+    }
+
+    return this.sandboxProvider;
+  }
+
   private toToolContext(context: Context): ToolContext {
     return {
       workdir: context.workdir,
@@ -911,6 +934,8 @@ export abstract class BaseEnvironment implements Environment {
         session_id: context.session_id,
         message_id: context.message_id,
       },
+      sandbox: this.sandboxConfig,
+      sandboxProvider: this.sandboxProvider,
     };
   }
 

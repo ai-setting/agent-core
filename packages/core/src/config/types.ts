@@ -60,6 +60,44 @@ export const AuthConfig = z.record(AuthProviderConfig).describe(
   "Authentication configurations for providers, keyed by provider name"
 );
 
+// ========== Sandbox 配置 ==========
+
+// 沙箱文件系统配置
+const SandboxFilesystemConfig = z.object({
+  denyRead: z.array(z.string()).optional().describe("Paths denied for reading (e.g., '~/.ssh', '~/.aws')"),
+  allowWrite: z.array(z.string()).optional().describe("Paths allowed for writing (e.g., '.', '/tmp')"),
+  denyWrite: z.array(z.string()).optional().describe("Paths denied for writing (e.g., '.env', '~/.aws')"),
+}).describe("Filesystem restrictions for sandbox");
+
+// 沙箱网络配置
+const SandboxNetworkConfig = z.object({
+  allowedDomains: z.array(z.string()).optional().describe("Allowed domain patterns (e.g., 'github.com', '*.npmjs.org')"),
+  deniedDomains: z.array(z.string()).optional().describe("Denied domain patterns"),
+}).describe("Network restrictions for sandbox");
+
+// Docker 沙箱配置（未来支持）
+const SandboxDockerConfig = z.object({
+  image: z.string().optional().describe("Docker image to use"),
+  networkMode: z.enum(["bridge", "host", "none"]).optional().describe("Docker network mode"),
+  volumes: z.record(z.string(), z.string()).optional().describe("Volume mappings"),
+}).describe("Docker-specific configuration (when sandbox type is 'docker')");
+
+// 沙箱动作过滤配置
+const SandboxActionFilterConfig = z.object({
+  include: z.array(z.string()).optional().describe("Action names to include in sandbox (e.g., ['bash', 'mcp_*'])"),
+  exclude: z.array(z.string()).optional().describe("Action names to exclude from sandbox"),
+}).describe("Filter which actions to sandbox by action name patterns");
+
+// 沙箱配置
+export const SandboxConfig = z.object({
+  enabled: z.boolean().optional().default(false).describe("Enable sandbox for this environment"),
+  type: z.enum(["native", "docker"]).default("native").describe("Sandbox type: 'native' uses OS-level sandboxing, 'docker' uses Docker containers"),
+  actionFilter: SandboxActionFilterConfig.optional().describe("Filter which actions to sandbox"),
+  filesystem: SandboxFilesystemConfig.optional().describe("Filesystem restrictions"),
+  network: SandboxNetworkConfig.optional().describe("Network restrictions"),
+  docker: SandboxDockerConfig.optional().describe("Docker-specific configuration (when type is 'docker')"),
+}).describe("Sandbox configuration for isolating tool execution");
+
 // Session 持久化配置
 const SessionPersistenceConfig = z.object({
   mode: z.enum(["memory", "file", "sqlite"]).default("sqlite").describe("Session storage mode: 'memory' for in-memory only, 'file' for persistent file storage, 'sqlite' for SQLite database (default)"),
@@ -157,6 +195,9 @@ export const ConfigInfo = z.object({
     ).optional().describe("MCP Clients configuration"),
   }).optional().describe("MCP configuration (Server and Clients)"),
   
+  // === Sandbox 配置 ===
+  sandbox: SandboxConfig.optional().describe("Sandbox configuration for isolating tool execution"),
+  
   // === 其他配置（预留扩展）===
   metadata: z.record(z.unknown()).optional().describe("Additional metadata"),
   
@@ -167,4 +208,5 @@ export const ConfigInfo = z.object({
 export namespace Config {
   export type Info = z.infer<typeof ConfigInfo>;
   export type Auth = z.infer<typeof AuthConfig>;
+  export type SandboxConfig = z.infer<typeof SandboxConfig>;
 }
