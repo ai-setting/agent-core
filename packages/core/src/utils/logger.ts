@@ -143,7 +143,8 @@ class Logger {
     
     if (data !== undefined) {
       if (typeof data === "object") {
-        formatted += " " + JSON.stringify(data, null, 2);
+        // 使用单行 JSON 格式，避免换行
+        formatted += " " + JSON.stringify(data).replace(/\n/g, "");
       } else {
         formatted += " " + String(data);
       }

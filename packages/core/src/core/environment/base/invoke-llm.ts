@@ -351,9 +351,15 @@ export async function invokeLLM(
             name: streamPart.toolName,
             args: toolInput,
           });
+          // 截断过长参数，保留前 300 字符
+          const toolArgsStr = JSON.stringify(toolInput);
+          const truncatedToolArgs = toolArgsStr.length > 300 
+            ? toolArgsStr.substring(0, 300) + "...[truncated]" 
+            : toolArgsStr;
           invokeLLMLogger.info("[invokeLLM] Tool call received", { 
             toolName: streamPart.toolName, 
-            toolCallId: streamPart.toolCallId 
+            toolCallId: streamPart.toolCallId,
+            toolArgs: truncatedToolArgs
           });
           if (eventHandler?.onToolCall) {
             eventHandler.onToolCall(streamPart.toolName, toolInput, streamPart.toolCallId);
@@ -387,13 +393,28 @@ export async function invokeLLM(
           arguments: JSON.stringify(tc.args),
         },
       }));
-      invokeLLMLogger.info("[invokeLLM] Returning with tool_calls", { count: toolCalls.length });
+      // 截断工具调用参数，保留前 300 字符
+      const toolCallsStr = JSON.stringify(toolCalls);
+      const truncatedToolCalls = toolCallsStr.length > 300 
+        ? toolCallsStr.substring(0, 300) + "...[truncated]" 
+        : toolCallsStr;
+      invokeLLMLogger.info("[invokeLLM] Returning with tool_calls", { 
+        count: toolCalls.length,
+        toolCalls: truncatedToolCalls
+      });
     } else {
+      // 截断过长响应内容，保留前 300 字符
+      const truncatedContent = fullContent.length > 300 
+        ? fullContent.substring(0, 300) + "...[truncated]" 
+        : fullContent;
       // Emit completed event only when no tool calls
       if (eventHandler?.onCompleted) {
         eventHandler.onCompleted(fullContent, { model: `${providerId}/${modelId}` });
       }
-      invokeLLMLogger.info("[invokeLLM] Returning content (no tool_calls)");
+      invokeLLMLogger.info("[invokeLLM] Returning content (no tool_calls)", { 
+        contentLength: fullContent.length,
+        content: truncatedContent
+      });
     }
 
     return {
