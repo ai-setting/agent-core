@@ -121,10 +121,20 @@ export class EventMcpClient {
     if (this.config.type === "local") {
       const resolvedCommand = this.resolveCommandPath(this.config.command!);
       const [cmd, ...args] = resolvedCommand;
+      
+      const env = {
+        ...process.env as Record<string, string>,
+        ...this.config.environment,
+      };
+      
+      if (this.envRoot) {
+        env.ENV_ROOT = this.envRoot;
+      }
+      
       const transport = new StdioClientTransport({
         command: cmd,
         args,
-        env: { ...process.env as Record<string, string>, ...this.config.environment },
+        env,
         stderr: "pipe",
       });
       return transport;
