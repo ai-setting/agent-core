@@ -1,13 +1,10 @@
 import { z } from "zod";
 import type { ToolInfo, ToolResult, ToolContext } from "../../core/types/tool.js";
-import { createLogger } from "../../utils/logger.js";
+import { createLogger, getLogDir } from "../../utils/logger.js";
 import fs from "fs";
 import path from "path";
-import { xdgData } from "xdg-basedir";
 
 const searchLogsLogger = createLogger("search-logs", "tools.log");
-
-const DEFAULT_LOG_DIR = path.join(xdgData || "", "tong_work", "logs");
 
 const SearchLogsParamsSchema = z.object({
   filename: z.string().describe("Log filename to search (e.g., server.log, tui.log)"),
@@ -27,7 +24,7 @@ export interface SearchLogsConfig {
 }
 
 export function createSearchLogsTool(config?: SearchLogsConfig): ToolInfo {
-  const logDir = config?.logDir || DEFAULT_LOG_DIR;
+  const logDir = config?.logDir || getLogDir();
 
   return {
     name: "search_logs",

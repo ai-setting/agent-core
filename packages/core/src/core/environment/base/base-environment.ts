@@ -796,6 +796,17 @@ export abstract class BaseEnvironment implements Environment {
     }
 
     try {
+      // 截断过长参数，保留前 300 字符
+      const toolArgsStr = JSON.stringify(action.args);
+      const truncatedToolArgs = toolArgsStr.length > 300 
+        ? toolArgsStr.substring(0, 300) + "...[truncated]" 
+        : toolArgsStr;
+      BaseEnvironment.baseLogger.info("[BaseEnvironment.executeAction] Executing tool", {
+        toolName: action.tool_name,
+        actionId: action.action_id,
+        toolArgs: truncatedToolArgs
+      });
+      
       this.emitStreamEvent({
         type: "tool_call",
         tool_name: action.tool_name,
@@ -851,6 +862,17 @@ export abstract class BaseEnvironment implements Environment {
           if (context.abort) {
             context.abort.removeEventListener("abort", abortHandler);
           }
+          // 截断过长结果，保留前 300 字符
+          const resultStr = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
+          const truncatedResult = resultStr.length > 300 
+            ? resultStr.substring(0, 300) + "...[truncated]" 
+            : resultStr;
+          BaseEnvironment.baseLogger.info("[BaseEnvironment.executeAction] Tool result received", {
+            toolName: action.tool_name,
+            success: result.success,
+            resultLength: resultStr.length,
+            result: truncatedResult
+          });
           this.emitStreamEvent({
             type: "tool_result",
             tool_name: action.tool_name,
@@ -864,6 +886,10 @@ export abstract class BaseEnvironment implements Environment {
           if (context.abort) {
             context.abort.removeEventListener("abort", abortHandler);
           }
+          BaseEnvironment.baseLogger.error("[BaseEnvironment.executeAction] Tool execution error", {
+            toolName: action.tool_name,
+            error: error instanceof Error ? error.message : String(error)
+          });
           this.emitStreamEvent({
             type: "error",
             content: error instanceof Error ? error.message : String(error),

@@ -167,7 +167,15 @@ app.post("/:id/prompt", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ content: string }>();
 
-  sessionLogger.info("Received prompt request", { sessionId: id, contentLength: body?.content?.length });
+  // 截断过长内容，保留前 300 字符
+  const truncatedContent = body?.content?.length > 300 
+    ? body?.content?.substring(0, 300) + "...[truncated]" 
+    : body?.content;
+  sessionLogger.info("Received prompt request", { 
+    sessionId: id, 
+    contentLength: body?.content?.length,
+    content: truncatedContent
+  });
 
   if (!body?.content) {
     sessionLogger.warn("Prompt request missing content", { sessionId: id });
