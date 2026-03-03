@@ -1,6 +1,7 @@
 'use client'
 
 import { useApp } from '@/lib/store'
+import type { Session } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -163,7 +164,7 @@ export function SessionSidebar() {
   )
 }
 
-function SessionGroup({ label, sessions }: { label: string; sessions: typeof MOCK_SESSIONS_TYPE }) {
+function SessionGroup({ label, sessions }: { label: string; sessions: Session[] }) {
   const { state, dispatch } = useApp()
 
   return (
