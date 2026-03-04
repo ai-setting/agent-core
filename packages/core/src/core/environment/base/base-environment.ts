@@ -702,6 +702,7 @@ export abstract class BaseEnvironment implements Environment {
 
   @Traced({ 
     name: "env.handle_query", 
+    log: true,
     recordParams: true, 
     recordResult: false,
     paramFilter: (args) => ({ query: args[0] })
@@ -768,7 +769,7 @@ export abstract class BaseEnvironment implements Environment {
     return agent.run();
   }
 
-  @Traced({ name: "env.handle_action", recordParams: true, recordResult: false })
+  @Traced({ name: "env.handle_action", log: true, recordParams: true, recordResult: false })
   async handle_action(action: Action, ctx: Context): Promise<ToolResult> {
     const startTime = Date.now();
     const tool = this.getTool(action.tool_name);
@@ -999,7 +1000,7 @@ export abstract class BaseEnvironment implements Environment {
    * Invoke LLM as a native environment capability
    * This is the primary way for agents to interact with LLM
     */
-  @Traced({ name: "env.invokeLLM", recordParams: true, recordResult: false })
+  @Traced({ name: "env.invokeLLM", log: true, recordParams: true, recordResult: false })
   async invokeLLM(
     messages: ModelMessage[],
     tools?: ToolInfo[],
