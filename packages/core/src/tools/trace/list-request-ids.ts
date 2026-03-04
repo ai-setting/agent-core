@@ -1,0 +1,124 @@
+import { z } from "zod";
+import type { ToolInfo, ToolResult, ToolContext } from "../../core/types/tool.js";
+import { createLogger, getLogDir } from "../../utils/logger.js";
+import fs from "fs";
+import path from "path";
+
+const listRequestIdsLogger = createLogger("list-request-ids", "tools.log");
+
+const ListRequestIdsParamsSchema = z.object({
+  filename: z.string().describe("Log filename (e.g., server.log, tui.log, tools.log). Do NOT include path or directory prefix. The file must be in the configured log directory."),
+  limit: z.number().optional().default(50).describe("Maximum number of requestIds to return"),
+  offset: z.number().optional().default(0).describe("Offset for pagination (use with limit to paginate through requestIds)"),
+});
+
+export type ListRequestIdsParams = z.infer<typeof ListRequestIdsParamsSchema>;
+
+export interface RequestIdInfo {
+  requestId: string;
+  firstLogTime: string;
+  lastLogTime: string;
+}
+
+export interface ListRequestIdsConfig {
+  logDir?: string;
+}
+
+export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInfo {
+  const logDir = config?.logDir || getLogDir();
+
+  return {
+    name: "list_request_ids",
+    description: "List all unique requestIds in a log file, sorted by time (newest first). Returns each requestId with its first and last log timestamp.",
+    parameters: ListRequestIdsParamsSchema,
+    async execute(
+      args: ListRequestIdsParams,
+      _ctx: ToolContext,
+    ): Promise<ToolResult> {
+      const { filename, limit, offset } = args;
+      
+      const logFile = path.join(logDir, filename);
+      
+      listRequestIdsLogger.info("[list_request_ids] Listing requestIds", { 
+        filename, 
+        logFile, 
+        limit,
+        offset
+      });
+
+      if (!fs.existsSync(logFile)) {
+        listRequestIdsLogger.warn("[list_request_ids] Log file not found", { logFile });
+        return {
+          success: false,
+          output: "",
+          error: `Log file not found: ${filename}`,
+        };
+      }
+
+      try {
+        const content = fs.readFileSync(logFile, "utf-8");
+        const lines = content.split("\n");
+        
+        const requestIdMap = new Map<string, { first: string; last: string }>();
+        
+        const requestIdRegex = /\[requestId=([^\]]+)\]/;
+        
+        let currentRequestId: string | null = null;
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          const timestamp = line.substring(0, 23);
+          const match = line.match(requestIdRegex);
+          if (match) {
+            currentRequestId = match[1];
+          }
+          
+          if (currentRequestId) {
+            if (!requestIdMap.has(currentRequestId)) {
+              requestIdMap.set(currentRequestId, { first: timestamp, last: timestamp });
+            } else {
+              const existing = requestIdMap.get(currentRequestId)!;
+              existing.last = timestamp;
+            }
+          }
+        }
+        
+        const result: RequestIdInfo[] = [];
+        for (const [requestId, times] of requestIdMap) {
+          result.push({
+            requestId,
+            firstLogTime: times.first,
+            lastLogTime: times.last,
+          });
+        }
+        
+        result.sort((a, b) => {
+          return b.lastLogTime.localeCompare(a.lastLogTime);
+        });
+        
+        const startIndex = offset || 0;
+        const paginatedResult = result.slice(startIndex, startIndex + (limit || 50));
+        
+        listRequestIdsLogger.info("[list_request_ids] Complete", { 
+          totalRequestIds: result.length,
+          offset: startIndex,
+          returned: paginatedResult.length
+        });
+
+        return {
+          success: true,
+          output: JSON.stringify(paginatedResult, null, 2),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        listRequestIdsLogger.error("[list_request_ids] Error reading log file", { filename, error: message });
+        return {
+          success: false,
+          output: "",
+          error: `Error reading log file: ${message}`,
+        };
+      }
+    },
+  };
+}
