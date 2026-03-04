@@ -122,15 +122,19 @@ Or ask questions naturally.
   {
     id: "trace_analysis",
     name: "trace_analysis",
-    description: `Analyze logs and traces for debugging. Use this skill when users want to:
-- View recent logs and request history
-- Investigate specific request issues
-- Analyze trace data and call chains
+    description: `日志和Trace分析调试 Skill。Use this skill when users want to:
+- View recent logs and request history / 查看最近日志、请求历史
+- Investigate specific request issues / 查看具体请求日志、调试问题
+- Analyze trace data and call chains / 分析调用链、Trace追踪
+- 查询日志、检索日志、查看日志详情
+- 查看某个 requestId 的日志
+- 帮我看下日志、帮我查下日志
+- 最近的query日志、请求日志分析
 
 This skill provides structured workflows for log analysis using list_request_ids, get_first_log_for_request, get_logs_for_request, and get_trace tools.`,
     content: `---
 name: trace_analysis
-description: Analyze logs and traces for debugging. Provides structured workflows for investigating request history and trace data.
+description: 日志和Trace分析调试 Skill。Provides structured workflows for investigating request history and trace data.
 ---
 
 # trace_analysis
@@ -180,11 +184,84 @@ Parameters:
 4. Call \`get_logs_for_request\` to get full logs for the selected requestId
 5. If needed, call \`get_trace\` to get the call chain visualization
 
-### View Specific Request
+### View Specific Request (Detailed)
 
-1. Call \`get_first_log_for_request\` to show the query
-2. Call \`get_logs_for_request\` to get all logs
-3. If needed, call \`get_trace\` for trace analysis
+When user wants to view detailed logs for a specific request, follow this workflow to get complete information without any omissions:
+
+#### Step 1: Get Complete Logs
+
+Use \`get_logs_for_request\` to get ALL logs for the requestId:
+
+\`\`\`
+get_logs_for_request({
+  filename: "server.log",
+  requestId: "<target_requestId>",
+  offset: 0,
+  limit: 500  // Large enough to get all logs
+})
+\`\`\`
+
+**Important**:
+- First try with a smaller limit (e.g., 100) to estimate total lines
+- Adjust limit until you get all logs (check if result is truncated)
+- Note the total line count range
+
+#### Step 2: Get Complete Trace
+
+Use \`get_trace\` to get the full call chain:
+
+\`\`\`
+get_trace({
+  requestId: "<target_requestId>",
+  format: "text"  // or "json" for programmatic processing
+})
+\`\`\`
+
+#### Step 3: Get User Query
+
+Use \`get_first_log_for_request\` to get the original user question:
+
+\`\`\`
+get_first_log_for_request({
+  filename: "server.log",
+  requestIds: ["<target_requestId>"]
+})
+\`\`\`
+
+#### Step 4: Integrate and Output
+
+Combine all three parts into a unified report:
+
+\`\`\`
+================================================================================
+                    Request Log Detail Report
+================================================================================
+RequestId: xxx
+--------------------------------------------------------------------------------
+【User Query】
+<first log content>
+
+【Execution Trace】
+<complete call chain from get_trace>
+
+【Detailed Logs】
+<complete logs in chronological order>
+
+【Key Information Summary】
+- Total Duration: xxx
+- Tool Calls: xxx
+- LLM Invocations: xxx
+- Errors/Warnings: xxx
+================================================================================
+\`\`\`
+
+#### Key Principles
+
+1. **No Omission**: Ensure the offset-limit range covers ALL log lines
+2. **Traceable**: Every span in trace should have corresponding entry in detailed logs
+3. **Structured**: Output should have clear sections and indexing
+
+---
 
 ### Browse Historical Logs (Large Time Range)
 
