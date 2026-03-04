@@ -3,7 +3,7 @@ import type { ToolInfo, ToolResult, ToolContext } from "../../core/types/tool.js
 import { createLogger } from "../../utils/logger.js";
 import { getSpanCollector } from "../../utils/span-collector.js";
 
-const getTraceLogger = createLogger("get-trace", "tools.log");
+const getTraceLogger = createLogger("get-trace", "tools.log", "debug");
 
 const GetTraceParamsSchema = z.object({
   requestId: z.string().describe("The requestId/traceId to query"),

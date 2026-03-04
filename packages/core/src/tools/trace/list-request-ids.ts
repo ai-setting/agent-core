@@ -4,7 +4,7 @@ import { createLogger, getLogDir } from "../../utils/logger.js";
 import fs from "fs";
 import path from "path";
 
-const listRequestIdsLogger = createLogger("list-request-ids", "tools.log");
+const listRequestIdsLogger = createLogger("list-request-ids", "tools.log", "debug");
 
 const ListRequestIdsParamsSchema = z.object({
   filename: z.string().describe("Log filename (e.g., server.log, tui.log, tools.log). Do NOT include path or directory prefix. The file must be in the configured log directory."),
@@ -36,12 +36,20 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
       _ctx: ToolContext,
     ): Promise<ToolResult> {
       const { filename, limit, offset } = args;
-      
+
       const logFile = path.join(logDir, filename);
-      
-      listRequestIdsLogger.info("[list_request_ids] Listing requestIds", { 
-        filename, 
-        logFile, 
+
+      // 在返回结果中包含日志文件路径，方便调试
+      const debugInfo = {
+        logFile,
+        logDir,
+        configLogPath: "/home/dzk/work/codework/personal/tong_work/logs_new"
+      };
+
+      listRequestIdsLogger.info("[list_request_ids] Listing requestIds", {
+        filename,
+        logFile,
+        logDir,
         limit,
         offset
       });
@@ -100,7 +108,7 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
         const startIndex = offset || 0;
         const paginatedResult = result.slice(startIndex, startIndex + (limit || 50));
         
-        listRequestIdsLogger.info("[list_request_ids] Complete", { 
+        listRequestIdsLogger.info("[list_request_ids] Complete", {
           totalRequestIds: result.length,
           offset: startIndex,
           returned: paginatedResult.length
@@ -108,7 +116,10 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
 
         return {
           success: true,
-          output: JSON.stringify(paginatedResult, null, 2),
+          output: JSON.stringify({
+            _debug: debugInfo,
+            requestIds: paginatedResult
+          }, null, 2),
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

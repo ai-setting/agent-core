@@ -212,10 +212,11 @@ class Logger {
 export const logger = new Logger({ filename: "app.log" });
 
 // 创建特定模块的 logger
-export function createLogger(module: string, filename?: string): Logger {
+export function createLogger(module: string, filename?: string, level?: LogLevel): Logger {
   return new Logger({ 
     filename: filename || `${module}.log`,
-    prefix: module 
+    prefix: module,
+    level: level
   });
 }
 
