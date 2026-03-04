@@ -4,7 +4,7 @@ import { createLogger, getLogDir } from "../../utils/logger.js";
 import fs from "fs";
 import path from "path";
 
-const getFirstLogLogger = createLogger("get-first-log", "tools.log");
+const getFirstLogLogger = createLogger("get-first-log", "tools.log", "debug");
 
 const GetFirstLogParamsSchema = z.object({
   filename: z.string().describe("Log filename (e.g., server.log, tui.log, tools.log). Do NOT include path or directory prefix. The file must be in the configured log directory."),
