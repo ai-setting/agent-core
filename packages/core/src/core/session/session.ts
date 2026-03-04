@@ -28,6 +28,7 @@ import { ID } from "./id";
 import { Storage } from "./storage";
 import { sessionToHistory } from "./history";
 import { createLogger } from "../../utils/logger.js";
+import { Traced } from "../../utils/wrap-function.js";
 
 const sessionLogger = createLogger("session:addMessage", "server.log");
 
@@ -180,6 +181,7 @@ export class Session {
   /**
    * Add a message to the session.
    */
+  @Traced({ name: "session.addMessage", log: true, recordParams: true, recordResult: false })
   addMessage(info: MessageInfo, parts: Part[] = []): string {
     const message: MessageWithParts = {
       info,
@@ -511,6 +513,7 @@ export class Session {
   /**
    * Convert session messages to Agent Core history format.
    */
+  @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: false })
   toHistory(): any[] {
     return sessionToHistory(this);
   }

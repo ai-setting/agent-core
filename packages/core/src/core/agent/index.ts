@@ -112,7 +112,7 @@ export class Agent {
     return count >= this.config.doomLoopThreshold;
   }
 
-  @Traced({ name: "agent.run", recordParams: true, recordResult: false })
+  @Traced({ name: "agent.run", log: true, recordParams: true, recordResult: false })
   async run(systemPrompt?: string, userQuery?: string): Promise<string> {
     // Extract user query from event content if not provided
     const query = userQuery ?? (typeof this.event.content === "string" ? this.event.content : JSON.stringify(this.event.content));
