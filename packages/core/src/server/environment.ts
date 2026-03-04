@@ -702,9 +702,13 @@ export class ServerEnvironment extends BaseEnvironment {
       // Import and create fetch_agent_core_source tool
       const { fetchAgentCoreSourceTool } = await import("../tools/github/index.js");
 
-      // Import and create search_logs tool
-      const { createSearchLogsTool } = await import("../tools/trace/search-logs.js");
-      const searchLogsTool = createSearchLogsTool();
+      // Import and create trace analysis tools
+      const { createListRequestIdsTool } = await import("../tools/trace/list-request-ids.js");
+      const { createGetFirstLogTool } = await import("../tools/trace/get-first-log.js");
+      const { createGetLogsForRequestTool } = await import("../tools/trace/get-logs-for-request.js");
+      const listRequestIdsTool = createListRequestIdsTool();
+      const getFirstLogTool = createGetFirstLogTool();
+      const getLogsForRequestTool = createGetLogsForRequestTool();
 
       // Import and create get_trace tool
       const { createGetTraceTool } = await import("../tools/trace/get-trace.js");
@@ -717,7 +721,9 @@ export class ServerEnvironment extends BaseEnvironment {
         webFetchTool,
         lspTool,
         fetchAgentCoreSourceTool,
-        searchLogsTool,
+        listRequestIdsTool,
+        getFirstLogTool,
+        getLogsForRequestTool,
         getTraceTool,
       ];
 
