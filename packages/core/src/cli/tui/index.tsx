@@ -42,7 +42,7 @@ export async function startTUI(options: TUIOptions): Promise<void> {
     try {
       const renderer = getRenderer();
       if (renderer?.destroy) {
-        renderer.destroy();
+        await renderer.destroy();
       }
     } catch {}
 

@@ -59,7 +59,7 @@ export function wrapFunction<T extends (...args: any[]) => any>(
 
   const truncate = (obj: any): any => {
     if (obj === undefined) return undefined;
-    const str = typeof obj === "string" ? obj : JSON.stringify(obj);
+    const str = typeof obj === "string" ? obj : JSON.stringify(obj, null, 0).replace(/\n/g, "");
     if (str.length > maxLogSize) {
       return str.slice(0, maxLogSize) + " [TRUNCATED]";
     }
@@ -72,7 +72,7 @@ export function wrapFunction<T extends (...args: any[]) => any>(
 
   const truncateString = (obj: any): string => {
     if (obj === undefined) return "";
-    const str = typeof obj === "string" ? obj : JSON.stringify(obj);
+    const str = typeof obj === "string" ? obj : JSON.stringify(obj, null, 0).replace(/\n/g, "");
     return str.length > maxLogSize ? str.slice(0, maxLogSize) + " [TRUNCATED]" : str;
   };
 
