@@ -147,17 +147,14 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
 
       case "tool": {
         const toolPart = part as ToolPart;
-        // Assistant messages show tool calls as tool-call parts
-        if (toolPart.state === "pending" || toolPart.state === "running") {
-          const normalizedCallId = normalizeToolCallId(toolPart.callID || `call_${Date.now()}`);
-          historyLogger.debug(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}`);
-          parts.push({
-            type: "tool-call",
-            toolCallId: normalizedCallId,
-            toolName: toolPart.tool,
-            input: toolPart.input || {},
-          });
-        }
+        const normalizedCallId = normalizeToolCallId(toolPart.callID || `call_${Date.now()}`);
+        historyLogger.debug(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}, state=${toolPart.state}`);
+        parts.push({
+          type: "tool-call",
+          toolCallId: normalizedCallId,
+          toolName: toolPart.tool,
+          input: toolPart.input || {},
+        });
         break;
       }
     }
