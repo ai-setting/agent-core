@@ -32,7 +32,7 @@ import { Traced } from "../../utils/wrap-function.js";
 
 const sessionLogger = createLogger("session:addMessage", "server.log");
 
-const DEFAULT_MESSAGE_LIMIT = 100;
+const DEFAULT_MESSAGE_LIMIT = Infinity;
 
 /**
  * Compaction options for Session.compact().
