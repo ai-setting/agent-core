@@ -37,7 +37,8 @@ export function sessionToHistory(session: Session): ModelMessage[] {
     }
   }
 
-  historyLogger.debug("[sessionToHistory] Converted session to history", {
+  // [DEBUG] Log session to history conversion
+  historyLogger.info("[sessionToHistory] Converted session to history", {
     sessionId: session.id,
     inputMessageCount: messages.length,
     outputHistoryCount: history.length,

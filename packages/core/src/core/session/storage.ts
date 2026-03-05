@@ -309,6 +309,9 @@ class StorageImpl {
         });
         this.sessions.set(info.id, session);
 
+        // [DEBUG] Log session loaded from SQLite
+        storageLogger.info(`[Storage] Loaded session from SQLite: id=${info.id}, title=${info.title}, messageCount=${info.messageCount}, timeCreated=${info.time?.created}, timeUpdated=${info.time?.updated}`);
+
         // Messages are NOT loaded during initialization
         // They will be loaded on demand when a session is selected
       }

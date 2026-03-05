@@ -42,8 +42,7 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
       // 在返回结果中包含日志文件路径，方便调试
       const debugInfo = {
         logFile,
-        logDir,
-        configLogPath: "/home/dzk/work/codework/personal/tong_work/logs_new"
+        logDir
       };
 
       listRequestIdsLogger.info("[list_request_ids] Listing requestIds", {

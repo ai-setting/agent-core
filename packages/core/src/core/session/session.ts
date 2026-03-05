@@ -89,6 +89,9 @@ export class Session {
     if (!options._isLoading) {
       Storage.saveSession(this);
     }
+
+    // [DEBUG] Log session creation
+    sessionLogger.info(`[Session] Created new session: id=${this.id}, title=${this.title}, messageCount=${options.messageCount ?? 0}, _isLoading=${options._isLoading ?? false}, timeCreated=${this._info.time.created}, now=${now}`);
   }
 
   /**
@@ -199,6 +202,9 @@ export class Session {
     this._info.time.updated = Date.now();
     Storage.saveSession(this);
     Storage.saveMessage(this.id, message);
+
+    // [DEBUG] Log after addMessage
+    sessionLogger.info(`[Session] addMessage: sessionId=${this.id}, messageId=${info.id}, role=${info.role}, totalMessages=${this._messageOrder.length}, _messages.size=${this._messages.size}`);
 
     return info.id;
   }
@@ -515,7 +521,12 @@ export class Session {
    */
   @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: false })
   toHistory(): any[] {
-    return sessionToHistory(this);
+    // [DEBUG] Log before toHistory
+    sessionLogger.info(`[Session] toHistory: sessionId=${this.id}, _messageOrder.length=${this._messageOrder.length}, _messages.size=${this._messages.size}`);
+    const history = sessionToHistory(this);
+    // [DEBUG] Log after toHistory
+    sessionLogger.info(`[Session] toHistory result: sessionId=${this.id}, history.length=${history.length}`);
+    return history;
   }
 
   /**

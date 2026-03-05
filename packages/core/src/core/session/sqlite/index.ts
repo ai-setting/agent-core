@@ -113,6 +113,9 @@ export class SqlitePersistence implements SessionPersistence {
       messageCount,
       info.metadata ? JSON.stringify(info.metadata) : null
     );
+
+    // [DEBUG] Log after saving session to SQLite
+    sqliteLogger.info(`[SQLite] saveSession: id=${info.id}, messageCount=${messageCount}, timeUpdated=${info.time.updated}`);
   }
 
   async updateMessageCount(sessionId: string, count: number): Promise<void> {
@@ -162,6 +165,12 @@ export class SqlitePersistence implements SessionPersistence {
 
     const stmt = this.db.prepare("SELECT * FROM session ORDER BY time_updated DESC");
     const rows = stmt.all() as any[];
+
+    // [DEBUG] Log all sessions loaded from SQLite
+    sqliteLogger.info(`[SQLite] listSessions: loaded ${rows.length} sessions`);
+    for (const row of rows) {
+      sqliteLogger.info(`[SQLite]   session: id=${row.id}, title=${row.title}, messageCount=${row.message_count ?? 0}, timeCreated=${row.time_created}, timeUpdated=${row.time_updated}`);
+    }
 
     return rows.map((row) => ({
       id: row.id,
@@ -218,6 +227,9 @@ export class SqlitePersistence implements SessionPersistence {
         partTime?.end ?? Date.now()
       );
     }
+
+    // [DEBUG] Log after saving message to SQLite
+    sqliteLogger.info(`[SQLite] saveMessage: sessionId=${sessionID}, messageId=${message.info.id}, role=${message.info.role}, partsCount=${message.parts.length}, timestamp=${message.info.timestamp}`);
   }
 
   async getMessage(sessionID: string, messageID: string): Promise<MessageWithParts | undefined> {
@@ -251,6 +263,9 @@ export class SqlitePersistence implements SessionPersistence {
 
     const msgStmt = this.db.prepare("SELECT * FROM message WHERE session_id = ? ORDER BY timestamp");
     const messageRows = msgStmt.all(sessionID) as any[];
+
+    // [DEBUG] Log messages loaded from SQLite
+    sqliteLogger.info(`[SQLite] getMessages: sessionId=${sessionID}, loaded ${messageRows.length} messages`);
 
     const result: MessageWithParts[] = [];
     for (const msgRow of messageRows) {
