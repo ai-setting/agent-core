@@ -70,7 +70,16 @@ export class EventHandlerAgent {
 
   private async createFallbackSession<T>(event: EnvEvent<T>): Promise<any> {
     const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
-    const newSession = await this.env.createSession?.({ title: fallbackTitle });
+    const metadata: Record<string, unknown> = {
+      trigger_type: "event",
+      event_type: event.type,
+      event_id: event.id,
+      ...event.metadata,
+    };
+    const newSession = await this.env.createSession?.({ 
+      title: fallbackTitle,
+      metadata,
+    });
     if (!newSession) {
       eventHandlerLogger.error("Failed to create fallback session");
       throw new Error("No session available and failed to create fallback session");

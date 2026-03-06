@@ -95,13 +95,14 @@ app.post("/", async (c) => {
   if (!env) return c.json({ error: "Session support not available" }, 503);
 
   let title: string | undefined;
+  let metadata: Record<string, unknown> = { trigger_type: "user_prompt" };
   try {
     const body = await c.req.json<{ title?: string }>();
     title = body?.title;
   } catch {
     title = undefined;
   }
-  const session = await resolve(env.createSession!({ title }));
+  const session = await resolve(env.createSession!({ title, metadata }));
   
   // 设置 Active Session
   const clientId = process.env.CLIENT_ID;
