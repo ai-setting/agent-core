@@ -262,7 +262,7 @@ export class SqlitePersistence implements SessionPersistence {
   async getSessionMessages(
     sessionId: string,
     options?: ListOptions
-  ): Promise<{ total: number; messages: Array<{ id: string; role: string; content: string; timestamp: number }> }> {
+  ): Promise<{ total: number; messages: Array<{ id: string; role: string; timestamp: number }> }> {
     if (!this.db) throw new Error("Not initialized");
 
     // Get total count
@@ -274,9 +274,9 @@ export class SqlitePersistence implements SessionPersistence {
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? 20;
     const stmt = this.db.prepare(
-      "SELECT id, role, content, timestamp FROM message WHERE session_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?"
+      "SELECT id, role, timestamp FROM message WHERE session_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?"
     );
-    const rows = stmt.all(sessionId, limit, offset) as Array<{ id: string; role: string; content: string; timestamp: number }>;
+    const rows = stmt.all(sessionId, limit, offset) as Array<{ id: string; role: string; timestamp: number }>;
 
     sqliteLogger.info(`[SQLite] getSessionMessages: loaded ${rows.length} messages, total=${total}`);
 
