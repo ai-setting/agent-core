@@ -28,6 +28,7 @@ describe("EventHandlerAgent", () => {
     mockEnv = {
       getSession: vi.fn().mockResolvedValue(mockSession),
       handle_query: vi.fn().mockResolvedValue("Processed event"),
+      createSession: vi.fn().mockResolvedValue({ ...mockSession, id: "new-session-1" }),
     };
   });
 
@@ -55,8 +56,7 @@ describe("EventHandlerAgent", () => {
       expect(mockEnv.handle_query).toHaveBeenCalled();
     });
 
-    it("should warn if no trigger_session_id", async () => {
-      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("should create new session if no trigger_session_id", async () => {
       const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
 
       const event: EnvEvent = {
@@ -69,17 +69,11 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      expect(consoleSpy).toHaveBeenCalled();
-      expect(consoleSpy.mock.calls.some((call: any[]) => 
-        call[0] && call[0].includes("No trigger_session_id")
-      )).toBe(true);
-
-      consoleSpy.mockRestore();
+      expect(mockEnv.createSession).toHaveBeenCalled();
+      expect(mockEnv.handle_query).toHaveBeenCalled();
     });
 
-    it("should warn if session not found", async () => {
-      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      
+    it("should create new session if session not found", async () => {
       mockEnv.getSession = vi.fn().mockResolvedValue(null);
       
       const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
@@ -96,12 +90,8 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      expect(consoleSpy).toHaveBeenCalled();
-      expect(consoleSpy.mock.calls.some((call: any[]) => 
-        call[0] && call[0].includes("Session not found")
-      )).toBe(true);
-
-      consoleSpy.mockRestore();
+      expect(mockEnv.createSession).toHaveBeenCalled();
+      expect(mockEnv.handle_query).toHaveBeenCalled();
     });
   });
 
@@ -220,6 +210,219 @@ describe("EventHandlerAgent", () => {
         const textPart = toolContent.find((p: any) => p.type === "text" || p.type === "tool-result");
         expect(textPart).toBeDefined();
       }
+    });
+  });
+
+  describe("fallback session handling", () => {
+    it("should get session from ActiveSessionManager when no trigger_session_id", async () => {
+      const mockActiveSessionManager = {
+        getActiveSession: vi.fn().mockReturnValue("active-session-id"),
+      };
+
+      const mockSession = {
+        id: "active-session-id",
+        addMessageFromModelMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([
+          { role: "user", content: "Hello" },
+        ]),
+      };
+
+      const mockEnv = {
+        getSession: vi.fn().mockResolvedValue(mockSession),
+        handle_query: vi.fn().mockResolvedValue("Processed"),
+        getActiveSessionManager: vi.fn().mockReturnValue(mockActiveSessionManager),
+      };
+
+      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
+
+      const event: EnvEvent = {
+        id: "event-1",
+        type: "test.event",
+        timestamp: Date.now(),
+        metadata: {
+          clientId: "client-123",
+        },
+        payload: {},
+      };
+
+      await agent.handle(event);
+
+      expect(mockActiveSessionManager.getActiveSession).toHaveBeenCalledWith("client-123");
+      expect(mockEnv.getSession).toHaveBeenCalledWith("active-session-id");
+      expect(mockEnv.handle_query).toHaveBeenCalled();
+    });
+
+    it("should create new session when ActiveSessionManager returns undefined", async () => {
+      const mockActiveSessionManager = {
+        getActiveSession: vi.fn().mockReturnValue(undefined),
+      };
+
+      const newSession = {
+        id: "new-fallback-session",
+        addMessageFromModelMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([]),
+      };
+
+      const mockEnv = {
+        getSession: vi.fn().mockResolvedValue(null),
+        handle_query: vi.fn().mockResolvedValue("Processed"),
+        getActiveSessionManager: vi.fn().mockReturnValue(mockActiveSessionManager),
+        createSession: vi.fn().mockResolvedValue(newSession),
+      };
+
+      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
+
+      const event: EnvEvent = {
+        id: "event-1",
+        type: "test.event",
+        timestamp: Date.now(),
+        metadata: {
+          clientId: "client-123",
+        },
+        payload: {},
+      };
+
+      await agent.handle(event);
+
+      expect(mockEnv.createSession).toHaveBeenCalled();
+      expect(mockEnv.handle_query).toHaveBeenCalled();
+    });
+  });
+
+  describe("handle_query error retry", () => {
+    it("should retry with new session when handle_query throws error", async () => {
+      const mockSession = {
+        id: "original-session",
+        addMessageFromModelMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([
+          { role: "user", content: "Hello" },
+        ]),
+      };
+
+      const retrySession = {
+        id: "retry-session-1",
+        addMessageFromModelMessage: vi.fn(),
+        addUserMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([]),
+      };
+
+      let callCount = 0;
+      const mockEnv = {
+        getSession: vi.fn().mockResolvedValue(mockSession),
+        handle_query: vi.fn().mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error("Original error");
+          }
+          return "Success after retry";
+        }),
+        createSession: vi.fn().mockImplementation(() => {
+          return Promise.resolve(retrySession);
+        }),
+      };
+
+      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
+
+      const event: EnvEvent = {
+        id: "event-1",
+        type: "test.event",
+        timestamp: Date.now(),
+        metadata: {
+          trigger_session_id: "original-session",
+        },
+        payload: {},
+      };
+
+      await agent.handle(event);
+
+      expect(mockEnv.createSession).toHaveBeenCalled();
+      expect(retrySession.addUserMessage).toHaveBeenCalled();
+      const errorMsg = retrySession.addUserMessage.mock.calls[0][0];
+      expect(errorMsg).toContain("An error occurred");
+      expect(errorMsg).toContain("Original error");
+      expect(errorMsg).toContain("Process event: test.event");
+      expect(errorMsg).toContain("A new session has been started");
+    });
+
+    it("should succeed on first retry", async () => {
+      const mockSession = {
+        id: "original-session",
+        addMessageFromModelMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([
+          { role: "user", content: "Hello" },
+        ]),
+      };
+
+      const retrySession = {
+        id: "retry-session-1",
+        addMessageFromModelMessage: vi.fn(),
+        addUserMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([]),
+      };
+
+      const mockEnv = {
+        getSession: vi.fn().mockResolvedValue(mockSession),
+        handle_query: vi.fn()
+          .mockRejectedValueOnce(new Error("Original error"))
+          .mockResolvedValueOnce("Success after retry"),
+        createSession: vi.fn().mockResolvedValue(retrySession),
+      };
+
+      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
+
+      const event: EnvEvent = {
+        id: "event-1",
+        type: "test.event",
+        timestamp: Date.now(),
+        metadata: {
+          trigger_session_id: "original-session",
+        },
+        payload: {},
+      };
+
+      await agent.handle(event);
+
+      expect(mockEnv.handle_query).toHaveBeenCalledTimes(2);
+    });
+
+    it("should stop retrying after max retries exhausted", async () => {
+      const mockSession = {
+        id: "original-session",
+        addMessageFromModelMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([
+          { role: "user", content: "Hello" },
+        ]),
+      };
+
+      const retrySession = {
+        id: "retry-session",
+        addMessageFromModelMessage: vi.fn(),
+        addUserMessage: vi.fn(),
+        toHistory: vi.fn().mockReturnValue([]),
+      };
+
+      const mockEnv = {
+        getSession: vi.fn().mockResolvedValue(mockSession),
+        handle_query: vi.fn().mockRejectedValue(new Error("Persistent error")),
+        createSession: vi.fn().mockResolvedValue(retrySession),
+      };
+
+      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
+
+      const event: EnvEvent = {
+        id: "event-1",
+        type: "test.event",
+        timestamp: Date.now(),
+        metadata: {
+          trigger_session_id: "original-session",
+        },
+        payload: {},
+      };
+
+      await agent.handle(event);
+
+      expect(mockEnv.handle_query).toHaveBeenCalledTimes(4);
+      expect(mockEnv.createSession).toHaveBeenCalledTimes(3);
     });
   });
 });

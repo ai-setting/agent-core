@@ -41,7 +41,7 @@ export class EventHandlerAgent {
     
     let sessionId = event.metadata.trigger_session_id;
     
-    // Fallback: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
+    // Fallback 1: 如果没有 trigger_session_id，尝试从 ActiveSessionManager 获取
     if (!sessionId) {
       const clientId = event.metadata.clientId;
       if (clientId && this.env.getActiveSessionManager) {
@@ -52,50 +52,118 @@ export class EventHandlerAgent {
       }
     }
     
-    if (!sessionId) {
-      eventHandlerLogger.debug("No trigger_session_id in event metadata and no active session available");
-      return;
+    // Fallback 2: 如果还是没有 sessionId，创建新 session
+    let session;
+    if (sessionId) {
+      session = await this.env.getSession?.(sessionId);
+      if (!session) {
+        eventHandlerLogger.warn(`Session not found: ${sessionId}, creating new session`);
+        session = await this.createFallbackSession(event);
+      }
+    } else {
+      eventHandlerLogger.info("No trigger_session_id and no active session, creating new session");
+      session = await this.createFallbackSession(event);
     }
 
-    const session = await this.env.getSession?.(sessionId);
-    if (!session) {
-      eventHandlerLogger.warn(`Session not found: ${sessionId}`);
-      return;
-    }
+    await this.processEventWithSession(session, event);
+  }
 
+  private async createFallbackSession<T>(event: EnvEvent<T>): Promise<any> {
+    const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
+    const newSession = await this.env.createSession?.({ title: fallbackTitle });
+    if (!newSession) {
+      eventHandlerLogger.error("Failed to create fallback session");
+      throw new Error("No session available and failed to create fallback session");
+    }
+    eventHandlerLogger.info(`Created fallback session: ${newSession.id}`);
+    return newSession;
+  }
+
+  private async processEventWithSession<T>(session: any, event: EnvEvent<T>): Promise<void> {
+    const sessionId = session.id;
     const messages = this.constructMessages(event);
     eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
 
     for (const msg of messages) {
       const msgStr = JSON.stringify(msg).substring(0, 200);
-      eventHandlerLogger.info(`Adding message: role=${(msg as any).role}, contentType=${typeof (msg as any).content}, isArray=${Array.isArray((msg as any).content)}`);
-      if ((msg as any).role === "assistant" && Array.isArray((msg as any).content)) {
-        const toolCalls = (msg as any).content.filter((p: any) => p.type === "tool-call");
-        eventHandlerLogger.info(`  assistant message has ${toolCalls.length} tool-calls`);
-      }
-      if ((msg as any).role === "tool" && Array.isArray((msg as any).content)) {
-        const toolResults = (msg as any).content.filter((p: any) => p.type === "tool-result");
-        eventHandlerLogger.info(`  tool message has ${toolResults.length} tool-results`);
-      }
+      eventHandlerLogger.debug(`Adding message: role=${(msg as any).role}`);
       
       const modelMessage: ModelMessage = msg as any;
       session.addMessageFromModelMessage(modelMessage);
     }
 
     const history = session.toHistory();
-    eventHandlerLogger.info(`toHistory returned ${history.length} messages`);
+    eventHandlerLogger.debug(`toHistory returned ${history.length} messages`);
     
-    await this.env.handle_query(
-      `Process event: ${event.type}`,
-      {
-        session_id: sessionId,
-        onMessageAdded: (message: ModelMessage) => {
-          eventHandlerLogger.info(`onMessageAdded: role=${message.role}`);
-          session.addMessageFromModelMessage(message);
+    const query = `Process event: ${event.type}`;
+    
+    try {
+      await this.env.handle_query(
+        query,
+        {
+          session_id: sessionId,
+          onMessageAdded: (message: ModelMessage) => {
+            eventHandlerLogger.debug(`onMessageAdded: role=${message.role}`);
+            session.addMessageFromModelMessage(message);
+          },
         },
-      },
-      history
-    );
+        history
+      );
+    } catch (error) {
+      eventHandlerLogger.error(`handle_query failed: ${error instanceof Error ? error.message : String(error)}`);
+      await this.retryWithNewSession(sessionId, query, error);
+    }
+  }
+
+  private async retryWithNewSession(originalSessionId: string, query: string, error: unknown): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const maxRetries = 3;
+    
+    for (let retry = 1; retry <= maxRetries; retry++) {
+      eventHandlerLogger.info(`Retry attempt ${retry}/${maxRetries} with new session`);
+      
+      const fallbackTitle = `[Event Retry ${retry}] ${new Date().toISOString()}`;
+      const newSession = await this.env.createSession?.({ title: fallbackTitle });
+      
+      if (!newSession) {
+        eventHandlerLogger.error("Failed to create retry session");
+        return;
+      }
+
+      const errorMsg = `[System] An error occurred while processing your previous request.
+Error: ${errorMessage}
+
+Your original request: ${query}
+
+A new session has been started. Please continue from here.`;
+
+      newSession.addUserMessage(errorMsg);
+      
+      const history = newSession.toHistory();
+      
+      try {
+        await this.env.handle_query(
+          `Continue from error recovery`,
+          {
+            session_id: newSession.id,
+            onMessageAdded: (message: ModelMessage) => {
+              eventHandlerLogger.debug(`Retry onMessageAdded: role=${message.role}`);
+              newSession.addMessageFromModelMessage(message);
+            },
+          },
+          history
+        );
+        eventHandlerLogger.info(`Retry succeeded with session ${newSession.id}`);
+        return;
+      } catch (retryError) {
+        const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        eventHandlerLogger.warn(`Retry attempt ${retry} failed: ${retryErrorMsg}`);
+        
+        if (retry === maxRetries) {
+          eventHandlerLogger.error(`All ${maxRetries} retry attempts failed`);
+        }
+      }
+    }
   }
 
   private constructMessages<T>(event: EnvEvent<T>): HistoryMessageWithTool[] {
