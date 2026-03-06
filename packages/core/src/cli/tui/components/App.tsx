@@ -37,24 +37,36 @@ export function App(props: AppProps) {
 
   // 处理 pending user query（从首页切换到聊天时）
   createEffect(() => {
-    if (store.view() === "chat" && store.pendingUserQuery()) {
-      const query = store.pendingUserQuery();
-      if (query) {
-        tuiLogger.info("[App] Processing pending user query", { query: query.substring(0, 50) });
-        // 清除 pending query
-        store.setPendingUserQuery(null);
-        // 创建 session 并发送 prompt
-        eventStream.createSession().then((sessionId) => {
-          store.setSessionId(sessionId);
-          eventStream.connect().then(() => {
-            eventStream.sendPrompt(query);
-          });
-        });
-      }
+    const currentView = store.view();
+    const pendingQuery = store.pendingUserQuery();
+    
+    tuiLogger.info("[App] createEffect triggered", { view: currentView, hasPendingQuery: !!pendingQuery, queryLength: pendingQuery?.length });
+    
+    if (currentView === "chat" && pendingQuery) {
+      const query = pendingQuery;
+      tuiLogger.info("[App] Processing pending user query", { query: query.substring(0, 50) });
+      // 清除 pending query
+      store.setPendingUserQuery(null);
+      // 创建 session 并发送 prompt
+      eventStream.createSession().then((sessionId) => {
+        tuiLogger.info("[App] Session created", { sessionId });
+        store.setSessionId(sessionId);
+        // 先调用 connect() 并等待连接建立
+        const connectPromise = eventStream.connect();
+        // 等待一小段时间让连接建立
+        setTimeout(() => {
+          tuiLogger.info("[App] Timeout done, sending prompt");
+          eventStream.sendPrompt(query);
+          tuiLogger.info("[App] Prompt sent");
+        }, 500);
+      }).catch((err) => {
+        tuiLogger.error("[App] Create session failed", { error: err.message });
+      });
     }
   });
 
   onMount(async () => {
+    tuiLogger.info("[App] Mounted, props.sessionId:", props.sessionId);
     // 如果传入了 sessionId，直接进入聊天模式
     if (props.sessionId) {
       store.setSessionId(props.sessionId);
