@@ -237,7 +237,7 @@ export class EventMcpClient {
     const requestId = this.trace.generateRequestId();
     
     await this.trace.runWithNewContextAsync(requestId, undefined, async () => {
-      serverLogger.info(`[MCP:${this.name}] Received event`, { type: rawEvent.type, requestId });
+      serverLogger.debug(`[MCP:${this.name}] Received event`, { type: rawEvent.type, requestId });
 
       const envEvent: EnvEvent = {
         id: (rawEvent.id as string) || crypto.randomUUID(),

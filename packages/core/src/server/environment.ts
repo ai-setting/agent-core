@@ -1221,8 +1221,10 @@ Please confirm the task has been stopped and ask if the user needs any other hel
     bus.registerRule({
       eventType: "timer.*",
       handler: {
-        type: "agent",
-        prompt: "You are a timer event handler. Analyze the timer event and respond appropriately.",
+        type: "function",
+        fn: async (event) => {
+          serverLogger.debug(`[TimerEvent] Received: ${event.type}`, { id: event.id, payload: event.payload, metadata: event.metadata });
+        }
       },
       options: { priority: 50 }
     });
