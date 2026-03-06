@@ -1,8 +1,12 @@
 /**
  * 复现 context window exceeds limit 问题
  * 
- * 使用日志中有问题的 session (ses_3422089a5ffefKehCES1GcGBg5) 来复现
- * 日志显示 messageCount 达到 697-709 时会触发 "context window exceeds limit"
+ * 使用日志中有问题的 session (ses_33d0a84ccffe0C9nF5l4w6PZiO) 来复现
+ * 日志显示 messageCount 达到 636 时会触发 "context window exceeds limit"
+ * 
+ * 修复验证：
+ * 1. Agent 内部会快速失败（3次重试后）而不是迭代 100 次
+ * 2. EventHandlerAgent 会选择消息最少的 session 进行重试
  */
 
 import { ServerEnvironment } from "../packages/core/src/server/environment.js";
@@ -15,7 +19,10 @@ async function main() {
   console.log("    Context Window 超过限制 复现测试");
   console.log("==============================================\n");
 
-  const env = new ServerEnvironment({});
+  // 使用 sszst 环境的配置
+  const env = new ServerEnvironment({
+    activeEnvironment: "sszst"
+  });
   
   console.log("等待环境就绪...");
   await env.waitForReady();
@@ -24,8 +31,8 @@ async function main() {
   console.log("✓ ServerEnvironment 就绪");
   console.log(`  Model: ${model?.providerID}/${model?.modelID}\n`);
 
-  // 加载日志中有问题的 session
-  const sessionId = "ses_3422089a5ffefKehCES1GcGBg5";
+  // 加载日志中有问题的 session (ses_33d0a84ccffe0C9nF5l4w6PZiO 有 637 条消息)
+  const sessionId = "ses_33d0a84ccffe0C9nF5l4w6PZiO";
   const session = await env.getSession(sessionId);
   
   if (!session) {

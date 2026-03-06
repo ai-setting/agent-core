@@ -167,12 +167,13 @@ export class Agent {
           { temperature: 0.7, maxTokens: 4000 }
         );
 
-        consecutiveErrors = 0;
-
         if (!llmResult.success) {
           agentLogger.error("LLM call failed", { error: llmResult.error });
           throw new Error(`LLM call failed: ${llmResult.error}`);
         }
+
+        // Only reset consecutiveErrors when LLM call succeeds
+        consecutiveErrors = 0;
 
         const output = llmResult.output as unknown as LLMOutput;
         agentLogger.debug(`LLM output received`, {
