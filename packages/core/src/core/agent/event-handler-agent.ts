@@ -81,6 +81,7 @@ export class EventHandlerAgent {
       title: fallbackTitle,
       metadata,
     });
+    eventHandlerLogger.info(`Creating session with metadata: ${JSON.stringify(metadata)}`);
     if (!newSession) {
       eventHandlerLogger.error("Failed to create fallback session");
       throw new Error("No session available and failed to create fallback session");
@@ -94,7 +95,7 @@ export class EventHandlerAgent {
   }
 
   private async loadRelatedSessionHistory<T>(event: EnvEvent<T>, session: any): Promise<void> {
-    eventHandlerLogger.debug(`loadRelatedSessionHistory: event metadata keys = ${JSON.stringify(Object.keys(event.metadata ?? {}))}, metadata = ${JSON.stringify(event.metadata)}`);
+    eventHandlerLogger.info(`loadRelatedSessionHistory: event metadata keys = ${JSON.stringify(Object.keys(event.metadata ?? {}))}, metadata = ${JSON.stringify(event.metadata)}`);
     const chatId = event.metadata?.chat_id as string | undefined;
     if (!chatId || !this.env.findSessionsByMetadata) {
       return;
@@ -102,6 +103,7 @@ export class EventHandlerAgent {
 
     try {
       const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
+      eventHandlerLogger.info(`findSessionsByMetadata result for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
       
       if (relatedSessionIds.length === 0) {
         eventHandlerLogger.debug(`No related sessions found for chat_id: ${chatId}`);
