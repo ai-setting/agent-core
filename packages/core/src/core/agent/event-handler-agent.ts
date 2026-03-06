@@ -94,6 +94,7 @@ export class EventHandlerAgent {
   }
 
   private async loadRelatedSessionHistory<T>(event: EnvEvent<T>, session: any): Promise<void> {
+    eventHandlerLogger.debug(`loadRelatedSessionHistory: event metadata keys = ${JSON.stringify(Object.keys(event.metadata ?? {}))}, metadata = ${JSON.stringify(event.metadata)}`);
     const chatId = event.metadata?.chat_id as string | undefined;
     if (!chatId || !this.env.findSessionsByMetadata) {
       return;
