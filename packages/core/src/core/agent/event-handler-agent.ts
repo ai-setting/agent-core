@@ -65,59 +65,10 @@ export class EventHandlerAgent {
       session = await this.createFallbackSession(event);
     }
 
-    await this.processEventWithSession(session, event);
+    await this.processEventWithSession(session, event, chatId);
   }
 
-  private async createFallbackSession<T>(event: EnvEvent<T>): Promise<any> {
-    const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
-    const metadata: Record<string, unknown> = {
-      trigger_type: "event",
-      created_at: Date.now(),
-      event_type: event.type,
-      event_id: event.id,
-      ...event.metadata,
-    };
-    const newSession = await this.env.createSession?.({ 
-      title: fallbackTitle,
-      metadata,
-    });
-    eventHandlerLogger.info(`Creating session with metadata: ${JSON.stringify(metadata)}`);
-    if (!newSession) {
-      eventHandlerLogger.error("Failed to create fallback session");
-      throw new Error("No session available and failed to create fallback session");
-    }
-    eventHandlerLogger.info(`Created fallback session: ${newSession.id}`);
-    
-    return newSession;
-  }
-
-  private async loadRelatedSessionHistory<T>(session: any, sourceSessionId: string): Promise<void> {
-    eventHandlerLogger.info(`loadRelatedSessionHistory: loading from session ${sourceSessionId} to ${session.id}`);
-
-    try {
-      // 获取源 session 的历史消息
-      const messagesResult = await this.env.getSessionMessages?.(sourceSessionId, {
-        offset: 0,
-        limit: 50,
-      });
-
-      if (messagesResult && messagesResult.messages.length > 0) {
-        // 找到第一个 role 为 user 的消息作为起始点，确保消息链完整
-        const startIndex = messagesResult.messages.findIndex((m: { role: string }) => m.role === "user");
-        const validMessages = startIndex >= 0 ? messagesResult.messages.slice(startIndex) : messagesResult.messages;
-        
-        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages from session ${sourceSessionId}`);
-        // 将相关历史消息加入当前 session
-        for (const msg of validMessages) {
-          session.addUserMessage?.(`[Related History] ${msg.content}`);
-        }
-      }
-    } catch (error) {
-      eventHandlerLogger.warn(`Failed to load related session history: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  private async processEventWithSession<T>(session: any, event: EnvEvent<T>): Promise<void> {
+  private async processEventWithSession<T>(session: any, event: EnvEvent<T>, chatId?: string): Promise<void> {
     const sessionId = session.id;
     const messages = this.constructMessages(event);
     eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
@@ -149,11 +100,60 @@ export class EventHandlerAgent {
       );
     } catch (error) {
       eventHandlerLogger.error(`handle_query failed: ${error instanceof Error ? error.message : String(error)}`);
-      await this.retryWithNewSession(sessionId, query, error);
+      await this.retryWithNewSession(sessionId, query, error, chatId);
     }
   }
 
-  private async retryWithNewSession(originalSessionId: string, query: string, error: unknown): Promise<void> {
+  private async createFallbackSession<T>(event: EnvEvent<T>): Promise<any> {
+    const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
+    const metadata: Record<string, unknown> = {
+      trigger_type: "event",
+      created_at: Date.now(),
+      event_type: event.type,
+      event_id: event.id,
+      ...event.metadata,
+    };
+    const newSession = await this.env.createSession?.({ 
+      title: fallbackTitle,
+      metadata,
+    });
+    eventHandlerLogger.info(`Creating session with metadata: ${JSON.stringify(metadata)}`);
+    if (!newSession) {
+      eventHandlerLogger.error("Failed to create fallback session");
+      throw new Error("No session available and failed to create fallback session");
+    }
+    eventHandlerLogger.info(`Created fallback session: ${newSession.id}`);
+    
+    return newSession;
+  }
+
+  private async loadRelatedSessionHistory(session: any, sourceSessionId: string): Promise<void> {
+    eventHandlerLogger.info(`loadRelatedSessionHistory: loading from session ${sourceSessionId} to ${session.id}`);
+
+    try {
+      // 获取源 session 的历史消息
+      const messagesResult = await this.env.getSessionMessages?.(sourceSessionId, {
+        offset: 0,
+        limit: 50,
+      });
+
+      if (messagesResult && messagesResult.messages.length > 0) {
+        // 找到第一个 role 为 user 的消息作为起始点，确保消息链完整
+        const startIndex = messagesResult.messages.findIndex((m: { role: string }) => m.role === "user");
+        const validMessages = startIndex >= 0 ? messagesResult.messages.slice(startIndex) : messagesResult.messages;
+        
+        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages from session ${sourceSessionId}`);
+        // 将相关历史消息加入当前 session
+        for (const msg of validMessages) {
+          session.addUserMessage?.(`[Related History] ${msg.content}`);
+        }
+      }
+    } catch (error) {
+      eventHandlerLogger.warn(`Failed to load related session history: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async retryWithNewSession(originalSessionId: string, query: string, error: unknown, chatId?: string): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const maxRetries = 3;
     
@@ -161,11 +161,17 @@ export class EventHandlerAgent {
       eventHandlerLogger.info(`Retry attempt ${retry}/${maxRetries} with new session`);
       
       const fallbackTitle = `[Event Retry ${retry}] ${new Date().toISOString()}`;
-      const newSession = await this.env.createSession?.({ title: fallbackTitle });
+      const metadata: Record<string, unknown> = chatId ? { chat_id: chatId, trigger_type: "event_retry" } : { trigger_type: "event_retry" };
+      const newSession = await this.env.createSession?.({ title: fallbackTitle, metadata });
       
       if (!newSession) {
         eventHandlerLogger.error("Failed to create retry session");
         return;
+      }
+
+      // 加载原 session 的历史消息作为背景
+      if (originalSessionId) {
+        await this.loadRelatedSessionHistory(newSession, originalSessionId);
       }
 
       const errorMsg = `[System] An error occurred while processing your previous request.
