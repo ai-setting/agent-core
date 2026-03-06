@@ -566,6 +566,80 @@ export abstract class BaseEnvironment implements Environment {
     return Session.list();
   }
 
+  async listSessionInfos(
+    filter?: {
+      metadata?: Record<string, unknown>;
+      timeRange?: { start?: number; end?: number };
+    },
+    options?: { offset?: number; limit?: number }
+  ): Promise<{
+    total: number;
+    sessions: Array<{
+      id: string;
+      title: string;
+      metadata?: Record<string, unknown>;
+      created_at: string;
+      updated_at: string;
+    }>;
+  }> {
+    const { Storage } = await import("../../session/storage.js");
+    const result = Storage.listSessionInfos(filter, options);
+    
+    return {
+      total: result.total,
+      sessions: result.sessions.map(s => ({
+        id: s.id,
+        title: s.title,
+        metadata: s.metadata,
+        created_at: s.time?.created ? new Date(s.time.created).toISOString() : "",
+        updated_at: s.time?.updated ? new Date(s.time.updated).toISOString() : "",
+      })),
+    };
+  }
+
+  async findSessionsByMetadata(metadata: Record<string, unknown>): Promise<string[]> {
+    const { Storage } = await import("../../session/storage.js");
+    return Storage.findSessionIdsByMetadata(metadata);
+  }
+
+  async getSessionMessages(
+    sessionId: string,
+    options?: { offset?: number; limit?: number }
+  ): Promise<{
+    total: number;
+    messages: Array<{
+      id: string;
+      role: string;
+      content: string;
+      timestamp: string;
+    }>;
+  }> {
+    const { Storage } = await import("../../session/storage.js");
+    const result = Storage.getSessionMessages(sessionId, options);
+    
+    return {
+      total: result.total,
+      messages: result.messages.map(m => {
+        // Extract text content from parts
+        let content = "";
+        if (m.parts) {
+          const textPart = m.parts.find(p => p.type === "text");
+          if (textPart && "text" in textPart) {
+            content = textPart.text;
+          } else {
+            content = JSON.stringify(m.parts);
+          }
+        }
+        return {
+          id: m.info.id,
+          role: m.info.role,
+          content,
+          timestamp: m.info.timestamp ? new Date(m.info.timestamp).toISOString() : "",
+        };
+      }),
+    };
+  }
+
   updateSession = withEventHookVoid(
     (id: string, payload: { title?: string; metadata?: Record<string, unknown> }): boolean => {
       const s = Session.get(id);

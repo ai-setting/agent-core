@@ -1,4 +1,4 @@
-import type { SessionInfo, MessageWithParts } from "./types";
+import type { SessionInfo, MessageWithParts, SessionFilter, ListOptions } from "./types";
 
 export interface PersistenceConfig {
   mode: "memory" | "sqlite";
@@ -12,7 +12,7 @@ export interface SessionPersistence {
   saveSession(info: SessionInfo): Promise<void>;
   getSession(id: string): Promise<SessionInfo | undefined>;
   deleteSession(id: string): Promise<void>;
-  listSessions(): Promise<SessionInfo[]>;
+  listSessions(filter?: SessionFilter, options?: ListOptions): Promise<{ total: number; sessions: SessionInfo[] }>;
 
   saveMessage(sessionID: string, message: MessageWithParts): Promise<void>;
   getMessage(sessionID: string, messageID: string): Promise<MessageWithParts | undefined>;
