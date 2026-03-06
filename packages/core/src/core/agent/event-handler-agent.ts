@@ -51,37 +51,46 @@ export class EventHandlerAgent {
         }
       }
     }
-    
-    // Fallback 2: 如果还是没有 sessionId，尝试通过 chat_id 查找相关 session
-    if (!sessionId) {
-      const chatId = event.metadata?.chat_id as string | undefined;
-      if (chatId && this.env.findSessionsByMetadata) {
-        const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
-        eventHandlerLogger.info(`findSessionsByMetadata for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
-        if (relatedSessionIds.length > 0) {
-          sessionId = relatedSessionIds[0];
-          eventHandlerLogger.info(`Found existing session by chat_id ${chatId}: ${sessionId}`);
-        }
+
+    // 尝试通过 chat_id 找到对应的 session（有完整历史）
+    const chatId = event.metadata?.chat_id as string | undefined;
+    let chatSessionId: string | undefined;
+    if (chatId && this.env.findSessionsByMetadata) {
+      const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
+      eventHandlerLogger.info(`findSessionsByMetadata for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
+      if (relatedSessionIds.length > 0) {
+        chatSessionId = relatedSessionIds[0];
+        eventHandlerLogger.info(`Found chat session by chat_id ${chatId}: ${chatSessionId}`);
       }
     }
+    
+    // Fallback 2: 如果还是没有 sessionId，使用 chat_session_id
+    if (!sessionId && chatSessionId) {
+      sessionId = chatSessionId;
+    }
 
-    // Fallback 3: 如果还是没有 sessionId，创建新 session
+    // 获取 session
     let session;
     if (sessionId) {
       session = await this.env.getSession?.(sessionId);
       if (!session) {
         eventHandlerLogger.warn(`Session not found: ${sessionId}, creating new session`);
-        session = await this.createFallbackSession(event);
+        session = await this.createFallbackSession(event, chatSessionId);
       }
     } else {
       eventHandlerLogger.info("No trigger_session_id, no active session, no chat_id match, creating new session");
-      session = await this.createFallbackSession(event);
+      session = await this.createFallbackSession(event, chatSessionId);
+    }
+
+    // 如果 active_session 和 chat_session 不一致，从 chat_session 加载历史消息
+    if (session.id !== chatSessionId && chatSessionId) {
+      await this.loadRelatedSessionHistory(session, chatSessionId);
     }
 
     await this.processEventWithSession(session, event);
   }
 
-  private async createFallbackSession<T>(event: EnvEvent<T>): Promise<any> {
+  private async createFallbackSession<T>(event: EnvEvent<T>, chatSessionId?: string): Promise<any> {
     const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
     const metadata: Record<string, unknown> = {
       trigger_type: "event",
@@ -100,41 +109,21 @@ export class EventHandlerAgent {
       throw new Error("No session available and failed to create fallback session");
     }
     eventHandlerLogger.info(`Created fallback session: ${newSession.id}`);
-    
-    // 如果有 chat_id，尝试获取相关历史消息
-    await this.loadRelatedSessionHistory(event, newSession);
+
+    // 如果有 chatSessionId，加载历史消息
+    if (chatSessionId && chatSessionId !== newSession.id) {
+      await this.loadRelatedSessionHistory(newSession, chatSessionId);
+    }
     
     return newSession;
   }
 
-  private async loadRelatedSessionHistory<T>(event: EnvEvent<T>, session: any): Promise<void> {
-    eventHandlerLogger.info(`loadRelatedSessionHistory: event metadata keys = ${JSON.stringify(Object.keys(event.metadata ?? {}))}, metadata = ${JSON.stringify(event.metadata)}`);
-    const chatId = event.metadata?.chat_id as string | undefined;
-    if (!chatId || !this.env.findSessionsByMetadata) {
-      return;
-    }
+  private async loadRelatedSessionHistory<T>(session: any, sourceSessionId: string): Promise<void> {
+    eventHandlerLogger.info(`loadRelatedSessionHistory: loading from session ${sourceSessionId} to ${session.id}`);
 
     try {
-      const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
-      eventHandlerLogger.info(`findSessionsByMetadata result for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
-      
-      if (relatedSessionIds.length === 0) {
-        eventHandlerLogger.debug(`No related sessions found for chat_id: ${chatId}`);
-        return;
-      }
-
-      // 排除当前 session，获取最近的相关 session
-      const otherSessionIds = relatedSessionIds.filter((id: string) => id !== session.id);
-      if (otherSessionIds.length === 0) {
-        eventHandlerLogger.debug(`No other related sessions found for chat_id: ${chatId}`);
-        return;
-      }
-
-      const recentSessionId = otherSessionIds[0];
-      eventHandlerLogger.info(`Found related session for chat_id ${chatId}: ${recentSessionId}`);
-
-      // 获取最近 session 的历史消息
-      const messagesResult = await this.env.getSessionMessages?.(recentSessionId, {
+      // 获取源 session 的历史消息
+      const messagesResult = await this.env.getSessionMessages?.(sourceSessionId, {
         offset: 0,
         limit: 50,
       });
@@ -144,7 +133,7 @@ export class EventHandlerAgent {
         const startIndex = messagesResult.messages.findIndex((m: { role: string }) => m.role === "user");
         const validMessages = startIndex >= 0 ? messagesResult.messages.slice(startIndex) : messagesResult.messages;
         
-        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages (from user query start) from session ${recentSessionId}`);
+        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages from session ${sourceSessionId}`);
         // 将相关历史消息加入当前 session
         for (const msg of validMessages) {
           session.addUserMessage?.(`[Related History] ${msg.content}`);
