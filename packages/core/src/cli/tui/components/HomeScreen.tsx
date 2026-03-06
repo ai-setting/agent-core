@@ -36,12 +36,9 @@ export function HomeScreen(props: { onExit?: () => void }) {
   const handlePromptSubmit = async (content: string) => {
     setIsLoading(true);
     try {
-      const newSessionId = await eventStream.createSession();
-      store.setSessionId(newSessionId);
+      store.setPendingUserQuery(content);
       store.setView("chat");
-      await eventStream.connect();
-      await eventStream.sendPrompt(content);
-      tuiLogger.info(`[HomeScreen] Started new chat with prompt: ${content.substring(0, 50)}`);
+      tuiLogger.info(`[HomeScreen] Set pending query and switch to chat: ${content.substring(0, 50)}`);
     } catch (err) {
       tuiLogger.error("[HomeScreen] Failed to start chat", { error: (err as Error).message });
     } finally {
