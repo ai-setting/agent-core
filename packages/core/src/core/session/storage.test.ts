@@ -105,9 +105,9 @@ describe("FileStorage", () => {
       await storage.saveSessionInfo(info2);
 
       const list = await storage.listSessionInfos();
-      expect(list).toHaveLength(2);
-      expect(list[0].id).toBe("session-2");
-      expect(list[1].id).toBe("session-1");
+      expect(list.sessions).toHaveLength(2);
+      expect(list.sessions[0].id).toBe("session-2");
+      expect(list.sessions[1].id).toBe("session-1");
     });
 
     it("should skip corrupted session files", async () => {
@@ -123,8 +123,8 @@ describe("FileStorage", () => {
       await fs.writeFile(corruptedPath, '{ "id": "corrupted", invalid json', "utf-8");
 
       const list = await storage.listSessionInfos();
-      expect(list).toHaveLength(1);
-      expect(list[0].id).toBe("valid-session");
+      expect(list.sessions).toHaveLength(1);
+      expect(list.sessions[0].id).toBe("valid-session");
     });
   });
 
@@ -241,6 +241,107 @@ describe("FileStorage", () => {
 
       const messages = await storage.getMessages("session-to-delete");
       expect(messages).toHaveLength(0);
+    });
+  });
+
+  describe("listSessionInfos with filter and pagination", () => {
+    it("should filter by time range", async () => {
+      const info1: SessionInfo = {
+        id: "session-old",
+        title: "Old Session",
+        directory: "/path1",
+        time: { created: 1000, updated: 1000 },
+        metadata: {},
+      };
+      const info2: SessionInfo = {
+        id: "session-new",
+        title: "New Session",
+        directory: "/path2",
+        time: { created: 3000, updated: 3000 },
+        metadata: {},
+      };
+
+      await storage.saveSessionInfo(info1);
+      await storage.saveSessionInfo(info2);
+
+      // Filter: timeRange start=2000
+      const result = await storage.listSessionInfos(
+        { timeRange: { start: 2000 } },
+        { offset: 0, limit: 10 }
+      );
+
+      expect(result.total).toBe(1);
+      expect(result.sessions[0].id).toBe("session-new");
+    });
+
+    it("should filter by metadata", async () => {
+      const info1: SessionInfo = {
+        id: "session-chat1",
+        title: "Chat 1",
+        directory: "/path1",
+        time: { created: 1000, updated: 1000 },
+        metadata: { chat_id: "chat1", trigger_type: "event" },
+      };
+      const info2: SessionInfo = {
+        id: "session-chat2",
+        title: "Chat 2",
+        directory: "/path2",
+        time: { created: 2000, updated: 2000 },
+        metadata: { chat_id: "chat2", trigger_type: "user_prompt" },
+      };
+
+      await storage.saveSessionInfo(info1);
+      await storage.saveSessionInfo(info2);
+
+      // Filter: metadata chat_id = chat1
+      const result = await storage.listSessionInfos(
+        { metadata: { chat_id: "chat1" } },
+        { offset: 0, limit: 10 }
+      );
+
+      expect(result.total).toBe(1);
+      expect(result.sessions[0].id).toBe("session-chat1");
+    });
+
+    it("should apply pagination correctly", async () => {
+      for (let i = 0; i < 5; i++) {
+        await storage.saveSessionInfo({
+          id: `session-${i}`,
+          title: `Session ${i}`,
+          directory: "/path",
+          time: { created: 1000 + i * 1000, updated: 1000 + i * 1000 },
+          metadata: {},
+        });
+      }
+
+      // Pagination: offset=2, limit=2
+      const result = await storage.listSessionInfos(
+        {},
+        { offset: 2, limit: 2 }
+      );
+
+      expect(result.total).toBe(5);
+      expect(result.sessions).toHaveLength(2);
+    });
+
+    it("should return total count regardless of pagination", async () => {
+      for (let i = 0; i < 15; i++) {
+        await storage.saveSessionInfo({
+          id: `session-total-${i}`,
+          title: `Session ${i}`,
+          directory: "/path",
+          time: { created: 1000 + i * 1000, updated: 1000 + i * 1000 },
+          metadata: {},
+        });
+      }
+
+      const result = await storage.listSessionInfos(
+        {},
+        { offset: 0, limit: 5 }
+      );
+
+      expect(result.total).toBe(15);
+      expect(result.sessions).toHaveLength(5);
     });
   });
 });
