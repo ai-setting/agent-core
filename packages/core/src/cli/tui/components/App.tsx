@@ -4,7 +4,7 @@
  * TUI 应用的主入口，根据 view 状态渲染首页或聊天页面
  */
 
-import { onMount, createSignal, createContext, useContext, type Accessor, type Setter, Show } from "solid-js";
+import { onMount, createSignal, createContext, useContext, type Accessor, type Setter, Show, createEffect } from "solid-js";
 import { useRenderer } from "@opentui/solid";
 import { Header } from "./Header.js";
 import { MessageList } from "./MessageList.js";
@@ -34,6 +34,25 @@ export function getRenderer() {
 export function App(props: AppProps) {
   const store = useStore();
   const eventStream = useEventStream();
+
+  // 处理 pending user query（从首页切换到聊天时）
+  createEffect(() => {
+    if (store.view() === "chat" && store.pendingUserQuery()) {
+      const query = store.pendingUserQuery();
+      if (query) {
+        tuiLogger.info("[App] Processing pending user query", { query: query.substring(0, 50) });
+        // 清除 pending query
+        store.setPendingUserQuery(null);
+        // 创建 session 并发送 prompt
+        eventStream.createSession().then((sessionId) => {
+          store.setSessionId(sessionId);
+          eventStream.connect().then(() => {
+            eventStream.sendPrompt(query);
+          });
+        });
+      }
+    }
+  });
 
   onMount(async () => {
     // 如果传入了 sessionId，直接进入聊天模式

@@ -45,6 +45,7 @@ export interface StoreState {
   view: ViewType;
   sessionId: string | null;
   sessionTitle: string | null;
+  pendingUserQuery: string | null;
   messages: Message[];
   parts: Record<string, MessagePart[]>;
   isStreaming: boolean;
@@ -64,6 +65,7 @@ export interface StoreContextValue {
   view: Accessor<ViewType>;
   sessionId: Accessor<string | null>;
   sessionTitle: Accessor<string | null>;
+  pendingUserQuery: Accessor<string | null>;
   messages: Accessor<Message[]>;
   parts: Accessor<Record<string, MessagePart[]>>;
   isStreaming: Accessor<boolean>;
@@ -77,6 +79,7 @@ export interface StoreContextValue {
   setView: Setter<ViewType>;
   setSessionId: Setter<string | null>;
   setSessionTitle: Setter<string | null>;
+  setPendingUserQuery: Setter<string | null>;
   setMessages: Setter<Message[]>;
   setParts: Setter<Record<string, MessagePart[]>>;
   setIsStreaming: Setter<boolean>;
@@ -107,6 +110,7 @@ export function StoreProvider(props: { children: any }) {
   const [view, setView] = createSignal<ViewType>("home");
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [sessionTitle, setSessionTitle] = createSignal<string | null>(null);
+  const [pendingUserQuery, setPendingUserQuery] = createSignal<string | null>(null);
   const [messages, setMessages] = createSignal<Message[]>([]);
   const [parts, setParts] = createSignal<Record<string, MessagePart[]>>({});
   const [isStreaming, setIsStreaming] = createSignal(false);
@@ -190,6 +194,7 @@ export function StoreProvider(props: { children: any }) {
     view,
     sessionId,
     sessionTitle,
+    pendingUserQuery,
     messages,
     parts,
     isStreaming,
@@ -201,6 +206,7 @@ export function StoreProvider(props: { children: any }) {
     setView,
     setSessionId,
     setSessionTitle,
+    setPendingUserQuery,
     setMessages,
     setParts,
     setIsStreaming,
