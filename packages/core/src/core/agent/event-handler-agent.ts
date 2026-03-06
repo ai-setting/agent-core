@@ -142,11 +142,14 @@ export class EventHandlerAgent {
         const startIndex = messagesResult.messages.findIndex((m: { role: string }) => m.role === "user");
         const validMessages = startIndex >= 0 ? messagesResult.messages.slice(startIndex) : messagesResult.messages;
         
-        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages from session ${sourceSessionId}`);
-        // 将相关历史消息加入当前 session
-        for (const msg of validMessages) {
-          session.addUserMessage?.(`[Related History] ${msg.content}`);
-        }
+        // 整合成一条 user message 作为背景
+        const historyContent = validMessages
+          .map((msg: { role: string; content: string }) => `[${msg.role}]: ${msg.content}`)
+          .join("\n\n");
+        
+        const backgroundMsg = `[Background History from previous session ${sourceSessionId}:\n${historyContent}]`;
+        session.addUserMessage?.(backgroundMsg);
+        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages as single background message`);
       }
     } catch (error) {
       eventHandlerLogger.warn(`Failed to load related session history: ${error instanceof Error ? error.message : String(error)}`);
