@@ -39,6 +39,7 @@ export function HomeScreen(props: { onExit?: () => void }) {
       const newSessionId = await eventStream.createSession();
       store.setSessionId(newSessionId);
       store.setView("chat");
+      await eventStream.connect();
       await eventStream.sendPrompt(content);
       tuiLogger.info(`[HomeScreen] Started new chat with prompt: ${content.substring(0, 50)}`);
     } catch (err) {
