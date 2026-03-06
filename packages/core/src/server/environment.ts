@@ -1219,6 +1219,17 @@ Please confirm the task has been stopped and ask if the user needs any other hel
     });
 
     bus.registerRule({
+      eventType: "timer.*",
+      handler: {
+        type: "function",
+        fn: async (event: EnvEvent): Promise<void> => {
+          console.log(`[EventBus] Timer event received: ${event.type}, id=${event.id}, timestamp=${new Date(event.timestamp).toISOString()}`);
+        }
+      },
+      options: { priority: 50 }
+    });
+
+    bus.registerRule({
       eventType: "*",
       handler: {
         type: "agent",
