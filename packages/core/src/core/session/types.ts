@@ -265,3 +265,27 @@ export interface MessageCreateOptions {
   model?: string;
   metadata?: Record<string, unknown>;
 }
+
+/**
+ * Time range for filtering sessions.
+ */
+export interface TimeRange {
+  start?: number;  // 毫秒时间戳
+  end?: number;
+}
+
+/**
+ * Filter options for listing sessions.
+ */
+export interface SessionFilter {
+  metadata?: Record<string, unknown>;
+  timeRange?: TimeRange;
+}
+
+/**
+ * Pagination options for list operations.
+ */
+export interface ListOptions {
+  offset?: number;
+  limit?: number;
+}

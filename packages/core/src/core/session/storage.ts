@@ -13,7 +13,7 @@
  * Based on OpenCode's Storage architecture with pluggable backend support.
  */
 
-import type { SessionInfo, MessageWithParts } from "./types";
+import type { SessionInfo, MessageWithParts, SessionFilter, ListOptions } from "./types";
 import type { Session } from "./session";
 import fs from "fs/promises";
 import path from "path";
@@ -292,8 +292,8 @@ class StorageImpl {
       this.fileStorage = null;
       await this.sqliteStorage.initialize();
 
-      const savedInfos = await this.sqliteStorage.listSessions();
-      for (const info of savedInfos) {
+      const result = await this.sqliteStorage.listSessions();
+      for (const info of result.sessions) {
         this.sessionInfos.set(info.id, info);
 
         const { Session: SessionClass } = await import("./session.js");
@@ -311,11 +311,8 @@ class StorageImpl {
 
         // [DEBUG] Log session loaded from SQLite
         storageLogger.info(`[Storage] Loaded session from SQLite: id=${info.id}, title=${info.title}, messageCount=${info.messageCount}, timeCreated=${info.time?.created}, timeUpdated=${info.time?.updated}`);
-
-        // Messages are NOT loaded during initialization
-        // They will be loaded on demand when a session is selected
       }
-      storageLogger.info(`Loaded ${savedInfos.length} sessions from SQLite storage`);
+      storageLogger.info(`Loaded ${result.sessions.length} sessions from SQLite storage`);
     } else {
       this.fileStorage = null;
       this.sqliteStorage = null;
@@ -400,8 +397,75 @@ class StorageImpl {
     return Array.from(this.sessions.values());
   }
 
-  listSessionInfos(): SessionInfo[] {
-    return Array.from(this.sessionInfos.values());
+  listSessionInfos(
+    filter?: SessionFilter,
+    options?: ListOptions
+  ): { total: number; sessions: SessionInfo[] } {
+    let sessions = Array.from(this.sessionInfos.values());
+
+    // Apply filters
+    if (filter) {
+      // Time range filter
+      if (filter.timeRange) {
+        if (filter.timeRange.start !== undefined) {
+          sessions = sessions.filter(s => (s.time?.created ?? 0) >= filter.timeRange!.start!);
+        }
+        if (filter.timeRange.end !== undefined) {
+          sessions = sessions.filter(s => (s.time?.created ?? 0) <= filter.timeRange!.end!);
+        }
+      }
+
+      // Metadata filter
+      if (filter.metadata) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          sessions = sessions.filter(s => s.metadata?.[key] === value);
+        }
+      }
+    }
+
+    const total = sessions.length;
+
+    // Apply pagination
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 20;
+    sessions = sessions.slice(offset, offset + limit);
+
+    return { total, sessions };
+  }
+
+  findSessionIdsByMetadata(metadata: Record<string, unknown>): string[] {
+    if (!metadata || Object.keys(metadata).length === 0) {
+      return Array.from(this.sessionInfos.keys());
+    }
+
+    const result: string[] = [];
+    for (const [id, info] of this.sessionInfos.entries()) {
+      let match = true;
+      for (const [key, value] of Object.entries(metadata)) {
+        if (info.metadata?.[key] !== value) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        result.push(id);
+      }
+    }
+    return result;
+  }
+
+  getSessionMessages(
+    sessionId: string,
+    options?: ListOptions
+  ): { total: number; messages: MessageWithParts[] } {
+    const sessionMessages = this.messages.get(sessionId);
+    const messages = sessionMessages ? Array.from(sessionMessages.values()) : [];
+    const total = messages.length;
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 20;
+    const paginatedMessages = messages.slice(offset, offset + limit);
+
+    return { total, messages: paginatedMessages };
   }
 
   getChildren(parentID: string): SessionInfo[] {

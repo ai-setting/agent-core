@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { ConfigPaths } from "../../../config/paths.js";
 import type { SessionPersistence, PersistenceConfig } from "../persistence.js";
-import type { SessionInfo, MessageWithParts, Part } from "../types.js";
+import type { SessionInfo, MessageWithParts, Part, SessionFilter, ListOptions } from "../types.js";
 import { createLogger } from "../../../utils/logger.js";
 
 const sqliteLogger = createLogger("session:sqlite", "server.log");
@@ -160,19 +160,59 @@ export class SqlitePersistence implements SessionPersistence {
     this.db.prepare("DELETE FROM session WHERE id = ?").run(id);
   }
 
-  async listSessions(): Promise<SessionInfo[]> {
+  async listSessions(
+    filter?: SessionFilter,
+    options?: ListOptions
+  ): Promise<{ total: number; sessions: SessionInfo[] }> {
     if (!this.db) throw new Error("Not initialized");
 
-    const stmt = this.db.prepare("SELECT * FROM session ORDER BY time_updated DESC");
-    const rows = stmt.all() as any[];
+    let whereClause = "";
+    const params: any[] = [];
 
-    // [DEBUG] Log all sessions loaded from SQLite
-    sqliteLogger.info(`[SQLite] listSessions: loaded ${rows.length} sessions`);
-    for (const row of rows) {
-      sqliteLogger.info(`[SQLite]   session: id=${row.id}, title=${row.title}, messageCount=${row.message_count ?? 0}, timeCreated=${row.time_created}, timeUpdated=${row.time_updated}`);
+    if (filter) {
+      const conditions: string[] = [];
+
+      // Time range filter
+      if (filter.timeRange) {
+        if (filter.timeRange.start !== undefined) {
+          conditions.push("time_created >= ?");
+          params.push(filter.timeRange.start);
+        }
+        if (filter.timeRange.end !== undefined) {
+          conditions.push("time_created <= ?");
+          params.push(filter.timeRange.end);
+        }
+      }
+
+      // Metadata filter
+      if (filter.metadata) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push("json_extract(metadata, ?) = ?");
+          params.push(`$.${key}`, value);
+        }
+      }
+
+      if (conditions.length > 0) {
+        whereClause = "WHERE " + conditions.join(" AND ");
+      }
     }
 
-    return rows.map((row) => ({
+    // Get total count
+    const countSql = `SELECT COUNT(*) as count FROM session ${whereClause}`;
+    const countStmt = this.db.prepare(countSql);
+    const countResult = countStmt.get(...params) as { count: number };
+    const total = countResult.count;
+
+    // Get paginated results
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 20;
+    const sql = `SELECT * FROM session ${whereClause} ORDER BY time_updated DESC LIMIT ? OFFSET ?`;
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params, limit, offset) as any[];
+
+    sqliteLogger.info(`[SQLite] listSessions: loaded ${rows.length} sessions, total=${total}`);
+
+    const sessions = rows.map((row) => ({
       id: row.id,
       parentID: row.parent_id,
       title: row.title,
@@ -191,6 +231,56 @@ export class SqlitePersistence implements SessionPersistence {
       },
       metadata: row.metadata,
     }));
+
+    return { total, sessions };
+  }
+
+  async findSessionIdsByMetadata(metadata: Record<string, unknown>): Promise<string[]> {
+    if (!this.db) throw new Error("Not initialized");
+
+    if (!metadata || Object.keys(metadata).length === 0) {
+      return [];
+    }
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    for (const [key, value] of Object.entries(metadata)) {
+      conditions.push("json_extract(metadata, ?) = ?");
+      params.push(`$.${key}`, value);
+    }
+
+    const sql = `SELECT id FROM session WHERE metadata IS NOT NULL AND (${conditions.join(" AND ")}) ORDER BY time_updated DESC`;
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as { id: string }[];
+
+    sqliteLogger.info(`[SQLite] findSessionIdsByMetadata: found ${rows.length} sessions for metadata: ${JSON.stringify(metadata)}`);
+
+    return rows.map((row) => row.id);
+  }
+
+  async getSessionMessages(
+    sessionId: string,
+    options?: ListOptions
+  ): Promise<{ total: number; messages: Array<{ id: string; role: string; content: string; timestamp: number }> }> {
+    if (!this.db) throw new Error("Not initialized");
+
+    // Get total count
+    const countStmt = this.db.prepare("SELECT COUNT(*) as count FROM message WHERE session_id = ?");
+    const countResult = countStmt.get(sessionId) as { count: number };
+    const total = countResult.count;
+
+    // Get paginated messages
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 20;
+    const stmt = this.db.prepare(
+      "SELECT id, role, content, timestamp FROM message WHERE session_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?"
+    );
+    const rows = stmt.all(sessionId, limit, offset) as Array<{ id: string; role: string; content: string; timestamp: number }>;
+
+    sqliteLogger.info(`[SQLite] getSessionMessages: loaded ${rows.length} messages, total=${total}`);
+
+    return { total, messages: rows };
   }
 
   async saveMessage(sessionID: string, message: MessageWithParts): Promise<void> {

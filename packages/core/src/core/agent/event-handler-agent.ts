@@ -72,6 +72,7 @@ export class EventHandlerAgent {
     const fallbackTitle = `[Event] ${event.type} - ${new Date(event.timestamp).toISOString()}`;
     const metadata: Record<string, unknown> = {
       trigger_type: "event",
+      created_at: Date.now(),
       event_type: event.type,
       event_id: event.id,
       ...event.metadata,
@@ -85,7 +86,53 @@ export class EventHandlerAgent {
       throw new Error("No session available and failed to create fallback session");
     }
     eventHandlerLogger.info(`Created fallback session: ${newSession.id}`);
+    
+    // 如果有 chat_id，尝试获取相关历史消息
+    await this.loadRelatedSessionHistory(event, newSession);
+    
     return newSession;
+  }
+
+  private async loadRelatedSessionHistory<T>(event: EnvEvent<T>, session: any): Promise<void> {
+    const chatId = event.metadata?.chat_id as string | undefined;
+    if (!chatId || !this.env.findSessionsByMetadata) {
+      return;
+    }
+
+    try {
+      const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
+      
+      if (relatedSessionIds.length === 0) {
+        eventHandlerLogger.debug(`No related sessions found for chat_id: ${chatId}`);
+        return;
+      }
+
+      // 排除当前 session，获取最近的相关 session
+      const otherSessionIds = relatedSessionIds.filter((id: string) => id !== session.id);
+      if (otherSessionIds.length === 0) {
+        eventHandlerLogger.debug(`No other related sessions found for chat_id: ${chatId}`);
+        return;
+      }
+
+      const recentSessionId = otherSessionIds[0];
+      eventHandlerLogger.info(`Found related session for chat_id ${chatId}: ${recentSessionId}`);
+
+      // 获取最近 session 的历史消息
+      const messagesResult = await this.env.getSessionMessages?.(recentSessionId, {
+        offset: 0,
+        limit: 50,
+      });
+
+      if (messagesResult && messagesResult.messages.length > 0) {
+        eventHandlerLogger.info(`Loaded ${messagesResult.messages.length} related messages from session ${recentSessionId}`);
+        // 将相关历史消息加入当前 session
+        for (const msg of messagesResult.messages) {
+          session.addUserMessage?.(`[Related History] ${msg.content}`);
+        }
+      }
+    } catch (error) {
+      eventHandlerLogger.warn(`Failed to load related session history: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private async processEventWithSession<T>(session: any, event: EnvEvent<T>): Promise<void> {

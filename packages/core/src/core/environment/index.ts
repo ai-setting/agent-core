@@ -226,6 +226,49 @@ export interface Environment {
   listSessions?(): Session[] | Promise<Session[]>;
 
   /**
+   * 可选：分页获取会话列表（支持时间和 metadata 过滤）
+   */
+  listSessionInfos?(
+    filter?: {
+      metadata?: Record<string, unknown>;
+      timeRange?: { start?: number; end?: number };
+    },
+    options?: { offset?: number; limit?: number }
+  ): Promise<{
+    total: number;
+    sessions: Array<{
+      id: string;
+      title: string;
+      metadata?: Record<string, unknown>;
+      created_at: string;
+      updated_at: string;
+    }>;
+  }>;
+
+  /**
+   * 可选：根据 metadata 查找会话 IDs
+   */
+  findSessionsByMetadata?(
+    metadata: Record<string, unknown>
+  ): Promise<string[]>;
+
+  /**
+   * 可选：分页获取会话消息
+   */
+  getSessionMessages?(
+    sessionId: string,
+    options?: { offset?: number; limit?: number }
+  ): Promise<{
+    total: number;
+    messages: Array<{
+      id: string;
+      role: string;
+      content: string;
+      timestamp: string;
+    }>;
+  }>;
+
+  /**
    * 可选：更新会话标题或 metadata。
    */
   updateSession?(
