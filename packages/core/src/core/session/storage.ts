@@ -103,7 +103,10 @@ export class FileStorage {
     await fs.unlink(filePath).catch(() => {});
   }
 
-  async listSessionInfos(): Promise<SessionInfo[]> {
+  async listSessionInfos(
+    filter?: SessionFilter,
+    options?: ListOptions
+  ): Promise<{ total: number; sessions: SessionInfo[] }> {
     await this.ensureInitialized();
     const infos: SessionInfo[] = [];
 
@@ -125,7 +128,44 @@ export class FileStorage {
       }
     }
 
-    return infos.sort((a, b) => b.time.updated - a.time.updated);
+    let sessions = infos.sort((a, b) => b.time.updated - a.time.updated);
+
+    // Apply filters
+    if (filter) {
+      if (filter.timeRange) {
+        if (filter.timeRange.start !== undefined) {
+          sessions = sessions.filter(s => (s.time?.created ?? 0) >= filter.timeRange!.start!);
+        }
+        if (filter.timeRange.end !== undefined) {
+          sessions = sessions.filter(s => (s.time?.created ?? 0) <= filter.timeRange!.end!);
+        }
+      }
+      if (filter.metadata) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          sessions = sessions.filter(s => s.metadata?.[key] === value);
+        }
+      }
+    }
+
+    const total = sessions.length;
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 20;
+    sessions = sessions.slice(offset, offset + limit);
+
+    return { total, sessions };
+  }
+
+  findSessionIdsByMetadata(metadata: Record<string, unknown>): string[] {
+    // FileStorage doesn't support this, return empty
+    return [];
+  }
+
+  getSessionMessages(
+    sessionId: string,
+    options?: ListOptions
+  ): { total: number; messages: MessageWithParts[] } {
+    // FileStorage doesn't support this, return empty
+    return { total: 0, messages: [] };
   }
 
   async saveMessage(sessionID: string, message: MessageWithParts): Promise<void> {
@@ -265,8 +305,8 @@ class StorageImpl {
       this.sqliteStorage = null;
       await this.fileStorage.ensureInitialized();
 
-      const savedInfos = await this.fileStorage.listSessionInfos();
-      for (const info of savedInfos) {
+      const savedResult = await this.fileStorage.listSessionInfos();
+      for (const info of savedResult.sessions) {
         this.sessionInfos.set(info.id, info);
 
         const { Session: SessionClass } = await import("./session.js");
@@ -285,7 +325,7 @@ class StorageImpl {
         // Messages are NOT loaded during initialization
         // They will be loaded on demand when a session is selected
       }
-      storageLogger.info(`Loaded ${savedInfos.length} sessions from file storage`);
+      storageLogger.info(`Loaded ${savedResult.sessions.length} sessions from file storage`);
     } else if (this.mode === "sqlite") {
       const { SqlitePersistence } = await import("./sqlite/index.js");
       this.sqliteStorage = new SqlitePersistence(cfg.path);
