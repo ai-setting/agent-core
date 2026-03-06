@@ -52,7 +52,20 @@ export class EventHandlerAgent {
       }
     }
     
-    // Fallback 2: 如果还是没有 sessionId，创建新 session
+    // Fallback 2: 如果还是没有 sessionId，尝试通过 chat_id 查找相关 session
+    if (!sessionId) {
+      const chatId = event.metadata?.chat_id as string | undefined;
+      if (chatId && this.env.findSessionsByMetadata) {
+        const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
+        eventHandlerLogger.info(`findSessionsByMetadata for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
+        if (relatedSessionIds.length > 0) {
+          sessionId = relatedSessionIds[0];
+          eventHandlerLogger.info(`Found existing session by chat_id ${chatId}: ${sessionId}`);
+        }
+      }
+    }
+
+    // Fallback 3: 如果还是没有 sessionId，创建新 session
     let session;
     if (sessionId) {
       session = await this.env.getSession?.(sessionId);
@@ -61,7 +74,7 @@ export class EventHandlerAgent {
         session = await this.createFallbackSession(event);
       }
     } else {
-      eventHandlerLogger.info("No trigger_session_id and no active session, creating new session");
+      eventHandlerLogger.info("No trigger_session_id, no active session, no chat_id match, creating new session");
       session = await this.createFallbackSession(event);
     }
 
