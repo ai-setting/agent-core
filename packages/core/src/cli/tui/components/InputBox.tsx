@@ -27,6 +27,8 @@ interface PendingCommandResult {
 
 interface InputBoxProps {
   onExit?: () => void;
+  onPromptSubmit?: (content: string) => Promise<void>;
+  showModelInfo?: boolean;
 }
 
 export function InputBox(props: InputBoxProps) {
@@ -205,17 +207,17 @@ export function InputBox(props: InputBoxProps) {
     }
 
     try {
+      // 命令检查始终优先
       if (content.startsWith("/")) {
         tuiLogger.info("[InputBox] Executing command", { content });
-        // 解析命令：/commandName args...
         const parts = content.slice(1).split(" ");
         const cmdName = parts[0];
         const args = parts.slice(1).join(" ");
-        
         tuiLogger.info("[InputBox] Parsed command", { cmdName, args });
-        
-        // 执行命令
         await executeCommand(cmdName, args);
+      } else if (props.onPromptSubmit) {
+        tuiLogger.info("[InputBox] Using custom onPromptSubmit");
+        await props.onPromptSubmit(content);
       } else {
         tuiLogger.info("[InputBox] Sending prompt");
         await eventStream.sendPrompt(content);
@@ -398,35 +400,37 @@ export function InputBox(props: InputBoxProps) {
         </box>
 
         {/* 下行：模型信息 */}
-        <box
-          flexDirection="row"
-          alignItems="center"
-          paddingLeft={1}
-          paddingRight={1}
-          paddingTop={0}
-          paddingBottom={0}
-          marginTop={1}
-          height={1}
-        >
-          <box flexDirection="row" alignItems="center" flexShrink={0}>
-            <text fg={theme.theme().primary}>Build </text>
-            <text fg={theme.theme().foreground}>{modelLabel()} </text>
-            <text fg={theme.theme().primary}>Free</text>
-            <text fg={theme.theme().foreground}> OpenCode Zen</text>
-          </box>
-          <Show when={store.isStreaming()}>
-            <box flexDirection="row" alignItems="center" marginLeft={1}>
-              <For each={Array.from({ length: STREAMING_DOT_COUNT }, (_, i) => i)}>
-                {(i) => (
-                  <text fg={streamingDotIndex() === i ? theme.theme().error : theme.theme().muted}>
-                    {streamingDotIndex() === i ? "●" : "·"}
-                  </text>
-                )}
-              </For>
-              <text fg={theme.theme().muted}> esc interrupt</text>
+        <Show when={props.showModelInfo !== false}>
+          <box
+            flexDirection="row"
+            alignItems="center"
+            paddingLeft={1}
+            paddingRight={1}
+            paddingTop={0}
+            paddingBottom={0}
+            marginTop={1}
+            height={1}
+          >
+            <box flexDirection="row" alignItems="center" flexShrink={0}>
+              <text fg={theme.theme().primary}>Build </text>
+              <text fg={theme.theme().foreground}>{modelLabel()} </text>
+              <text fg={theme.theme().primary}>Free</text>
+              <text fg={theme.theme().foreground}> OpenCode Zen</text>
             </box>
-          </Show>
-        </box>
+            <Show when={store.isStreaming()}>
+              <box flexDirection="row" alignItems="center" marginLeft={1}>
+                <For each={Array.from({ length: STREAMING_DOT_COUNT }, (_, i) => i)}>
+                  {(i) => (
+                    <text fg={streamingDotIndex() === i ? theme.theme().error : theme.theme().muted}>
+                      {streamingDotIndex() === i ? "●" : "·"}
+                    </text>
+                  )}
+                </For>
+                <text fg={theme.theme().muted}> esc interrupt</text>
+              </box>
+            </Show>
+          </box>
+        </Show>
       </box>
     </box>
   );
