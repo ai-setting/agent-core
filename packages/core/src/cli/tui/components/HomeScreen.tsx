@@ -4,7 +4,7 @@
  * 首页组件：展示 Logo、session 列表，复用 InputBox 组件
  */
 
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show, createMemo } from "solid-js";
 import { useStore, useEventStream } from "../contexts/index.js";
 import { tuiLogger } from "../logger.js";
 import { InputBox } from "./InputBox.js";
@@ -16,11 +16,7 @@ interface SessionItem {
   updatedAt: number;
 }
 
-interface HomeScreenProps {
-  onExit?: () => void;
-}
-
-export function HomeScreen(props: HomeScreenProps) {
+export function HomeScreen(props: { onExit?: () => void }) {
   const store = useStore();
   const eventStream = useEventStream();
   
@@ -30,7 +26,7 @@ export function HomeScreen(props: HomeScreenProps) {
   onMount(async () => {
     try {
       const list = await eventStream.listSessions();
-      setSessions(list);
+      setSessions(list.slice(0, 10));
       tuiLogger.info(`[HomeScreen] Loaded ${list.length} sessions`);
     } catch (err) {
       tuiLogger.error("[HomeScreen] Failed to load sessions", { error: (err as Error).message });
@@ -43,7 +39,6 @@ export function HomeScreen(props: HomeScreenProps) {
       const newSessionId = await eventStream.createSession();
       store.setSessionId(newSessionId);
       store.setView("chat");
-      await eventStream.connect();
       await eventStream.sendPrompt(content);
       tuiLogger.info(`[HomeScreen] Started new chat with prompt: ${content.substring(0, 50)}`);
     } catch (err) {
@@ -95,13 +90,13 @@ export function HomeScreen(props: HomeScreenProps) {
         <text fg="#999999">MiniMax-M2.5 MiniMax Coding Plan</text>
       </box>
 
-      {/* Session 列表 */}
+      {/* Session 列表 - 只显示 title */}
       <Show when={sessions().length > 0}>
         <box 
           flexDirection="column" 
           width={80} 
           marginTop={4}
-          maxHeight={12}
+          maxHeight={10}
           borderStyle="single"
           borderColor="#333333"
         >
@@ -112,9 +107,9 @@ export function HomeScreen(props: HomeScreenProps) {
           <box flexGrow={1} overflow="scroll">
             <For each={sessions()}>
               {(session) => (
-                <box paddingX={1}>
+                <box paddingX={1} paddingY={0} height={1}>
+                  <text fg="#999999">› </text>
                   <text fg="#ffffff">{session.title || "Untitled"}</text>
-                  <text fg="#666666" marginLeft={2}>{formatDate(session.updatedAt)}</text>
                 </box>
               )}
             </For>
