@@ -39,7 +39,10 @@ export interface Session {
   updatedAt: string;
 }
 
+export type ViewType = "home" | "chat";
+
 export interface StoreState {
+  view: ViewType;
   sessionId: string | null;
   sessionTitle: string | null;
   messages: Message[];
@@ -58,6 +61,7 @@ export interface StoreState {
 
 export interface StoreContextValue {
   // State
+  view: Accessor<ViewType>;
   sessionId: Accessor<string | null>;
   sessionTitle: Accessor<string | null>;
   messages: Accessor<Message[]>;
@@ -70,6 +74,7 @@ export interface StoreContextValue {
   lastResponseTimeMs: Accessor<number | null>;
 
   // Setters
+  setView: Setter<ViewType>;
   setSessionId: Setter<string | null>;
   setSessionTitle: Setter<string | null>;
   setMessages: Setter<Message[]>;
@@ -99,6 +104,7 @@ const StoreContext = createContext<StoreContextValue>();
 
 export function StoreProvider(props: { children: any }) {
   // 创建响应式状态
+  const [view, setView] = createSignal<ViewType>("home");
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [sessionTitle, setSessionTitle] = createSignal<string | null>(null);
   const [messages, setMessages] = createSignal<Message[]>([]);
@@ -181,6 +187,7 @@ export function StoreProvider(props: { children: any }) {
   };
 
   const value: StoreContextValue = {
+    view,
     sessionId,
     sessionTitle,
     messages,
@@ -191,6 +198,7 @@ export function StoreProvider(props: { children: any }) {
     error,
     lastModelName,
     lastResponseTimeMs,
+    setView,
     setSessionId,
     setSessionTitle,
     setMessages,

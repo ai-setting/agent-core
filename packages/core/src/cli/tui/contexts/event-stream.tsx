@@ -41,6 +41,7 @@ export interface EventStreamContextValue {
   sendPrompt: (content: string) => Promise<void>;
   createSession: () => Promise<string>;
   loadMessages: (sessionId: string) => Promise<void>;
+  listSessions: () => Promise<Array<{ id: string; title: string; createdAt: number; updatedAt: number }>>;
 }
 
 // ============================================================================
@@ -509,6 +510,23 @@ export function EventStreamProvider(props: {
     }
   };
 
+  // 获取 session 列表
+  const listSessions = async (): Promise<Array<{ id: string; title: string; createdAt: number; updatedAt: number }>> => {
+    try {
+      const response = await apiCall("/sessions");
+      
+      if (!response.ok) {
+        throw new Error(`Failed to list sessions: ${response.status}`);
+      }
+
+      const sessions = await response.json() as Array<{ id: string; title: string; createdAt: number; updatedAt: number }>;
+      return sessions;
+    } catch (err) {
+      setError((err as Error).message);
+      return [];
+    }
+  };
+
   // 清理
   onCleanup(() => {
     disconnect();
@@ -524,6 +542,7 @@ export function EventStreamProvider(props: {
     sendPrompt,
     createSession,
     loadMessages,
+    listSessions,
   };
 
   return (
