@@ -182,7 +182,9 @@ Error: ${errorMessage}
 
 Your original request: ${query}
 
-A new session has been started. Please continue from here.`;
+A new session has been started. Please continue from here.
+
+After handling this error, please reply to the user who triggered this event (e.g., use feishu_reply tool if from Feishu).`;
 
       newSession.addUserMessage(errorMsg);
       
