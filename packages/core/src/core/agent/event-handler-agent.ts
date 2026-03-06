@@ -140,9 +140,13 @@ export class EventHandlerAgent {
       });
 
       if (messagesResult && messagesResult.messages.length > 0) {
-        eventHandlerLogger.info(`Loaded ${messagesResult.messages.length} related messages from session ${recentSessionId}`);
+        // 找到第一个 role 为 user 的消息作为起始点，确保消息链完整
+        const startIndex = messagesResult.messages.findIndex((m: { role: string }) => m.role === "user");
+        const validMessages = startIndex >= 0 ? messagesResult.messages.slice(startIndex) : messagesResult.messages;
+        
+        eventHandlerLogger.info(`Loaded ${validMessages.length} related messages (from user query start) from session ${recentSessionId}`);
         // 将相关历史消息加入当前 session
-        for (const msg of messagesResult.messages) {
+        for (const msg of validMessages) {
           session.addUserMessage?.(`[Related History] ${msg.content}`);
         }
       }
