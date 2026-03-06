@@ -34,11 +34,13 @@ export function HomeScreen(props: { onExit?: () => void }) {
   });
 
   const handlePromptSubmit = async (content: string) => {
+    tuiLogger.info("[HomeScreen] handlePromptSubmit called", { content: content.substring(0, 50) });
     setIsLoading(true);
     try {
       store.setPendingUserQuery(content);
+      tuiLogger.info("[HomeScreen] Set pendingUserQuery, switching to chat");
       store.setView("chat");
-      tuiLogger.info(`[HomeScreen] Set pending query and switch to chat: ${content.substring(0, 50)}`);
+      tuiLogger.info("[HomeScreen] View changed to chat");
     } catch (err) {
       tuiLogger.error("[HomeScreen] Failed to start chat", { error: (err as Error).message });
     } finally {
