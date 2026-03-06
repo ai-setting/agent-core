@@ -59,61 +59,66 @@ async function main() {
   // 获取 eventBus 并注册 timer 事件的处理规则
   const eventBus = (env as any).eventBus as EnvEventBus;
 
-  // 创建并发布 timer event（不走手动注册的 rule，直接触发默认的 timer.* function rule）
-  const timerEvent: EnvEvent = {
+  // 测试场景1: 有 trigger_session_id，handle_query 会报错，验证 new session 重试
+  console.log("=== 测试场景1: handle_query 报错，验证 new session 重试 ===");
+
+  const timerEvent1: EnvEvent = {
     id: `timer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     type: "timer.heartbeat",
     timestamp: Date.now(),
     metadata: {
       trigger_session_id: session.id,
       source: "test-timer",
-      clientId: clientId,
     },
     payload: {
       count: 1,
-      message: "Test timer event from test-event-trigger.ts"
+      message: "Test timer event to trigger retry logic"
     }
   };
 
   console.log("【发布 Timer Event】");
-  console.log(`  Event ID: ${timerEvent.id}`);
-  console.log(`  Event Type: ${timerEvent.type}`);
-  console.log(`  Trigger Session: ${timerEvent.metadata.trigger_session_id}`);
+  console.log(`  Event ID: ${timerEvent1.id}`);
+  console.log(`  Event Type: ${timerEvent1.type}`);
+  console.log(`  Trigger Session: ${timerEvent1.metadata.trigger_session_id}`);
+  console.log("  预期: handle_query 报错后创建 new session 重试\n");
+
+  try {
+    await env.publishEvent(timerEvent1);
+    console.log("✓ Event 处理完成（应创建 new session 并重试成功）\n");
+  } catch (error: any) {
+    console.error("【Error】", error.message);
+  }
+
+  // 测试场景2: 没有 trigger_session_id，也没有 clientId，创建 new session
+  console.log("=== 测试场景2: 没有 trigger_session_id，也没有 clientId (创建 new session) ===");
+  const timerEvent2: EnvEvent = {
+    id: `timer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type: "timer.heartbeat",
+    timestamp: Date.now(),
+    metadata: {
+      source: "test-timer",
+    },
+    payload: {
+      count: 2,
+      message: "Test timer event to trigger new session creation"
+    }
+  };
+
+  console.log("【发布 Timer Event】");
+  console.log(`  Event ID: ${timerEvent2.id}`);
+  console.log(`  Event Type: ${timerEvent2.type}`);
+  console.log(`  metadata: ${JSON.stringify(timerEvent2.metadata)}`);
   console.log("");
 
   try {
-    console.log("【Event Handler Agent 处理中...】\n");
-    
-    // 发布事件，触发 event handler agent
-    await env.publishEvent(timerEvent);
-    
-    console.log("\n✓ Event 已发布并处理完成");
-    console.log("\n【验证结果】");
-    console.log(`  Session 消息数: ${(session as any)._messageOrder?.length}`);
-    
-    // 查看最后几条消息
-    const history = session.toHistory();
-    console.log(`  toHistory() 返回消息数: ${history.length}`);
-    
-    if (history.length > 0) {
-      console.log("\n【最后 3 条消息】");
-      const recentMessages = history.slice(-3);
-      recentMessages.forEach((msg: any, idx: number) => {
-        const content = typeof msg.content === 'string' 
-          ? msg.content.substring(0, 100) 
-          : JSON.stringify(msg.content).substring(0, 100);
-        console.log(`  [${history.length - 3 + idx + 1}] role=${msg.role}: ${content}...`);
-      });
-    }
-    
+    await env.publishEvent(timerEvent2);
+    console.log("✓ Event 处理完成（应创建 new session）\n");
   } catch (error: any) {
-    console.error("\n【Error】");
-    console.error(`错误信息: ${error.message}`);
-    console.error(error.stack);
+    console.error("【Error】", error.message);
   }
 
   // 清理
-  console.log("\n【清理资源】");
+  console.log("【清理资源】");
   const eventMcpManager = env.getEventMcpManager();
   if (eventMcpManager) {
     await eventMcpManager.disconnectAll();

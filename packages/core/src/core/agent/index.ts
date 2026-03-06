@@ -171,7 +171,7 @@ export class Agent {
 
         if (!llmResult.success) {
           agentLogger.error("LLM call failed", { error: llmResult.error });
-          return `Error: ${llmResult.error}`;
+          throw new Error(`LLM call failed: ${llmResult.error}`);
         }
 
         const output = llmResult.output as unknown as LLMOutput;
@@ -357,7 +357,7 @@ export class Agent {
 
         if (consecutiveErrors >= this.config.maxErrorRetries) {
           agentLogger.error(`Max consecutive errors exceeded`, { maxRetries: this.config.maxErrorRetries });
-          return `Error: Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${error instanceof Error ? error.message : String(error)}`;
+          throw new Error(`Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${error instanceof Error ? error.message : String(error)}`);
         }
 
         const delay = this.getRetryDelay(consecutiveErrors - 1);
@@ -367,6 +367,6 @@ export class Agent {
     }
 
     agentLogger.info(`Max iterations reached`, { maxIterations: this.config.maxIterations });
-    return `Error: Max iterations (${this.config.maxIterations}) reached without completion`;
+    throw new Error(`Max iterations (${this.config.maxIterations}) reached without completion`);
   }
 }
