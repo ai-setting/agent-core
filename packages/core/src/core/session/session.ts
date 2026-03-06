@@ -69,6 +69,7 @@ export class Session {
         created: now,
         updated: now,
       },
+      metadata: options.metadata,
     };
 
     if (options.metadata) {
