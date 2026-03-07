@@ -160,9 +160,18 @@ export class Agent {
       try {
         agentLogger.debug(`Invoking LLM (iteration ${iteration})`);
         
-        // Get model from context or environment
-        const modelStr = this.context?.model || this.env.getDefaultModel?.() || "gpt-4";
-        const providerId = modelStr.split('/')[0];
+        // Get current model from environment
+        let providerId = "gpt-4";
+        try {
+          const currentModel = (this.env as any).getCurrentModel?.();
+          if (currentModel) {
+            providerId = currentModel.providerID;
+          }
+        } catch (e) {
+          // Fallback to parsing from context or default
+          const modelStr = this.context?.model || this.env.getDefaultModel?.() || "gpt-4";
+          providerId = modelStr.split('/')[0] || "gpt-4";
+        }
         
         // Get provider LLM options from config
         const providerOptions = await this.env.getProviderLLMOptions?.(providerId) || { temperature: 0.7, maxTokens: 4000 };

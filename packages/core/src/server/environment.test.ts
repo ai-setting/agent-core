@@ -278,4 +278,42 @@ describe("ServerEnvironment EventBus Integration", () => {
 
     unsubscribe();
   });
+
+  describe("Provider LLM options (temperature/maxTokens)", () => {
+    it("should load provider temperature and maxTokens from config", async () => {
+      const env = new ServerEnvironment({
+        model: "minimax/MiniMax-M2.5",
+        apiKey: "test-key",
+        baseURL: "https://api.minimax.chat/v1",
+      });
+      
+      // Wait for config to be loaded
+      await (env as any).configLoaded;
+      
+      // Get the current provider LLM options
+      const llmOptions = await (env as any).getProviderLLMOptions?.("minimax");
+      
+      // Should have temperature from provider config (0.8) and maxTokens (8120)
+      expect(llmOptions).toBeDefined();
+      expect(llmOptions.temperature).toBe(0.8);
+      expect(llmOptions.maxTokens).toBe(8120);
+    });
+
+    it("should use default temperature and maxTokens when not configured", async () => {
+      const env = new ServerEnvironment({
+        model: "openai/gpt-4o",
+        apiKey: "test-key",
+        baseURL: "https://api.openai.com/v1",
+      });
+      
+      await (env as any).configLoaded;
+      
+      const llmOptions = await (env as any).getProviderLLMOptions?.("openai");
+      
+      // Should use default values (0.7, 4000) since openai doesn't have config
+      expect(llmOptions).toBeDefined();
+      expect(llmOptions.temperature).toBe(0.7);
+      expect(llmOptions.maxTokens).toBe(4000);
+    });
+  });
 });
