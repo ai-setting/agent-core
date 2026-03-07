@@ -50,6 +50,8 @@ export {
   Providers_remove,
   Providers_list,
   Providers_getAll,
+  Providers_getDefaults,
+  Providers_getDefaultsAsync,
   type ProviderInfo,
 } from "./providers.js";
 
