@@ -22,6 +22,7 @@ import type {
   FilePart,
   ToolPart,
   MessageWithParts,
+  ContextUsage,
 } from "./types";
 import type { ModelMessage } from "ai";
 import { ID } from "./id";
@@ -717,5 +718,67 @@ ${historyForLLM}
     compactedSession.addSystemMessage(summary);
 
     return compactedSession;
+  }
+
+  /**
+   * Get context usage statistics for this session.
+   * @returns ContextUsage object with aggregated token usage or undefined if no usage recorded
+   */
+  getContextStats(): ContextUsage | undefined {
+    return this._info.contextUsage;
+  }
+
+  /**
+   * Update context usage statistics with new usage data from an LLM response.
+   * This method accumulates usage across multiple requests within the session.
+   * @param usage - Usage information from the LLM response
+   * @param limit - Optional context window limit for calculating usage percentage
+   */
+  updateContextUsage(
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    },
+    limit?: number
+  ): void {
+    const currentUsage = this._info.contextUsage;
+    const now = Date.now();
+    
+    // Determine the context window limit to use
+    // Priority: 1. Provided limit parameter, 2. Existing limit in contextUsage, 3. Default 8192
+    const ctxLimit = limit || currentUsage?.contextWindow || 8192;
+    
+    // Calculate total tokens for percentage calculation
+    const newTotalTokens = (currentUsage?.totalTokens || 0) + usage.totalTokens;
+
+    if (currentUsage) {
+      // Accumulate usage
+      this._info.contextUsage = {
+        inputTokens: currentUsage.inputTokens + usage.inputTokens,
+        outputTokens: currentUsage.outputTokens + usage.outputTokens,
+        totalTokens: currentUsage.totalTokens + usage.totalTokens,
+        contextWindow: ctxLimit,
+        usagePercent: Math.round((newTotalTokens / ctxLimit) * 100),
+        requestCount: currentUsage.requestCount + 1,
+        lastUpdated: now,
+      };
+    } else {
+      // Initialize usage
+      this._info.contextUsage = {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        contextWindow: ctxLimit,
+        usagePercent: Math.round((usage.totalTokens / ctxLimit) * 100),
+        requestCount: 1,
+        lastUpdated: now,
+      };
+    }
+
+    this._info.time.updated = now;
+    Storage.saveSession(this);
+    
+    sessionLogger.info(`[Session] Updated context usage: sessionId=${this.id}, totalTokens=${this._info.contextUsage.totalTokens}, contextWindow=${ctxLimit}, usagePercent=${this._info.contextUsage.usagePercent}%, requestCount=${this._info.contextUsage.requestCount}`);
   }
 }

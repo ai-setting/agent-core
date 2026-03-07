@@ -8,6 +8,15 @@ function getProvidersConfigPath(): string {
   return path.join(ConfigPaths.config, "providers.jsonc");
 }
 
+export interface ModelLimits {
+  /** Context window size in tokens */
+  contextWindow: number;
+  /** Maximum output tokens */
+  maxOutputTokens?: number;
+  /** Maximum input tokens (if different from contextWindow) */
+  maxInputTokens?: number;
+}
+
 export interface ProviderConfig {
   id?: string;
   name: string;
@@ -37,6 +46,8 @@ export interface ProviderConfig {
       audio?: boolean;
     };
   };
+  /** Model limits configuration (contextWindow, maxOutputTokens, etc.) */
+  limits?: Record<string, ModelLimits>;
   /** Additional headers for API requests */
   headers?: Record<string, string>;
   /** LLM options for this provider */

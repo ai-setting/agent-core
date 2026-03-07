@@ -11,6 +11,26 @@
 export type Role = "user" | "assistant" | "system" | "tool" | "agent";
 
 /**
+ * Context usage statistics for tracking token usage across session
+ */
+export interface ContextUsage {
+  /** Total input tokens used */
+  inputTokens: number;
+  /** Total output tokens used */
+  outputTokens: number;
+  /** Total tokens used (input + output) */
+  totalTokens: number;
+  /** Context window limit (from model configuration) */
+  contextWindow?: number;
+  /** Usage percentage relative to context window */
+  usagePercent?: number;
+  /** Number of LLM requests made */
+  requestCount: number;
+  /** Last updated timestamp */
+  lastUpdated: number;
+}
+
+/**
  * Session metadata and configuration.
  */
 export interface SessionInfo {
@@ -37,6 +57,8 @@ export interface SessionInfo {
     /** Compaction timestamp (reserved for future use) */
     compacting?: number;
   };
+  /** Context usage statistics */
+  contextUsage?: ContextUsage;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
 }
@@ -59,6 +81,12 @@ export interface MessageInfo {
   model?: string;
   /** Creation timestamp */
   timestamp: number;
+  /** Context usage for this message (from LLM response) */
+  contextUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
   /** Additional metadata */
   metadata?: Record<string, unknown>;
 }
