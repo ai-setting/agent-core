@@ -301,6 +301,17 @@ export interface Environment {
    * 在构建时通过 TONG_WORK_COMMIT 注入
    */
   getCommitVersion(): string;
+
+  /**
+   * 获取默认模型
+   */
+  getDefaultModel?(): string;
+
+  /**
+   * 获取指定 provider 的 LLM 调用选项（temperature, maxTokens）
+   * 从 providers.jsonc 配置读取
+   */
+  getProviderLLMOptions?(providerId: string): Promise<{ temperature: number; maxTokens: number }>;
 }
 
 export interface Prompt {

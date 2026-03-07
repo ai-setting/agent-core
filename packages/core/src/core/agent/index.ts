@@ -160,11 +160,18 @@ export class Agent {
       try {
         agentLogger.debug(`Invoking LLM (iteration ${iteration})`);
         
+        // Get model from context or environment
+        const modelStr = this.context?.model || this.env.getDefaultModel?.() || "gpt-4";
+        const providerId = modelStr.split('/')[0];
+        
+        // Get provider LLM options from config
+        const providerOptions = await this.env.getProviderLLMOptions?.(providerId) || { temperature: 0.7, maxTokens: 4000 };
+        
         const llmResult = await this.env.invokeLLM(
           messages,
           this.tools,
           this.context,
-          { temperature: 0.7, maxTokens: 4000 }
+          { temperature: providerOptions.temperature, maxTokens: providerOptions.maxTokens }
         );
 
         if (!llmResult.success) {

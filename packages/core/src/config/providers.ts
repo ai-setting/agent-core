@@ -25,6 +25,8 @@ export interface ProviderInfo {
   apiKey?: string;
   models?: string[];
   defaultModel?: string;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 /**
@@ -46,6 +48,8 @@ export async function Providers_load(): Promise<Record<string, ProviderInfo>> {
       apiKey: p.apiKey,
       models: p.models,
       defaultModel: p.defaultModel,
+      temperature: p.temperature,
+      maxTokens: p.maxTokens,
     };
   }
   return result;
@@ -111,6 +115,57 @@ export async function Providers_list(): Promise<string[]> {
   return providers.map(p => p.id);
 }
 
+const DEFAULT_LLM_OPTIONS = {
+  temperature: 0.7,
+  maxTokens: 4000,
+};
+
+let cachedDefaults: { temperature: number; maxTokens: number } | null = null;
+
+/**
+ * Get default LLM options from providers.jsonc
+ * Returns hardcoded defaults if not configured
+ * Note: For first call, it returns hardcoded defaults and triggers async cache update
+ * Use Providers_getDefaultsAsync() for guaranteed fresh values
+ */
+export function Providers_getDefaults(): { temperature: number; maxTokens: number } {
+  // Return cached value if available
+  if (cachedDefaults) {
+    return cachedDefaults;
+  }
+  
+  // Trigger async cache update for next call
+  Providers_getDefaultsAsync().then((defaults) => {
+    cachedDefaults = defaults;
+  }).catch(() => {
+    // Ignore errors, use defaults
+  });
+  
+  // Return hardcoded defaults for first call
+  return {
+    temperature: DEFAULT_LLM_OPTIONS.temperature,
+    maxTokens: DEFAULT_LLM_OPTIONS.maxTokens,
+  };
+}
+
+/**
+ * Get default LLM options asynchronously from providers.jsonc
+ */
+export async function Providers_getDefaultsAsync(): Promise<{ temperature: number; maxTokens: number }> {
+  try {
+    const config = await loadProvidersConfig();
+    return {
+      temperature: config?.default?.temperature ?? DEFAULT_LLM_OPTIONS.temperature,
+      maxTokens: config?.default?.maxTokens ?? DEFAULT_LLM_OPTIONS.maxTokens,
+    };
+  } catch {
+    return {
+      temperature: DEFAULT_LLM_OPTIONS.temperature,
+      maxTokens: DEFAULT_LLM_OPTIONS.maxTokens,
+    };
+  }
+}
+
 /**
  * Built-in providers with default models (minimal set)
  * Primary sources: providers.jsonc (recommended) > built-in
@@ -169,6 +224,8 @@ export async function Providers_getAll(): Promise<ProviderInfo[]> {
         apiKey: p.apiKey,
         models: p.models,
         defaultModel: p.defaultModel,
+        temperature: p.temperature,
+        maxTokens: p.maxTokens,
       };
     }
   }

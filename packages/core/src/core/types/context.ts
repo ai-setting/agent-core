@@ -16,6 +16,10 @@ export interface Context {
    */
   agentType?: string;
   /**
+   * Model to use for LLM calls. Format: provider/model (e.g., "minimax/MiniMax-M2.5")
+   */
+  model?: string;
+  /**
    * Callback for storing intermediate messages during agent execution.
    * Called whenever the agent adds an assistant or tool message.
    * Useful for persisting messages to session history in real-time.

@@ -17,6 +17,7 @@ import {
 import type { ModelMessage } from "ai";
 import { createLogger } from "../../../utils/logger.js";
 import { Traced } from "../../../utils/wrap-function.js";
+import { Providers_get, Providers_getDefaultsAsync } from "../../../config/providers.js";
 import {
   Context,
   Action,
@@ -244,6 +245,10 @@ export abstract class BaseEnvironment implements Environment {
     return this.listSkills()
       .map(s => `- ${s.name}: ${s.description}`)
       .join("\n");
+  }
+
+  getDefaultModel(): string {
+    return this.defaultModel;
   }
 
   getCommitVersion(): string {
@@ -1069,6 +1074,30 @@ export abstract class BaseEnvironment implements Environment {
   }
 
   protected llmConfig?: InvokeLLMConfig;
+
+  /**
+   * Get LLM options (temperature, maxTokens) for a specific provider
+   * Priority: provider config > default config > hardcoded defaults
+   */
+  async getProviderLLMOptions(providerId: string): Promise<{ temperature: number; maxTokens: number }> {
+    const defaults = { temperature: 0.7, maxTokens: 4000 };
+    
+    // Try to get from config
+    try {
+      const providerConfig = await Providers_get(providerId);
+      
+      if (providerConfig) {
+        return {
+          temperature: providerConfig.temperature ?? defaults.temperature,
+          maxTokens: providerConfig.maxTokens ?? defaults.maxTokens,
+        };
+      }
+    } catch {
+      // Config not available, use defaults
+    }
+    
+    return defaults;
+  }
 
   /**
    * Invoke LLM as a native environment capability

@@ -39,6 +39,19 @@ export interface ProviderConfig {
   };
   /** Additional headers for API requests */
   headers?: Record<string, string>;
+  /** LLM options for this provider */
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface ProvidersDefaultConfig {
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface ProvidersConfig {
+  default?: ProvidersDefaultConfig;
+  providers: Record<string, ProviderConfig>;
 }
 
 export interface ProvidersConfig {

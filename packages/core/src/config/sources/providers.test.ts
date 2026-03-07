@@ -143,3 +143,158 @@ describe("providers merge logic", () => {
     expect(custom?.name).toBe("Custom Provider");
   });
 });
+
+describe("providers LLM options (temperature/maxTokens)", () => {
+  beforeEach(async () => {
+    Paths_setTestHome(TEST_DIR);
+    Config_clear();
+    configRegistry.clear();
+    await fs.mkdir(path.join(TEST_DIR, ".config", "tong_work", "agent-core"), {
+      recursive: true,
+    });
+  });
+
+  afterEach(async () => {
+    Paths_clearTestHome();
+    Config_clear();
+    configRegistry.clear();
+    await fs.rm(TEST_DIR, { recursive: true, force: true });
+  });
+
+  test("loadProvidersConfig loads default temperature and maxTokens", async () => {
+    const providersContent = `{
+      "default": {
+        "temperature": 0.5,
+        "maxTokens": 2000
+      },
+      "providers": {
+        "openai": {
+          "name": "OpenAI",
+          "baseURL": "https://api.openai.com/v1"
+        }
+      }
+    }`;
+
+    await fs.writeFile(
+      path.join(TEST_DIR, ".config", "tong_work", "agent-core", "providers.jsonc"),
+      providersContent
+    );
+
+    const { loadProvidersConfig } = await import("../sources/providers.js");
+    const config = await loadProvidersConfig();
+
+    expect(config?.default).toBeDefined();
+    expect(config?.default?.temperature).toBe(0.5);
+    expect(config?.default?.maxTokens).toBe(2000);
+  });
+
+  test("loadProvidersConfig loads provider-specific temperature and maxTokens", async () => {
+    const providersContent = `{
+      "default": {
+        "temperature": 0.7,
+        "maxTokens": 4000
+      },
+      "providers": {
+        "minimax": {
+          "name": "MiniMax",
+          "baseURL": "https://api.minimax.chat/v1",
+          "defaultModel": "MiniMax-M2.5",
+          "temperature": 0.8,
+          "maxTokens": 8192
+        },
+        "anthropic": {
+          "name": "Anthropic",
+          "baseURL": "https://api.anthropic.com/v1",
+          "temperature": 0.3
+        }
+      }
+    }`;
+
+    await fs.writeFile(
+      path.join(TEST_DIR, ".config", "tong_work", "agent-core", "providers.jsonc"),
+      providersContent
+    );
+
+    const { loadProvidersConfig } = await import("../sources/providers.js");
+    const config = await loadProvidersConfig();
+
+    // Provider with all options
+    expect(config?.providers?.minimax?.temperature).toBe(0.8);
+    expect(config?.providers?.minimax?.maxTokens).toBe(8192);
+
+    // Provider with partial options (only temperature)
+    expect(config?.providers?.anthropic?.temperature).toBe(0.3);
+    expect(config?.providers?.anthropic?.maxTokens).toBeUndefined(); // uses default
+
+    // Provider without options (uses default)
+    expect(config?.providers?.openai?.temperature).toBeUndefined();
+    expect(config?.providers?.openai?.maxTokens).toBeUndefined();
+  });
+
+  test("Providers_getAll returns temperature and maxTokens in provider info", async () => {
+    const providersContent = `{
+      "default": {
+        "temperature": 0.6,
+        "maxTokens": 3000
+      },
+      "providers": {
+        "zhipuai": {
+          "name": "ZhipuAI",
+          "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+          "temperature": 0.9,
+          "maxTokens": 6000
+        }
+      }
+    }`;
+
+    await fs.writeFile(
+      path.join(TEST_DIR, ".config", "tong_work", "agent-core", "providers.jsonc"),
+      providersContent
+    );
+
+    const { Providers_getAll } = await import("../providers.js");
+    const providers = await Providers_getAll();
+
+    const zhipuai = providers.find((p) => p.id === "zhipuai");
+    expect(zhipuai).toBeDefined();
+    expect(zhipuai?.temperature).toBe(0.9);
+    expect(zhipuai?.maxTokens).toBe(6000);
+  });
+
+  test("Providers_getDefaults returns default temperature and maxTokens", async () => {
+    const providersContent = `{
+      "default": {
+        "temperature": 0.4,
+        "maxTokens": 1500
+      },
+      "providers": {}
+    }`;
+
+    await fs.writeFile(
+      path.join(TEST_DIR, ".config", "tong_work", "agent-core", "providers.jsonc"),
+      providersContent
+    );
+
+    const { Providers_getDefaultsAsync } = await import("../providers.js");
+    const defaults = await Providers_getDefaultsAsync();
+
+    expect(defaults.temperature).toBe(0.4);
+    expect(defaults.maxTokens).toBe(1500);
+  });
+
+  test("Providers_getDefaults returns hardcoded defaults when no config", async () => {
+    // Write empty providers config
+    const providersContent = `{}`;
+
+    await fs.writeFile(
+      path.join(TEST_DIR, ".config", "tong_work", "agent-core", "providers.jsonc"),
+      providersContent
+    );
+
+    const { Providers_getDefaultsAsync } = await import("../providers.js");
+    const defaults = await Providers_getDefaultsAsync();
+
+    expect(defaults.temperature).toBe(0.7);
+    expect(defaults.maxTokens).toBe(4000);
+  });
+});
