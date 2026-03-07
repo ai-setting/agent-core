@@ -21,6 +21,11 @@ export interface StreamEvent {
   error?: string;
   code?: string;
   metadata?: Record<string, unknown>;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 export type MessageContent =

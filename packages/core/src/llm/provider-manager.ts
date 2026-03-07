@@ -282,7 +282,8 @@ class ProviderManager {
       return {
         id: modelId,
         capabilities,
-        limits: {
+        // Read limits from provider config, fallback to default
+        limits: config.limits?.[modelId] || {
           contextWindow: 8192, // Default value
         },
       };

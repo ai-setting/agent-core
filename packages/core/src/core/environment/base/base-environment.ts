@@ -1152,9 +1152,34 @@ export abstract class BaseEnvironment implements Environment {
           ctx
         );
       },
-      onCompleted: (content, metadata) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onCompleted callback");
-        this.emitStreamEvent({ type: "completed", content, metadata }, ctx);
+      onCompleted: async (content, metadata) => {
+        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onCompleted callback", { 
+          hasUsage: !!metadata.usage 
+        });
+        this.emitStreamEvent({ 
+          type: "completed", 
+          content, 
+          metadata,
+          usage: metadata.usage 
+        }, ctx);
+        
+        // Update session context usage stats if usage info is available
+        if (metadata.usage && ctx.session_id) {
+          try {
+            const { Session } = await import("../../session/session.js");
+            const session = Session.get(ctx.session_id);
+            if (session) {
+              session.updateContextUsage(metadata.usage);
+              BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] Updated session context usage", { 
+                inputTokens: metadata.usage.inputTokens,
+                outputTokens: metadata.usage.outputTokens,
+                totalTokens: metadata.usage.totalTokens,
+              });
+            }
+          } catch (err) {
+            BaseEnvironment.baseLogger.warn(`[BaseEnvironment.invokeLLM] Failed to update session context usage:`, err);
+          }
+        }
       },
     };
 

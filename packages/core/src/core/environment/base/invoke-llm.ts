@@ -45,12 +45,24 @@ export interface LLMOutput extends Record<string, unknown> {
   model: string;
 }
 
+/**
+ * Usage information from LLM API
+ */
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface StreamEventHandler {
   onStart?: (metadata: { model: string }) => void;
   onText?: (content: string, delta: string) => void;
   onReasoning?: (content: string) => void;
   onToolCall?: (toolName: string, toolArgs: Record<string, unknown>, toolCallId: string) => void;
-  onCompleted?: (content: string, metadata: { model: string }) => void;
+  onCompleted?: (content: string, metadata: { 
+    model: string;
+    usage?: UsageInfo;
+  }) => void;
 }
 
 /**
@@ -293,6 +305,10 @@ export async function invokeLLM(
       ...providerOptions.providerOptions,
       abortSignal: ctx.abort,
       maxRetries: 2,
+      // Enable usage info in stream completion
+      streamOptions: {
+        includeUsage: true,
+      },
     };
     
     invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
@@ -320,6 +336,7 @@ export async function invokeLLM(
     let fullContent = "";
     let reasoningContent = "";
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+    let usageInfo: UsageInfo | undefined;
 
     invokeLLMLogger.info("[invokeLLM] Starting to process stream");
 
@@ -370,9 +387,17 @@ export async function invokeLLM(
           throw streamPart.error;
 
         case "finish":
+          // Capture usage info from stream completion
+          if (streamPart.totalUsage) {
+            usageInfo = {
+              inputTokens: streamPart.totalUsage.inputTokens ?? 0,
+              outputTokens: streamPart.totalUsage.outputTokens ?? 0,
+              totalTokens: streamPart.totalUsage.totalTokens ?? 0,
+            };
+          }
           invokeLLMLogger.info("[invokeLLM] Stream finished", { 
             finishReason: streamPart.finishReason,
-            usage: streamPart.totalUsage 
+            usage: usageInfo
           });
           break;
       }
@@ -384,6 +409,14 @@ export async function invokeLLM(
       reasoning: reasoningContent || undefined,
       model: `${providerId}/${modelId}`,
     };
+
+    // Emit completed event with usage info (for both tool calls and non-tool calls cases)
+    if (eventHandler?.onCompleted) {
+      eventHandler.onCompleted(fullContent, { 
+        model: `${providerId}/${modelId}`,
+        usage: usageInfo
+      });
+    }
 
     if (toolCalls.length > 0) {
       output.tool_calls = toolCalls.map(tc => ({
@@ -400,20 +433,18 @@ export async function invokeLLM(
         : toolCallsStr;
       invokeLLMLogger.info("[invokeLLM] Returning with tool_calls", { 
         count: toolCalls.length,
-        toolCalls: truncatedToolCalls
+        toolCalls: truncatedToolCalls,
+        usage: usageInfo
       });
     } else {
       // 截断过长响应内容，保留前 300 字符
       const truncatedContent = fullContent.length > 300 
         ? fullContent.substring(0, 300) + "...[truncated]" 
         : fullContent;
-      // Emit completed event only when no tool calls
-      if (eventHandler?.onCompleted) {
-        eventHandler.onCompleted(fullContent, { model: `${providerId}/${modelId}` });
-      }
       invokeLLMLogger.info("[invokeLLM] Returning content (no tool_calls)", { 
         contentLength: fullContent.length,
-        content: truncatedContent
+        content: truncatedContent,
+        usage: usageInfo
       });
     }
 
@@ -595,13 +626,45 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
               });
             }
           },
-          onCompleted: (content, metadata) => {
+          onCompleted: async (content, metadata) => {
             const env = (ctx as any).env;
+            
+            // Emit completed event with usage info
             if (env?.emitStreamEvent) {
-              env.emitStreamEvent({ type: "completed", content, metadata }, { 
+              env.emitStreamEvent({ 
+                type: "completed", 
+                content, 
+                metadata,
+                usage: metadata.usage 
+              }, { 
                 session_id: ctx.session_id || "default",
                 message_id: (ctx.metadata as any)?.message_id 
               });
+            }
+            
+            // Update session context usage stats if usage info is available
+            if (metadata.usage) {
+              try {
+                // Import Session and providerManager dynamically to avoid circular dependency
+                const { Session } = await import("../../session/session.js");
+                const { providerManager } = await import("../../../llm/provider-manager.js");
+                const session = Session.get(ctx.session_id || "default");
+                
+                if (session) {
+                  // Parse model string to get provider and model ID
+                  const modelString = metadata.model || args.model as string || "";
+                  const { providerId, modelId } = parseModelString(modelString);
+                  
+                  // Get context window limit from provider
+                  const provider = providerManager.getProvider(providerId);
+                  const model = provider?.metadata.models.find(m => m.id === modelId);
+                  const contextWindowLimit = model?.limits?.contextWindow;
+                  
+                  session.updateContextUsage(metadata.usage, contextWindowLimit);
+                }
+              } catch (err) {
+                invokeLLMLogger.warn(`[createInvokeLLM] Failed to update session context usage:`, err);
+              }
             }
           },
         }
