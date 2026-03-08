@@ -52,6 +52,7 @@ export class Session {
   private _messages: Map<string, MessageWithParts> = new Map();
   private _messageOrder: string[] = [];
   private _metadata: Map<string, unknown> = new Map();
+  private _historyLoaded: boolean = false;
 
   /**
    * Create a new session.
@@ -521,7 +522,16 @@ export class Session {
    * Convert session messages to Agent Core history format.
    */
   @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: false })
-  toHistory(): any[] {
+  async toHistory(): Promise<any[]> {
+    // Lazy load messages from storage on first call
+    if (!this._historyLoaded && this._messageOrder.length > 0 && this._messages.size === 0) {
+      sessionLogger.info(`[Session] toHistory: loading messages from storage for session ${this.id}`);
+      await Storage.loadSessionMessages(this.id);
+    }
+    
+    // Mark as loaded to prevent reloading on subsequent calls
+    this._historyLoaded = true;
+    
     // [DEBUG] Log before toHistory
     sessionLogger.info(`[Session] toHistory: sessionId=${this.id}, _messageOrder.length=${this._messageOrder.length}, _messages.size=${this._messages.size}`);
     const history = sessionToHistory(this);
