@@ -236,6 +236,9 @@ export class SqlitePersistence implements SessionPersistence {
   }
 
   async findSessionIdsByMetadata(metadata: Record<string, unknown>): Promise<string[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
     if (!this.db) throw new Error("Not initialized");
 
     if (!metadata || Object.keys(metadata).length === 0) {

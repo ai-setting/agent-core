@@ -473,7 +473,9 @@ class StorageImpl {
     return { total, sessions };
   }
 
-  findSessionIdsByMetadata(metadata: Record<string, unknown>): string[] {
+  async findSessionIdsByMetadata(metadata: Record<string, unknown>): Promise<string[]> {
+    await this.ensureInitialized();
+    
     if (!metadata || Object.keys(metadata).length === 0) {
       return Array.from(this.sessionInfos.keys());
     }
