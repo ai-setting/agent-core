@@ -1053,7 +1053,7 @@ export class ServerEnvironment extends BaseEnvironment {
         fn: async (event: EnvEvent) => {
           const { sessionId, content } = event.payload as { sessionId: string; content: string };
           const session = await this.getSession!(sessionId);
-          const history = session?.toHistory() || [];
+          const history = await session?.toHistory() || [];
           
           session?.addUserMessage(content);
           
