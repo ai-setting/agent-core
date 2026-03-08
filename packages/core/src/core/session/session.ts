@@ -524,8 +524,9 @@ export class Session {
   @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: false })
   async toHistory(): Promise<any[]> {
     // Lazy load messages from storage on first call
-    if (!this._historyLoaded && this._messageOrder.length > 0 && this._messages.size === 0) {
-      sessionLogger.info(`[Session] toHistory: loading messages from storage for session ${this.id}`);
+    // Check if we have placeholder messages that need to be loaded
+    if (!this._historyLoaded && this._messageOrder.length > this._messages.size) {
+      sessionLogger.info(`[Session] toHistory: loading messages from storage for session ${this.id}, placeholders=${this._messageOrder.length}, loaded=${this._messages.size}`);
       await Storage.loadSessionMessages(this.id);
     }
     
