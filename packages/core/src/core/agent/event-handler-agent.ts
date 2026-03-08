@@ -39,17 +39,22 @@ export class EventHandlerAgent {
   async handle<T>(event: EnvEvent<T>): Promise<void> {
     eventHandlerLogger.info(`Handling event: type=${event.type}, id=${event.id}`);
     
-    // 通过 chat_id 查找已存在的 session
-    // chat_id 可能位于多个位置，尝试从不同路径提取
-    const chatId = this.extractChatId(event);
-    let sessionId: string | undefined;
+    // 优先使用 trigger_session_id（用于继续已有对话）
+    let sessionId: string | undefined = event.metadata?.trigger_session_id;
     
-    if (chatId && this.env.findSessionsByMetadata) {
-      const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
-      eventHandlerLogger.info(`findSessionsByMetadata for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
-      if (relatedSessionIds.length > 0) {
-        sessionId = relatedSessionIds[0];
-        eventHandlerLogger.info(`Found existing session by chat_id ${chatId}: ${sessionId}`);
+    if (sessionId) {
+      eventHandlerLogger.info(`Using trigger_session_id from event: ${sessionId}`);
+    } else {
+      // 如果没有 trigger_session_id，尝试通过 chat_id 查找
+      const chatId = this.extractChatId(event);
+      
+      if (chatId && this.env.findSessionsByMetadata) {
+        const relatedSessionIds = await this.env.findSessionsByMetadata({ chat_id: chatId });
+        eventHandlerLogger.info(`findSessionsByMetadata for chat_id ${chatId}: ${JSON.stringify(relatedSessionIds)}`);
+        if (relatedSessionIds.length > 0) {
+          sessionId = relatedSessionIds[0];
+          eventHandlerLogger.info(`Found existing session by chat_id ${chatId}: ${sessionId}`);
+        }
       }
     }
 
@@ -62,14 +67,14 @@ export class EventHandlerAgent {
         session = await this.createFallbackSession(event);
       }
     } else {
-      eventHandlerLogger.info("No existing session found by chat_id, creating new session");
+      eventHandlerLogger.info("No existing session found, creating new session");
       session = await this.createFallbackSession(event);
     }
 
-    await this.processEventWithSession(session, event, chatId);
+    await this.processEventWithSession(session, event);
   }
 
-  private async processEventWithSession<T>(session: any, event: EnvEvent<T>, chatId?: string): Promise<void> {
+  private async processEventWithSession<T>(session: any, event: EnvEvent<T>): Promise<void> {
     const sessionId = session.id;
     const messages = this.constructMessages(event);
     eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
@@ -101,7 +106,7 @@ export class EventHandlerAgent {
       );
     } catch (error) {
       eventHandlerLogger.error(`handle_query failed: ${error instanceof Error ? error.message : String(error)}`);
-      await this.retryWithNewSession(sessionId, query, error, chatId);
+      await this.retryWithNewSession(sessionId, query, error, session.metadata);
     }
   }
 
@@ -157,7 +162,7 @@ export class EventHandlerAgent {
     }
   }
 
-  private async retryWithNewSession(originalSessionId: string, query: string, error: unknown, chatId?: string): Promise<void> {
+  private async retryWithNewSession(originalSessionId: string, query: string, error: unknown, originalMetadata?: Record<string, unknown>): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const maxRetries = 3;
     
@@ -165,7 +170,11 @@ export class EventHandlerAgent {
       eventHandlerLogger.info(`Retry attempt ${retry}/${maxRetries} with new session`);
       
       const fallbackTitle = `[Event Retry ${retry}] ${new Date().toISOString()}`;
-      const metadata: Record<string, unknown> = chatId ? { chat_id: chatId, trigger_type: "event_retry" } : { trigger_type: "event_retry" };
+      const metadata: Record<string, unknown> = {
+        trigger_type: "event_retry",
+        original_session_id: originalSessionId,
+        ...originalMetadata,
+      };
       const newSession = await this.env.createSession?.({ title: fallbackTitle, metadata });
       
       if (!newSession) {
