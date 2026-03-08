@@ -82,7 +82,7 @@ export class EventHandlerAgent {
       session.addMessageFromModelMessage(modelMessage);
     }
 
-    const history = session.toHistory();
+    const history = await session.toHistory();
     eventHandlerLogger.debug(`toHistory returned ${history.length} messages`);
     
     const query = `Process event: ${event.type}`;
@@ -189,7 +189,7 @@ After handling this error, please reply to the user who triggered this event (e.
 
       newSession.addUserMessage(errorMsg);
       
-      const history = newSession.toHistory();
+      const history = await newSession.toHistory();
       
       try {
         await this.env.handle_query(
