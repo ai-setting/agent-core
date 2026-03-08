@@ -40,7 +40,8 @@ export class EventHandlerAgent {
     eventHandlerLogger.info(`Handling event: type=${event.type}, id=${event.id}`);
     
     // 通过 chat_id 查找已存在的 session
-    const chatId = event.metadata?.chat_id as string | undefined;
+    // chat_id 可能位于多个位置，尝试从不同路径提取
+    const chatId = this.extractChatId(event);
     let sessionId: string | undefined;
     
     if (chatId && this.env.findSessionsByMetadata) {
@@ -281,5 +282,29 @@ After handling this error, please reply to the user who triggered this event (e.
     });
 
     return messages;
+  }
+
+  private extractChatId<T>(event: EnvEvent<T>): string | undefined {
+    // 尝试从多个可能的位置提取 chat_id
+    // 1. event.metadata.chat_id (通用位置)
+    if (event.metadata?.chat_id && typeof event.metadata.chat_id === "string") {
+      return event.metadata.chat_id;
+    }
+    
+    // 2. event.payload.message.chat_id (如飞书 IM 事件)
+    const payload = event.payload as Record<string, unknown> | undefined;
+    if (payload?.message && typeof payload.message === "object") {
+      const message = payload.message as Record<string, unknown>;
+      if (message.chat_id && typeof message.chat_id === "string") {
+        return message.chat_id;
+      }
+    }
+    
+    // 3. event.payload.chat_id (部分事件的直接位置)
+    if (payload?.chat_id && typeof payload.chat_id === "string") {
+      return payload.chat_id;
+    }
+    
+    return undefined;
   }
 }
