@@ -219,9 +219,63 @@ After handling this error, please reply to the user who triggered this event (e.
         eventHandlerLogger.warn(`Retry attempt ${retry} failed: ${retryErrorMsg}`);
         
         if (retry === maxRetries) {
-          eventHandlerLogger.error(`All ${maxRetries} retry attempts failed`);
+          eventHandlerLogger.error(`All ${maxRetries} retry attempts failed, creating fresh session without history`);
+          await this.createFreshSessionWithoutHistory(originalSessionId, query, errorMessage, originalMetadata);
         }
       }
+    }
+  }
+
+  private async createFreshSessionWithoutHistory(
+    originalSessionId: string,
+    query: string,
+    errorMessage: string,
+    originalMetadata?: Record<string, unknown>
+  ): Promise<void> {
+    const fallbackTitle = `[Event Fresh Start] ${new Date().toISOString()}`;
+    const metadata: Record<string, unknown> = {
+      trigger_type: "event_fresh_start",
+      original_session_id: originalSessionId,
+      ...originalMetadata,
+    };
+    
+    const newSession = await this.env.createSession?.({ title: fallbackTitle, metadata });
+    
+    if (!newSession) {
+      eventHandlerLogger.error("Failed to create fresh session");
+      return;
+    }
+    
+    const errorMsg = `[System] Previous session (id: ${originalSessionId}) encountered a persistent error: ${errorMessage}
+
+A new session has been started. You can continue handling the event: ${query}
+
+To view the previous conversation history, you can:
+- Use "get_session_messages" tool to view messages from the original session (session_id: ${originalSessionId})
+- Check server logs for detailed error information
+
+Please handle the event and reply to the user who triggered it.`;
+
+    newSession.addUserMessage(errorMsg);
+    
+    const history = await newSession.toHistory();
+    
+    try {
+      await this.env.handle_query(
+        `Continue from fresh session`,
+        {
+          session_id: newSession.id,
+          onMessageAdded: (message: ModelMessage) => {
+            eventHandlerLogger.debug(`Fresh session onMessageAdded: role=${message.role}`);
+            newSession.addMessageFromModelMessage(message);
+          },
+        },
+        history
+      );
+      eventHandlerLogger.info(`Fresh session created successfully: ${newSession.id}`);
+    } catch (finalError) {
+      const finalErrorMsg = finalError instanceof Error ? finalError.message : String(finalError);
+      eventHandlerLogger.error(`Fresh session also failed: ${finalErrorMsg}`);
     }
   }
 
