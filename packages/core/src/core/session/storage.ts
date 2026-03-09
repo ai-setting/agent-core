@@ -480,6 +480,12 @@ class StorageImpl {
       return Array.from(this.sessionInfos.keys());
     }
 
+    // 在 SQLite 模式下，直接使用 SQLite 查询以确保能查到所有 session
+    if (this.sqliteStorage) {
+      return this.sqliteStorage.findSessionIdsByMetadata(metadata);
+    }
+
+    // FileStorage/Memory 模式：在内存中查找
     const result: string[] = [];
     for (const [id, info] of this.sessionInfos.entries()) {
       let match = true;
