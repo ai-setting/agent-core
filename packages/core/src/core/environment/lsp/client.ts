@@ -105,6 +105,7 @@ export class LSPClient extends EventEmitter {
   private initialized = false;
   private pendingRequests: Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }> = new Map();
   private readBuffer = "";
+  private serverCapabilities: Record<string, unknown> | null = null;
 
   constructor(options: LSPClientOptions) {
     super();
@@ -392,7 +393,15 @@ export class LSPClient extends EventEmitter {
       Object.assign(initParams, this.server.initializationOptions);
     }
 
-    await this.sendRequest("initialize", initParams);
+    const result = await this.sendRequest("initialize", initParams) as { capabilities?: Record<string, unknown> };
+    
+    // Save server capabilities for diagnostic mode detection
+    if (result?.capabilities) {
+      this.serverCapabilities = result.capabilities;
+      lspLogger.debug(`Server capabilities saved for ${this.serverID}`, { 
+        capabilities: this.serverCapabilities 
+      });
+    }
 
     this.initialized = true;
     this.sendNotification("initialized", {});
@@ -443,6 +452,41 @@ export class LSPClient extends EventEmitter {
 
   /**
    * Get diagnostics for a file
+   * For push mode: returns cached diagnostics from publishNotifications
+   * For pull mode: requests diagnostics via textDocument/diagnostic
+   */
+  async getDiagnosticsAsync(filePath: string): Promise<LSPDiagnostic[]> {
+    const uri = pathToFileURL(filePath).href;
+    
+    // Check if server uses pull mode (workspaceDiagnostics: false)
+    const diagnosticProvider = this.serverCapabilities?.diagnosticProvider as Record<string, unknown> | undefined;
+    const usesPullMode = diagnosticProvider && !diagnosticProvider.workspaceDiagnostics;
+    
+    if (usesPullMode) {
+      // Use pull mode: request diagnostics via textDocument/diagnostic
+      try {
+        const result = await this.sendRequest("textDocument/diagnostic", {
+          textDocument: { uri },
+        }) as { items?: LSPDiagnostic[] };
+        
+        const diagnostics = result?.items || [];
+        lspLogger.debug(`Pull diagnostics for ${filePath}`, { count: diagnostics.length });
+        
+        // Cache the results
+        this.diagnostics.set(filePath, diagnostics);
+        return diagnostics;
+      } catch (error) {
+        lspLogger.warn(`Failed to get pull diagnostics for ${filePath}`, { error: (error as Error).message });
+        return [];
+      }
+    }
+    
+    // Push mode: return cached diagnostics
+    return this.diagnostics.get(filePath) || [];
+  }
+
+  /**
+   * Get diagnostics for a file (sync version - returns cached only)
    */
   getDiagnostics(filePath?: string): Map<string, LSPDiagnostic[]> {
     if (filePath) {
