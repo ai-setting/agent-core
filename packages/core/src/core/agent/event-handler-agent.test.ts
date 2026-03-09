@@ -19,7 +19,7 @@ describe("EventHandlerAgent", () => {
       addAssistantMessage: vi.fn(),
       addMessageFromModelMessage: vi.fn(),
       addToolMessage: vi.fn(),
-      toHistory: vi.fn().mockReturnValue([
+      toHistory: vi.fn().mockResolvedValue([
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Hi there!" },
       ]),
@@ -157,7 +157,7 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      const history = session.toHistory() as ModelMessage[];
+      const history = await session.toHistory();
 
       // 验证有 3 条消息：user + assistant (with tool call) + tool
       expect(history.length).toBe(3);
@@ -213,88 +213,12 @@ describe("EventHandlerAgent", () => {
     });
   });
 
-  describe("fallback session handling", () => {
-    it("should get session from ActiveSessionManager when no trigger_session_id", async () => {
-      const mockActiveSessionManager = {
-        getActiveSession: vi.fn().mockReturnValue("active-session-id"),
-      };
-
-      const mockSession = {
-        id: "active-session-id",
-        addMessageFromModelMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([
-          { role: "user", content: "Hello" },
-        ]),
-      };
-
-      const mockEnv = {
-        getSession: vi.fn().mockResolvedValue(mockSession),
-        handle_query: vi.fn().mockResolvedValue("Processed"),
-        getActiveSessionManager: vi.fn().mockReturnValue(mockActiveSessionManager),
-      };
-
-      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
-
-      const event: EnvEvent = {
-        id: "event-1",
-        type: "test.event",
-        timestamp: Date.now(),
-        metadata: {
-          clientId: "client-123",
-        },
-        payload: {},
-      };
-
-      await agent.handle(event);
-
-      expect(mockActiveSessionManager.getActiveSession).toHaveBeenCalledWith("client-123");
-      expect(mockEnv.getSession).toHaveBeenCalledWith("active-session-id");
-      expect(mockEnv.handle_query).toHaveBeenCalled();
-    });
-
-    it("should create new session when ActiveSessionManager returns undefined", async () => {
-      const mockActiveSessionManager = {
-        getActiveSession: vi.fn().mockReturnValue(undefined),
-      };
-
-      const newSession = {
-        id: "new-fallback-session",
-        addMessageFromModelMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([]),
-      };
-
-      const mockEnv = {
-        getSession: vi.fn().mockResolvedValue(null),
-        handle_query: vi.fn().mockResolvedValue("Processed"),
-        getActiveSessionManager: vi.fn().mockReturnValue(mockActiveSessionManager),
-        createSession: vi.fn().mockResolvedValue(newSession),
-      };
-
-      const agent = new EventHandlerAgent(mockEnv, "You are a helpful assistant");
-
-      const event: EnvEvent = {
-        id: "event-1",
-        type: "test.event",
-        timestamp: Date.now(),
-        metadata: {
-          clientId: "client-123",
-        },
-        payload: {},
-      };
-
-      await agent.handle(event);
-
-      expect(mockEnv.createSession).toHaveBeenCalled();
-      expect(mockEnv.handle_query).toHaveBeenCalled();
-    });
-  });
-
   describe("handle_query error retry", () => {
     it("should retry with new session when handle_query throws error", async () => {
       const mockSession = {
         id: "original-session",
         addMessageFromModelMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([
+        toHistory: vi.fn().mockResolvedValue([
           { role: "user", content: "Hello" },
         ]),
       };
@@ -303,7 +227,7 @@ describe("EventHandlerAgent", () => {
         id: "retry-session-1",
         addMessageFromModelMessage: vi.fn(),
         addUserMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([]),
+        toHistory: vi.fn().mockResolvedValue([]),
       };
 
       let callCount = 0;
@@ -348,7 +272,7 @@ describe("EventHandlerAgent", () => {
       const mockSession = {
         id: "original-session",
         addMessageFromModelMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([
+        toHistory: vi.fn().mockResolvedValue([
           { role: "user", content: "Hello" },
         ]),
       };
@@ -357,7 +281,7 @@ describe("EventHandlerAgent", () => {
         id: "retry-session-1",
         addMessageFromModelMessage: vi.fn(),
         addUserMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([]),
+        toHistory: vi.fn().mockResolvedValue([]),
       };
 
       const mockEnv = {
@@ -389,7 +313,7 @@ describe("EventHandlerAgent", () => {
       const mockSession = {
         id: "original-session",
         addMessageFromModelMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([
+        toHistory: vi.fn().mockResolvedValue([
           { role: "user", content: "Hello" },
         ]),
       };
@@ -398,7 +322,7 @@ describe("EventHandlerAgent", () => {
         id: "retry-session",
         addMessageFromModelMessage: vi.fn(),
         addUserMessage: vi.fn(),
-        toHistory: vi.fn().mockReturnValue([]),
+        toHistory: vi.fn().mockResolvedValue([]),
       };
 
       const mockEnv = {

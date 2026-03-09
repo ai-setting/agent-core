@@ -253,7 +253,7 @@ export class SqlitePersistence implements SessionPersistence {
       params.push(`$.${key}`, value);
     }
 
-    const sql = `SELECT id FROM session WHERE metadata IS NOT NULL AND (${conditions.join(" AND ")}) ORDER BY time_updated DESC`;
+    const sql = `SELECT id FROM session WHERE metadata IS NOT NULL AND (${conditions.join(" AND ")}) ORDER BY time_created DESC`;
     const stmt = this.db.prepare(sql);
     const rows = stmt.all(...params) as { id: string }[];
 

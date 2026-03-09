@@ -198,41 +198,39 @@ export class BackgroundTaskManager {
     timeoutMs: number,
     signal?: AbortSignal
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`Task execution timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
+    const timer = setTimeout(() => {
+      throw new Error(`Task execution timeout after ${timeoutMs}ms`);
+    }, timeoutMs);
 
-      if (signal) {
-        signal.addEventListener("abort", () => {
-          clearTimeout(timer);
-          reject(new Error("Task stopped by user"));
-        });
-      }
+    if (signal) {
+      signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        throw new Error("Task stopped by user");
+      });
+    }
 
-      const history = subSession.toHistory();
+    try {
+      const history = await subSession.toHistory();
       logger.info(`executeWithAbort: history length=${history.length}`);
       for (let i = 0; i < history.length; i++) {
         const msg = history[i];
         logger.info(`  history[${i}]: role=${msg.role}, content type=${typeof msg.content}, isArray=${Array.isArray(msg.content)}`);
       }
 
-      this.env.handle_query(prompt, { 
+      const result = await this.env.handle_query(prompt, { 
         session_id: subSession.id,
         onMessageAdded: (message: any) => {
           subSession.addMessageFromModelMessage(message);
         }
-      }, subSession.toHistory())
-      .then((result) => {
-        clearTimeout(timer);
-        logger.info(`handle_query success, result length: ${result.length}`);
-        resolve(result);
-      })
-        .catch((error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
-    });
+      }, history);
+      
+      clearTimeout(timer);
+      logger.info(`handle_query success, result length: ${result.length}`);
+      return result;
+    } catch (error) {
+      clearTimeout(timer);
+      throw error;
+    }
   }
 
   private startProgressReporter(taskId: string): void {

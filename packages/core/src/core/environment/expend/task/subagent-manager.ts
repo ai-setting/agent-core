@@ -59,7 +59,7 @@ export class SubAgentManager {
     timeout?: number
   ): Promise<string> {
     const subAgent = getSubAgentSpec(subSession.info.metadata?.subagent_type as string || "general");
-    const history = subSession.toHistory();
+    const history = await subSession.toHistory();
 
     try {
       const timeoutMs = timeout || subAgent?.timeout || 300000;
