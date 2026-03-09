@@ -345,8 +345,8 @@ describe("EventHandlerAgent", () => {
 
       await agent.handle(event);
 
-      expect(mockEnv.handle_query).toHaveBeenCalledTimes(4);
-      expect(mockEnv.createSession).toHaveBeenCalledTimes(3);
+      expect(mockEnv.handle_query).toHaveBeenCalledTimes(5);
+      expect(mockEnv.createSession).toHaveBeenCalledTimes(4);
     });
   });
 });
