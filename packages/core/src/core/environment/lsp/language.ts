@@ -36,11 +36,19 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".vue": "vue",
   ".svelte": "svelte",
   ".astro": "astro",
+  ".md": "markdown",
+  ".markdown": "markdown",
+  ".mdown": "markdown",
+  ".mkd": "markdown",
+  ".mkdn": "markdown",
+  ".mdwn": "markdown",
+  ".mdtxt": "markdown",
+  ".mdtext": "markdown",
 };
 
 /**
  * Code file extensions that need LSP diagnostics
- * Non-code files (like .md, .txt, .json) will skip LSP
+ * Non-code files (like .txt, .json) will skip LSP
  */
 const CODE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".mts", ".cts",
@@ -56,6 +64,7 @@ const CODE_EXTENSIONS = new Set([
   ".swift",
   ".zig",
   ".vue", ".svelte", ".astro",
+  ".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdwn", ".mdtxt", ".mdtext",
 ]);
 
 /**
