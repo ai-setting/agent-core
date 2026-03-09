@@ -83,6 +83,8 @@ export function getInstallCommand(serverID: string): string | undefined {
     rust: "rustup component add rust-analyzer",
     vueLanguageServer: "bun add -g @vue/language-server",
     vue: "bun add -g @vue/language-server",
+    markdown: "npm i -g @gddzhaokun/markdown-language-server",
+    vscode_markdown_languageserver: "npm i -g @gddzhaokun/markdown-language-server",
   };
   return installCommands[serverID];
 }
@@ -366,7 +368,7 @@ export class LSPClient extends EventEmitter {
 
     const rootUri = pathToFileURL(this.root).href;
 
-    await this.sendRequest("initialize", {
+    const initParams: Record<string, unknown> = {
       rootUri,
       processId: process.pid,
       capabilities: {
@@ -383,7 +385,14 @@ export class LSPClient extends EventEmitter {
         },
       },
       workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-    });
+    };
+
+    // Add server-specific initialization options
+    if (this.server.initializationOptions) {
+      Object.assign(initParams, this.server.initializationOptions);
+    }
+
+    await this.sendRequest("initialize", initParams);
 
     this.initialized = true;
     this.sendNotification("initialized", {});

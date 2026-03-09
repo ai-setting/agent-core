@@ -23,6 +23,23 @@ describe("language.ts", () => {
     it("should map .go to go", () => {
       expect(LANGUAGE_EXTENSIONS[".go"]).toBe("go");
     });
+
+    it("should map .md to markdown", () => {
+      expect(LANGUAGE_EXTENSIONS[".md"]).toBe("markdown");
+    });
+
+    it("should map .markdown to markdown", () => {
+      expect(LANGUAGE_EXTENSIONS[".markdown"]).toBe("markdown");
+    });
+
+    it("should map various markdown extensions", () => {
+      expect(LANGUAGE_EXTENSIONS[".mdown"]).toBe("markdown");
+      expect(LANGUAGE_EXTENSIONS[".mkd"]).toBe("markdown");
+      expect(LANGUAGE_EXTENSIONS[".mkdn"]).toBe("markdown");
+      expect(LANGUAGE_EXTENSIONS[".mdwn"]).toBe("markdown");
+      expect(LANGUAGE_EXTENSIONS[".mdtxt"]).toBe("markdown");
+      expect(LANGUAGE_EXTENSIONS[".mdtext"]).toBe("markdown");
+    });
   });
 
   describe("needsLSPDiagnostics", () => {
@@ -45,8 +62,11 @@ describe("language.ts", () => {
       expect(needsLSPDiagnostics("/path/to/file.rs")).toBe(true);
     });
 
-    it("should return false for markdown files", () => {
-      expect(needsLSPDiagnostics("/path/to/file.md")).toBe(false);
+    it("should return true for Markdown files", () => {
+      expect(needsLSPDiagnostics("/path/to/file.md")).toBe(true);
+      expect(needsLSPDiagnostics("/path/to/file.markdown")).toBe(true);
+      expect(needsLSPDiagnostics("/path/to/file.mdown")).toBe(true);
+      expect(needsLSPDiagnostics("/path/to/file.mkd")).toBe(true);
     });
 
     it("should return false for text files", () => {
@@ -78,6 +98,12 @@ describe("language.ts", () => {
       expect(getLanguageId("/path/to/file.py")).toBe("python");
     });
 
+    it("should return language ID for Markdown files", () => {
+      expect(getLanguageId("/path/to/file.md")).toBe("markdown");
+      expect(getLanguageId("/path/to/file.markdown")).toBe("markdown");
+      expect(getLanguageId("/path/to/file.mdown")).toBe("markdown");
+    });
+
     it("should return undefined for unknown extensions", () => {
       expect(getLanguageId("/path/to/file.unknown")).toBeUndefined();
     });
@@ -96,6 +122,14 @@ describe("language.ts", () => {
       expect(extensions).toContain(".py");
       expect(extensions).toContain(".go");
       expect(extensions).toContain(".rs");
+    });
+
+    it("should include markdown extensions", () => {
+      const extensions = getSupportedExtensions();
+      expect(extensions).toContain(".md");
+      expect(extensions).toContain(".markdown");
+      expect(extensions).toContain(".mdown");
+      expect(extensions).toContain(".mkd");
     });
   });
 });

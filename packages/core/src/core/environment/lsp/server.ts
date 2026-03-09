@@ -170,6 +170,16 @@ export const LSPServers: Record<string, LSPServerInfo> = {
     command: ["astro-ls", "--stdio"],
     rootPatterns: ["package.json"],
   },
+
+  markdown: {
+    id: "vscode-markdown-languageserver",
+    extensions: [".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdwn", ".mdtxt", ".mdtext"],
+    command: ["markdown-language-server", "--stdio"],
+    rootPatterns: [".git", "package.json"],
+    initializationOptions: {
+      markdownFileExtensions: ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdtxt", "mdtext"],
+    },
+  },
 };
 
 /**
