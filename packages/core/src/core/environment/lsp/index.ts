@@ -167,13 +167,19 @@ export class LSPManager extends EventEmitter {
 
   /**
    * Get all diagnostics
+   * For push mode: returns cached diagnostics from publishNotifications
+   * For pull mode: actively requests diagnostics via textDocument/diagnostic
    */
   async getDiagnostics(): Promise<Record<string, LSPDiagnostic[]>> {
     const results: Record<string, LSPDiagnostic[]> = {};
 
-    for (const { client } of this.clients.values()) {
-      const diags = client.getDiagnostics();
-      for (const [filePath, diagnostics] of diags) {
+    for (const { client, root } of this.clients.values()) {
+      // Get all files in the workspace that have been opened
+      const workspaceFiles = client.getDiagnostics();
+      
+      for (const [filePath] of workspaceFiles) {
+        // Use async method to support both push and pull modes
+        const diagnostics = await client.getDiagnosticsAsync(filePath);
         if (diagnostics.length > 0) {
           results[filePath] = (results[filePath] || []).concat(diagnostics);
         }
