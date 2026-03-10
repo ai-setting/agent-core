@@ -7,7 +7,7 @@
 import { AgentServer } from "./server.js";
 import { ServerEnvironment } from "./environment.js";
 import { serverLogger, sessionLogger, sseLogger } from "./logger.js";
-import { getLogDir, setLogDirOverride } from "../utils/logger.js";
+import { getLogDir, setLogDirOverride, setLoggerGlobalLevel, type LogLevel } from "../utils/logger.js";
 import { CommandRegistry } from "./command/index.js";
 import { echoCommand } from "./command/built-in/echo.js";
 import { connectCommand } from "./command/built-in/connect.js";
@@ -65,6 +65,12 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     // 应用 logging 配置
     if (config.logging?.path) {
       setLogDirOverride(config.logging.path);
+    }
+    
+    // 应用日志级别配置
+    if (config.logging?.level) {
+      setLoggerGlobalLevel(config.logging.level as LogLevel);
+      console.log(`[Config] Log level set to: ${config.logging.level}`);
     }
     
     if (!model && config.defaultModel) model = config.defaultModel;

@@ -36,10 +36,24 @@ interface LoggerConfig {
 }
 
 class Logger {
+  private static _globalLevel: LogLevel | null = null;
+  
   private level: LogLevel;
   private prefix: string;
   private filename: string;
   private currentLogDir: string = "";
+
+  static setGlobalLevel(level: LogLevel): void {
+    Logger._globalLevel = level;
+  }
+  
+  static get globalLevel(): LogLevel | null {
+    return Logger._globalLevel;
+  }
+
+  private getEffectiveLevel(): LogLevel {
+    return Logger._globalLevel || this.level;
+  }
 
   private get logFile(): string {
     const dir = getLogDir();
@@ -58,7 +72,9 @@ class Logger {
   };
 
   constructor(config: LoggerConfig = {}) {
-    this.level = (config.level || (process.env.LOG_LEVEL as LogLevel) || "info").toLowerCase() as LogLevel;
+    // 优先使用全局级别（通过 setGlobalLevel 设置），其次使用构造函数参数，最后使用环境变量
+    const envLevel = (process.env.LOG_LEVEL as LogLevel) || "info";
+    this.level = Logger.globalLevel || config.level || envLevel;
     this.prefix = config.prefix || "";
     this.filename = config.filename || "app.log";
     this.currentLogDir = getLogDir();
@@ -78,7 +94,7 @@ class Logger {
   }
 
   private shouldLog(level: LogLevel): boolean {
-    return this.levelPriority[level] >= this.levelPriority[this.level];
+    return this.levelPriority[level] >= this.levelPriority[this.getEffectiveLevel()];
   }
 
   private getCallerLocation(): { file: string; line: number } | null {
@@ -196,7 +212,7 @@ class Logger {
   // 创建带前缀的子 logger
   child(prefix: string): Logger {
     return new Logger({
-      level: this.level,
+      level: this.getEffectiveLevel(),
       filename: this.filename,
       prefix: this.prefix ? `${this.prefix}:${prefix}` : prefix,
     });
@@ -213,11 +229,18 @@ export const logger = new Logger({ filename: "app.log" });
 
 // 创建特定模块的 logger
 export function createLogger(module: string, filename?: string, level?: LogLevel): Logger {
+  // 优先使用传入的 level，其次使用全局 level
+  const effectiveLevel = level || Logger.globalLevel || undefined;
   return new Logger({ 
     filename: filename || `${module}.log`,
     prefix: module,
-    level: level
+    level: effectiveLevel
   });
+}
+
+// 设置全局日志级别（在配置加载后调用）
+export function setLoggerGlobalLevel(level: LogLevel): void {
+  Logger.setGlobalLevel(level);
 }
 
 // 导出日志目录路径
