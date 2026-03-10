@@ -423,22 +423,7 @@ async function getLSPDiagnosticsForFile(
       resultOutput += `\n\nLSP errors detected, please fix:\n${limited.map(formatLSPDiagnostic).join("\n")}${suffix}`;
     }
 
-    let otherFilesCount = 0;
-    for (const [path, diags] of Object.entries(allDiagnostics)) {
-      if (path === normalizedPath) continue;
-      if (otherFilesCount >= MAX_OTHER_FILES_DIAGNOSTICS) break;
-
-      const fileErrors = diags.filter((d: LSPDiagnostic) => d.severity === 1);
-      if (fileErrors.length > 0) {
-        otherFilesCount++;
-        resultOutput += `\n\nLSP errors in ${path}:\n${fileErrors
-          .slice(0, 5)
-          .map(formatLSPDiagnostic)
-          .join("\n")}`;
-      }
-    }
-
-    return { output: resultOutput, diagnostics: allDiagnostics };
+    return { output: resultOutput, diagnostics: { [normalizedPath]: fileDiagnostics } };
   } catch {
     return { output: "", diagnostics: {} };
   }

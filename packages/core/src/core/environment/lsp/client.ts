@@ -256,9 +256,14 @@ export class LSPClient extends EventEmitter {
       return;
     }
 
-    // Handle server request (without id)
+    // Handle server request or notification (without id)
     if (message.method) {
+      // If there's an id, it's a request that needs a response
+      // If there's no id, it's a notification
       this.handleServerRequest(message.method, message.params as Record<string, unknown>, message.id);
+    } else if (message.id !== undefined) {
+      // Message has id but not in pendingRequests - could be a stray response
+      lspLogger.debug(`Received message with unknown id: ${message.id}`);
     }
   }
 
@@ -329,6 +334,11 @@ export class LSPClient extends EventEmitter {
       }
 
       default:
+        // Handle notifications (no id) - like textDocument/publishDiagnostics
+        if (id === undefined) {
+          this.handleNotification(method, params);
+          return;
+        }
         lspLogger.debug(`Unhandled server request: ${method}`);
         return;
     }
@@ -359,6 +369,13 @@ export class LSPClient extends EventEmitter {
       case "textDocument/publishDiagnostics": {
         const uri = params.uri as string;
         const filePath = this.uriToPath(uri);
+        
+        lspLogger.debug(`[${this.serverID}] publishDiagnostics received`, { 
+          uri, 
+          filePath,
+          diagnosticsCount: (params.diagnostics as unknown[])?.length 
+        });
+        
         const diagnostics = (params.diagnostics as Array<{
           range: { start: { line: number; character: number }; end: { line: number; character: number } };
           severity?: number;
@@ -372,7 +389,6 @@ export class LSPClient extends EventEmitter {
         })) || [];
 
         this.diagnostics.set(filePath, diagnostics);
-        lspLogger.debug(`Diagnostics received for ${filePath}`, { count: diagnostics.length });
         this.emit("diagnostics", { filePath, diagnostics });
         break;
       }
@@ -502,8 +518,12 @@ export class LSPClient extends EventEmitter {
           markdown: {
             validate: {
               enabled: true,
-              fileLinks: { enabled: "error", markdownFragmentLinks: "inherit" },
+              referenceLinks: { enabled: "error" },
               fragmentLinks: { enabled: "error" },
+              fileLinks: { enabled: "error", markdownFragmentLinks: "inherit" },
+              ignoredLinks: [],
+              unusedLinkDefinitions: { enabled: "warning" },
+              duplicateLinkDefinitions: { enabled: "warning" },
             },
           },
         },
@@ -517,6 +537,9 @@ export class LSPClient extends EventEmitter {
    * Open a document
    */
   async openDocument(filePath: string): Promise<void> {
+    // Clear old diagnostics for this file to avoid stale cache
+    this.diagnostics.delete(filePath);
+    
     const { readFileSync } = await import("fs");
     const uri = pathToFileURL(filePath).href;
     const languageId = getLanguageId(filePath) || "plaintext";
@@ -548,6 +571,9 @@ export class LSPClient extends EventEmitter {
    * Change a document
    */
   async changeDocument(filePath: string, content: string): Promise<void> {
+    // Clear old diagnostics for this file to avoid stale cache
+    this.diagnostics.delete(filePath);
+    
     const uri = pathToFileURL(filePath).href;
     this.sendNotification("textDocument/didChange", {
       textDocument: { uri, version: 1 },
@@ -679,6 +705,11 @@ export class LSPClient extends EventEmitter {
    */
   private uriToPath(uri: string): string {
     try {
+      // If it's already a file:// URL, just remove the prefix
+      if (uri.startsWith('file://')) {
+        return uri.replace(/^file:\/\//, '');
+      }
+      // Otherwise, convert using pathToFileURL
       return pathToFileURL(uri).href.replace(/^file:\/\//, "");
     } catch {
       return uri;

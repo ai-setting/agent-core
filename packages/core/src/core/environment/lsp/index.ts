@@ -175,11 +175,9 @@ export class LSPManager extends EventEmitter {
 
     for (const { client, root } of this.clients.values()) {
       // Get all files in the workspace that have been opened
-      const workspaceFiles = client.getDiagnostics();
+      const workspaceDiagnostics = client.getDiagnostics();
       
-      for (const [filePath] of workspaceFiles) {
-        // Use async method to support both push and pull modes
-        const diagnostics = await client.getDiagnosticsAsync(filePath);
+      for (const [filePath, diagnostics] of workspaceDiagnostics) {
         if (diagnostics.length > 0) {
           results[filePath] = (results[filePath] || []).concat(diagnostics);
         }
