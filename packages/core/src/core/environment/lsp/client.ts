@@ -83,8 +83,8 @@ export function getInstallCommand(serverID: string): string | undefined {
     rust: "rustup component add rust-analyzer",
     vueLanguageServer: "bun add -g @vue/language-server",
     vue: "bun add -g @vue/language-server",
-    markdown: "npm i -g @gddzhaokun/markdown-language-server",
-    vscode_markdown_languageserver: "npm i -g @gddzhaokun/markdown-language-server",
+    markdown: "npm i -g @gddzhaokun/markdown-language-server@0.5.6",
+    vscode_markdown_languageserver: "npm i -g @gddzhaokun/markdown-language-server@0.5.6",
   };
   return installCommands[serverID];
 }
@@ -256,10 +256,99 @@ export class LSPClient extends EventEmitter {
       return;
     }
 
-    // Handle notification
+    // Handle server request (without id)
     if (message.method) {
-      this.handleNotification(message.method, message.params as Record<string, unknown>);
+      this.handleServerRequest(message.method, message.params as Record<string, unknown>, message.id);
     }
+  }
+
+  /**
+   * Handle requests from LSP server
+   */
+  private handleServerRequest(method: string, params: Record<string, unknown>, id?: number): void {
+    let result: unknown;
+
+    switch (method) {
+      case "markdown/parse": {
+        const text = params.text as string || "";
+        try {
+          const markdownIt = require("markdown-it");
+          const md = new markdownIt();
+          const tokens = md.parse(text, {});
+          result = tokens;
+        } catch {
+          result = [];
+        }
+        break;
+      }
+
+      case "markdown/fs/stat": {
+        const uri = params.uri as string || "";
+        const filePath = uri.replace(/^file:\/\//, "");
+        try {
+          const { statSync } = require("fs");
+          const stats = statSync(filePath);
+          result = { isDirectory: stats.isDirectory() };
+        } catch {
+          result = undefined;
+        }
+        break;
+      }
+
+      case "markdown/fs/readFile": {
+        const uri = params.uri as string || "";
+        const filePath = uri.replace(/^file:\/\//, "");
+        try {
+          const { readFileSync } = require("fs");
+          const content = readFileSync(filePath);
+          result = content;
+        } catch {
+          result = [];
+        }
+        break;
+      }
+
+      case "markdown/fs/readDirectory": {
+        const uri = params.uri as string || "";
+        const filePath = uri.replace(/^file:\/\//, "");
+        try {
+          const { readdirSync } = require("fs");
+          const entries = readdirSync(filePath, { withFileTypes: true });
+          result = entries.map((e: any) => [e.name, { isDirectory: e.isDirectory() }]);
+        } catch {
+          result = [];
+        }
+        break;
+      }
+
+      case "markdown/fs/watcher/create":
+      case "markdown/fs/watcher/delete":
+      case "workspace/diagnostic/refresh": {
+        result = null;
+        break;
+      }
+
+      default:
+        lspLogger.debug(`Unhandled server request: ${method}`);
+        return;
+    }
+
+    // Send response if there's an id
+    if (id !== undefined) {
+      this.sendResponse(id, result);
+    }
+  }
+
+  /**
+   * Send response to server request
+   */
+  private sendResponse(id: number, result: unknown): void {
+    const message = {
+      jsonrpc: "2.0",
+      id,
+      result,
+    };
+    this.sendMessage(message);
   }
 
   /**
@@ -405,6 +494,22 @@ export class LSPClient extends EventEmitter {
 
     this.initialized = true;
     this.sendNotification("initialized", {});
+
+    // For markdown server, send configuration to enable diagnostics
+    if (this.serverID === "markdown" || this.serverID === "vscode_markdown_languageserver") {
+      this.sendNotification("workspace/didChangeConfiguration", {
+        settings: {
+          markdown: {
+            validate: {
+              enabled: true,
+              fileLinks: { enabled: "error", markdownFragmentLinks: "inherit" },
+              fragmentLinks: { enabled: "error" },
+            },
+          },
+        },
+      });
+    }
+
     lspLogger.info(`LSP client initialized: ${this.serverID}`);
   }
 
