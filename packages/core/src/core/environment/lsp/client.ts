@@ -83,8 +83,8 @@ export function getInstallCommand(serverID: string): string | undefined {
     rust: "rustup component add rust-analyzer",
     vueLanguageServer: "bun add -g @vue/language-server",
     vue: "bun add -g @vue/language-server",
-    markdown: "npm i -g @gddzhaokun/markdown-language-server@0.5.6",
-    vscode_markdown_languageserver: "npm i -g @gddzhaokun/markdown-language-server@0.5.6",
+    markdown: "npm i -g @ai-setting/markdown-language-server@0.5.7",
+    vscode_markdown_languageserver: "npm i -g @ai-setting/markdown-language-server@0.5.7",
   };
   return installCommands[serverID];
 }
