@@ -199,7 +199,7 @@ class ProviderManager {
     sdkType: SDKType,
     config: ProviderConfig & { apiKey: string }
   ): any {
-    const { baseURL, apiKey, headers } = config;
+    const { baseURL, apiKey, headers, providerOptions } = config;
 
     try {
       switch (sdkType) {
@@ -208,6 +208,7 @@ class ProviderManager {
             baseURL,
             apiKey,
             headers,
+            ...providerOptions,
           });
 
         case "anthropic":
@@ -215,6 +216,7 @@ class ProviderManager {
             baseURL,
             apiKey,
             headers,
+            ...providerOptions,
           });
 
         case "google":
@@ -222,6 +224,7 @@ class ProviderManager {
             baseURL,
             apiKey,
             headers,
+            ...providerOptions,
           });
 
         case "openai-compatible":
@@ -231,6 +234,7 @@ class ProviderManager {
             baseURL,
             apiKey,
             headers,
+            ...providerOptions,
           });
       }
     } catch (error) {
