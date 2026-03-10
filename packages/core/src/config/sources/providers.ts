@@ -53,6 +53,8 @@ export interface ProviderConfig {
   /** LLM options for this provider */
   temperature?: number;
   maxTokens?: number;
+  /** Provider-specific options (e.g., __dangerous__ for AI SDK) */
+  providerOptions?: Record<string, unknown>;
 }
 
 export interface ProvidersDefaultConfig {
