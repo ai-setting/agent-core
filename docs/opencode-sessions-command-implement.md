@@ -42,7 +42,7 @@ dialog.push(() => <SessionsDialog data={...} />, { title: "Sessions" })
 
 ### 3.1 文件位置
 
-**绝对路径**: `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\server\command\built-in\sessions.ts`
+**绝对路径**: `packages/core/src/server/command/built-in/sessions.ts`
 
 ### 3.2 核心代码解析
 
@@ -170,7 +170,7 @@ async function handleDeleteAction(action: SessionsAction): Promise<CommandResult
 
 ### 3.4 命令注册
 
-**文件**: `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\server\index.ts`（行 52）
+**文件**: `packages/core/src/server/index.ts`（行 52）
 
 ```typescript
 import { sessionsCommand } from "./command/built-in/sessions.js";
@@ -182,7 +182,7 @@ commandRegistry.register(sessionsCommand);
 
 ### 4.1 文件位置
 
-**绝对路径**: `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\cli\tui\components\SessionsDialog.tsx`
+**绝对路径**: `packages/core/src/cli/tui/components/SessionsDialog.tsx`
 
 ### 4.2 组件结构
 
@@ -436,11 +436,11 @@ function formatRelativeTime(timestamp: number): string {
 
 | 功能 | 绝对路径 | 关键行号 |
 |------|----------|----------|
-| 命令定义 | `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\server\command\built-in\sessions.ts` | 1-198 |
-| Dialog 组件 | `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\cli\tui\components\SessionsDialog.tsx` | 1-290 |
-| CommandDialog 集成 | `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\cli\tui\components\CommandDialog.tsx` | 180-186 |
-| CommandPalette 集成 | `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\cli\tui\components\CommandPalette.tsx` | 17, 129, 222-240 |
-| 命令注册 | `D:\document\zhishitong_workspace\test_tong_work\agent-core\packages\core\src\server\index.ts` | 52 |
+| 命令定义 | `packages/core/src/server/command/built-in/sessions.ts` | 1-198 |
+| Dialog 组件 | `packages/core/src/cli/tui/components/SessionsDialog.tsx` | 1-290 |
+| CommandDialog 集成 | `packages/core/src/cli/tui/components/CommandDialog.tsx` | 180-186 |
+| CommandPalette 集成 | `packages/core/src/cli/tui/components/CommandPalette.tsx` | 17, 129, 222-240 |
+| 命令注册 | `packages/core/src/server/index.ts` | 52 |
 
 ## 八、扩展指南
 

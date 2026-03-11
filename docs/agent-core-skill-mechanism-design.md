@@ -57,7 +57,7 @@ description: Skill A 的功能描述，用于执行特定任务
 
 ### 4.1 Skill 元信息
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\types.ts`
+**文件位置**: `packages/core/src/core/environment/skills/types.ts`
 
 ```typescript
 interface SkillInfo {
@@ -72,7 +72,7 @@ interface SkillInfo {
 
 ### 5.1 SkillLoader
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\skill-loader.ts`
+**文件位置**: `packages/core/src/core/environment/skills/skill-loader.ts`
 
 职责：
 - 扫描 Environment 配置路径下的 `skills/` 目录
@@ -147,7 +147,7 @@ export class SkillLoader {
 
 ### 5.2 skillTool 定义
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\skill-tool.ts`
+**文件位置**: `packages/core/src/core/environment/skills/skill-tool.ts`
 
 **baseSkillTool** - 基础 SkillTool（不含动态 description）:
 
@@ -209,7 +209,7 @@ export function createSkillToolWithDescription(skills: SkillInfo[]): ToolInfo {
 
 ## 6. Environment 接口扩展
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\index.ts`
+**文件位置**: `packages/core/src/core/environment/index.ts`
 
 ### 6.1 新增方法
 
@@ -242,7 +242,7 @@ export * from "./skills/index.js";
 
 ## 7. BaseEnvironment 实现
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\base\base-environment.ts`
+**文件位置**: `packages/core/src/core/environment/base/base-environment.ts`
 
 ### 7.1 Skill 相关属性
 
@@ -316,7 +316,7 @@ protected abstract getSkillsDirectory(): string | undefined;
 
 ## 8. ServerEnvironment 集成
 
-**文件位置**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\environment.ts`
+**文件位置**: `packages/core/src/server/environment.ts`
 
 ### 8.1 属性定义
 
@@ -474,15 +474,15 @@ Execute a skill. Available skills:
 
 | 功能 | 绝对路径 |
 |------|----------|
-| Skill 类型定义 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\types.ts` |
-| SkillLoader | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\skill-loader.ts` |
-| skillTool 定义 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\skill-tool.ts` |
-| Skills 模块导出 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\skills\index.ts` |
-| Environment 接口 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\index.ts` |
-| BaseEnvironment | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\environment\base\base-environment.ts` |
-| ServerEnvironment | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\environment.ts` |
-| Agent | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\core\agent\index.ts` |
-| Config 路径 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\config\paths.ts` |
+| Skill 类型定义 | `packages/core/src/core/environment/skills/types.ts` |
+| SkillLoader | `packages/core/src/core/environment/skills/skill-loader.ts` |
+| skillTool 定义 | `packages/core/src/core/environment/skills/skill-tool.ts` |
+| Skills 模块导出 | `packages/core/src/core/environment/skills/index.ts` |
+| Environment 接口 | `packages/core/src/core/environment/index.ts` |
+| BaseEnvironment | `packages/core/src/core/environment/base/base-environment.ts` |
+| ServerEnvironment | `packages/core/src/server/environment.ts` |
+| Agent | `packages/core/src/core/agent/index.ts` |
+| Config 路径 | `packages/core/src/config/paths.ts` |
 
 ## 12. 注意事项
 

@@ -32,8 +32,11 @@ packages/core/src/
 │   │   ├── registry.ts           # Command 注册中心
 │   │   └── built-in/
 │   │       ├── echo.ts           # 示例命令
+│   │       ├── exit.ts           # 退出命令
 │   │       ├── connect.ts        # Provider 连接命令
-│   │       └── models.ts         # 模型选择命令
+│   │       ├── models.ts         # 模型选择命令
+│   │       ├── sessions.ts       # 会话管理命令
+│   │       └── agent-env.ts      # Agent-Env 命令
 │   └── index.ts                  # Server 入口，注册命令
 │
 └── cli/tui/
@@ -43,6 +46,7 @@ packages/core/src/
     │   ├── DialogStack.tsx       # Dialog 栈管理
     │   ├── ModelsDialog.tsx      # 模型选择 Dialog
     │   ├── ConnectDialog.tsx     # Provider 连接 Dialog
+    │   ├── SessionsDialog.tsx    # 会话管理 Dialog
     │   └── EchoDialog.tsx        # Echo 测试 Dialog
     │
     └── contexts/

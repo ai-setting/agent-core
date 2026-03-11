@@ -44,7 +44,7 @@ AgentEnv Command 是一个后端命令，用于管理 agent-core 的 Environment
 
 ### 3.1 文件位置
 
-**绝对路径**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts`
+**绝对路径**: `packages/core/src/server/command/built-in/agent-env.ts`
 
 ### 3.2 核心代码解析
 
@@ -271,14 +271,14 @@ async function handleDeleteAction(action): Promise<CommandResult> {
 
 | 模块 | 绝对路径 | 用途 |
 |------|----------|------|
-| ConfigPaths | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\config\paths.ts` | 获取 environments 目录路径 |
-| Config_get | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\config\config.ts` | 获取当前配置 |
-| Config_reload | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\config\config.ts` | 重新加载配置 |
-| loadEnvironmentConfig | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\config\sources\environment.ts` | 加载指定 Environment 配置 |
+| ConfigPaths | `packages/core/src/config/paths.ts` | 获取 environments 目录路径 |
+| Config_get | `packages/core/src/config/config.ts` | 获取当前配置 |
+| Config_reload | `packages/core/src/config/config.ts` | 重新加载配置 |
+| loadEnvironmentConfig | `packages/core/src/config/sources/environment.ts` | 加载指定 Environment 配置 |
 
 ### 3.4 命令注册
 
-命令注册在 **第 38-42 行** 的 `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\index.ts`：
+命令注册在 **第 38-42 行** 的 `packages/core/src/server/index.ts`：
 
 ```typescript
 import { agentEnvCommand } from "./command/built-in/agent-env.js";
@@ -296,7 +296,7 @@ commandRegistry.register(agentEnvCommand);  // 新增
 
 ### 4.1 文件位置
 
-**绝对路径**: `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\cli\tui\components\AgentEnvDialog.tsx`
+**绝对路径**: `packages/core/src/cli/tui/components/AgentEnvDialog.tsx`
 
 ### 4.2 组件结构
 
@@ -483,7 +483,7 @@ const createEnv = async () => {
 
 ### 4.5 CommandDialog 集成
 
-在 **第 175-182 行** 的 `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\cli\tui\components\CommandDialog.tsx`：
+在 **第 175-182 行** 的 `packages/core/src/cli/tui/components/CommandDialog.tsx`：
 
 ```typescript
 case "agent-env": {
@@ -632,15 +632,15 @@ User opens AgentEnvDialog
 
 | 功能 | 绝对路径 | 关键行号 |
 |------|----------|----------|
-| 命令定义 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 51-89 |
-| list action | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 95-137 |
-| select action | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 143-198 |
-| create action | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 204-261 |
-| update action | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 267-303 |
-| delete action | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\command\built-in\agent-env.ts` | 309-341 |
-| Dialog 组件 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\cli\tui\components\AgentEnvDialog.tsx` | 31-454 |
-| CommandDialog 集成 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\cli\tui\components\CommandDialog.tsx` | 175-182 |
-| 命令注册 | `D:\document\zhishitong_workspace\zst_project\tong_work\agent-core\packages\core\src\server\index.ts` | 38-42 |
+| 命令定义 | `packages/core/src/server/command/built-in/agent-env.ts` | 51-89 |
+| list action | `packages/core/src/server/command/built-in/agent-env.ts` | 95-137 |
+| select action | `packages/core/src/server/command/built-in/agent-env.ts` | 143-198 |
+| create action | `packages/core/src/server/command/built-in/agent-env.ts` | 204-261 |
+| update action | `packages/core/src/server/command/built-in/agent-env.ts` | 267-303 |
+| delete action | `packages/core/src/server/command/built-in/agent-env.ts` | 309-341 |
+| Dialog 组件 | `packages/core/src/cli/tui/components/AgentEnvDialog.tsx` | 31-454 |
+| CommandDialog 集成 | `packages/core/src/cli/tui/components/CommandDialog.tsx` | 175-182 |
+| 命令注册 | `packages/core/src/server/index.ts` | 38-42 |
 
 ## 八、扩展指南
 

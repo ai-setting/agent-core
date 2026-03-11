@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-02-26（新增 Sessions Command - 支持查看和管理历史会话列表）
+最后更新：2026-03-11（更新 MCP 进度、修正 Sub-agents 状态、新增 Command 开发文档链接）
 
 ---
 
@@ -33,11 +33,10 @@
 
 ### 2.2 明显缺口（尚未体系化/尚未落地）
 
-- **MCP 集成**：尚无统一"连接/发现/装配为工具"的实现
 - **Skills 体系**：尚无"技能包加载→注册为工具→版本化/隔离"的实现
-- **Sub-agents**：尚无子代理编排与权限收敛机制
 - **Environment 原生接口**（日志查询、事件回放、工件/资源管理、审计查询等）：目前仅有事件推送的部分链路
-- **配置系统**：用户级配置、状态持久化尚未实现
+- **治理策略**：需补齐"策略可配置/可观测/可回放"的闭环
+- **统一事件协议**：客户端/服务端事件 schema 尚未完全统一
 
 ---
 
@@ -75,11 +74,12 @@
 | 治理（超时/重试/并发） | 统一策略入口（per-tool override） | [WIP] | manager 已存在；需要补齐"策略可配置/可观测/可回放"的闭环 | `packages/core/src/core/environment/base/{timeout,retry,concurrency}.ts` |
 | 可靠性（恢复） | tool error recovery / fallback | [WIP] | 有 `recovery.ts` 但需定义清晰策略与事件 | `.../base/recovery.ts` |
 | Metrics | 可观测指标采集 | [WIP] | metrics collector 已存在但需接入端到端展示/导出 | `.../base/metrics.ts` |
-| 环境事件机制 | EnvEvent 类型定义 + EventTypes 常量 | [WIP] | 设计文档已创建：预定义事件类型（user_query, session.*, background_task.*, tool.*, stream.*）、EventBus 统一入口 + Rule 路由 + Queue、EventHandlerAgent 无状态处理 | `docs/environment-event-mechanism.md`、`core/types/event.ts` |
-| 环境事件机制 | Session Route 事件化改造 | [TODO] | 改造 `/sessions/:id/prompt` route，只产生 user_query event，由 EventBus 统一处理 | `server/routes/sessions.ts` |
-| 环境事件机制 | EventHandlerAgent 实现 | [TODO] | new 无状态 agent 处理事件，构造 3 条消息插入 session history，触发 handle_query 执行 | `core/agent/event-handler-agent.ts` |
-| 环境事件机制 | StreamEvent 通过 EventBus 发布 | [TODO] | 现有 emitStreamEvent 保持不变，同时通过 EventBus publish 供其他订阅者使用 | `core/environment/base/invoke-llm.ts` |
-| MCP | 连接/发现/将 MCP tool 装配进 env | [WIP] | 已有 Env 协议 JSON 规范与 Env client/server 封装雏形，下一步接入真实 MCP client/server 传输层 | `packages/core/env_spec/**` |
+| 环境事件机制 | EnvEvent 类型定义 + EventTypes 常量 | [DONE] | 已实现：EnvEvent 类型、EventTypes 常量、EventHandlerAgent 无状态处理 | `core/types/event.ts`、`core/agent/event-handler-agent.ts` |
+| 环境事件机制 | Session Route 事件化改造 | [WIP] | 正在改造 `/sessions/:id/prompt` route，只产生 user_query event | `server/routes/sessions.ts` |
+| 环境事件机制 | EventHandlerAgent 实现 | [DONE] | 已实现无状态 EventHandlerAgent 类，集成到 EventBus | `core/agent/event-handler-agent.ts`、`server/eventbus/bus.ts` |
+| 环境事件机制 | StreamEvent 通过 EventBus 发布 | [WIP] | 正在实现中 | `core/environment/base/invoke-llm.ts` |
+| MCP | EventSource MCP 连接/发现/装配为工具 | [DONE] | EventMcpManager 已实现，支持从配置加载 MCP clients 并注册为工具 | `server/env_spec/mcp/event-source/manager.ts`、`server/environment.ts` |
+| MCP | Env 协议 JSON 规范与 Client/Server 封装 | [DONE] | Env 协议 JSON 规范、EnvClient、createEnvMcpServer 已实现 | `packages/core/env_spec/**` |
 | Skills | 从目录/配置加载技能→注册为工具 | [TODO] | 目前未形成技能加载与隔离体系 | （待创建） |
 | Sub-agents | TaskTool 与 SubAgent 实现 | [DONE] | 设计文档已创建：TaskTool 参数定义、SubAgent Manager、后台任务执行、事件集成机制 | `docs/task-tool-subagent-design.md` |
 | Sub-agents | 子代理编排、权限收敛、并行探索 | [TODO] | 设计文档已创建，实现需按 Phase 1-4 逐步落地 | `docs/task-tool-subagent-design.md` |
@@ -143,26 +143,22 @@
 ~~- 交付物：`BaseEnvironment` 集成配置加载，配置能正确注入 LLM/治理策略/Session~~
 ~~- 验收：通过配置文件和环境变量能控制 Agent 行为~~
 
-1) **Environment 事件机制实现**（新增）
-- 交付物：
-  - `core/types/event.ts`：新增 `EnvEvent` 类型 + `EventTypes` 常量
-  - `server/eventbus/bus.ts`：改造为统一入口 + Rule 路由 + Queue + AgentHandler 支持
-  - `server/environment.ts`：注册默认 rules + 暴露 `publishEvent`
-  - `server/routes/sessions.ts`：改造 `/prompt` route 只产生 event
-  - `core/agent/event-handler-agent.ts`：无状态 EventHandlerAgent 类
-  - `core/environment/base/invoke-llm.ts`：StreamEvent 通过 EventBus publish
-- 验收：
-  - POST /sessions/:id/prompt 产生 user_query event 并由 EventBus 处理
-  - background_task.completed event 能触发 EventHandlerAgent 处理
-  - 伪造消息正确插入 session history 并触发 agent 执行
+~~1) **Environment 事件机制实现**~~ ✅ 已完成（Phase 1）
+~~- EnvEvent 类型 + EventTypes 常量~~
+~~- EventHandlerAgent 无状态处理~~
+~~- EventBus Rule 路由 + AgentHandler 支持~~
 
-4) **统一事件协议与版本**（M1）
-- 交付物：在 `core/types/event.ts`（或等价位置）确定客户端/服务端统一事件 schema + version 字段
+~~2) **统一事件协议与版本**（M1）~~ 🔄 进行中
+- 在 `core/types/event.ts` 确定客户端/服务端统一事件 schema + version 字段
 - 验收：TUI 能消费 server SSE 的事件，且通过 schema 校验
 
-5) **Environment 原生日志接口最小闭环**（M1）
+3) **Environment 原生日志接口最小闭环**（M1）
 - 交付物：定义 `env.getLogs(...)` / `env.subscribeLogs(...)`（或等价）+ 基础实现
 - 验收：同一份结构化日志可在 CLI、Server、测试环境获取；并能关联 session/message/toolCallId
+
+4) **Command 系统完善**
+- 新增 Command 开发指南：`docs/command-development-guide.md`
+- 新增 Agent-Env Command：`docs/agent-env-command-design.md`、`docs/opencode-agent-env-command-implement.md`
 
 ---
 
@@ -183,3 +179,5 @@
 - 2026-02-16：新增 **Environment 事件机制设计**（`docs/environment-event-mechanism.md`）：通过 EventBus 统一入口 + Rule 路由机制，让 Environment 产生的事件可被 Agent 感知并插入 LLM 消息上下文。核心组件：EnvEvent 类型定义、EventHandlerAgent 无状态处理、Session Route 事件化改造。支持场景：异步任务完成事件、环境变化观测、工具执行错误等。
 - 2026-02-22：新增 **Session 持久化能力**：支持 memory/file 两种存储模式，通过 `config.session.persistence` 配置切换。文件存储在 XDG data 目录（`~/.local/share/tong_work/agent-core/storage/`），参考 OpenCode 的存储结构。每个 session 有独立的 JSON 文件，messages 按 session 分目录存储。服务重启后自动加载历史会话，实现会话可回放。
 - 2026-02-26：新增 **Sessions Command**：实现 `/sessions` 命令，允许用户通过 TUI dialog 查看和管理历史会话列表。功能包括：会话列表展示（按更新时间倒序）、搜索过滤（按标题/目录）、选择切换会话、删除会话（带确认）。参考 OpenCode 的 `list session` 功能体验，支持键盘导航（↑↓/Enter/D/Esc）和相对时间显示（如 "2h ago"）。包含完整的后端 command 实现（`sessions.ts`）和前端 Dialog 组件（`SessionsDialog.tsx`），集成到 CommandDialog 和 CommandPalette。
+- 2026-03-11：**Environment 事件机制 Phase 1 完成**：EnvEvent 类型、EventTypes 常量、EventHandlerAgent 无状态处理已实现，EventBus 支持 Rule 路由和 AgentHandler。MCP EventSource 功能已完成，EventMcpManager 支持从配置加载 MCP clients。
+- 2026-03-11：**新增 Command 开发文档**：新增 `command-development-guide.md` 详细记录 Command 完整开发流程、`agent-env-command-design.md` 和实现文档。

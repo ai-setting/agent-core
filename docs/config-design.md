@@ -1204,6 +1204,7 @@ test("recent models limited to 10", async () => {
 - **可扩展配置设计**：`docs/extensible-config-design.md`
 - **Environment 设计理念**：`docs/environment-design-philosophy.md`
 - **Env Spec 设计**：`docs/env-spec-design-and-implementation.md`
+- **Provider 配置集中化**：`docs/providers-config-centralization-design.md` - providers.jsonc 配置机制
 
 ---
 

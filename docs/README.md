@@ -10,13 +10,30 @@
 
 ## 从这里开始
 
+> **新手指南**: 建议从 [`project.md`](./project.md) 开始，它提供了完整的故事线阅读指南。
+
+- [项目入口 - project.md](./project.md) - 新手指南，包含理念、目标、功能特性、故事线索引
 - [Environment 设计理念（统一运行时上下文）](./environment-design-philosophy.md)
 - [开发进度与路线图（Progress & Roadmap）](./DEVELOPMENT_PROGRESS.md)
 - [Env Spec 设计与实现（从 Environment 推导 MCP options、Stdio/HTTP 传输）](./env-spec-design-and-implementation.md)
+- [Command 开发指南](./command-development-guide.md) - 快速实现新 Command 的完整流程
 
 ## LLM Provider 相关
 
 - [Interleaved Reasoning 处理机制](./llm-interleaved-reasoning.md) - 如何处理 Kimi k2.5、DeepSeek R1 等模型的 reasoning content
+
+## 配置与命令系统
+
+- [配置系统设计](./config-design.md) - 用户级配置系统
+- [Command 开发指南](./command-development-guide.md) - 后端命令 + 前端 Dialog 开发
+- [Models 命令设计](./models-command-design.md) + [实现](./opencode-model-command-implement.md)
+- [Sessions 命令设计](./sessions-command-design.md) + [实现](./opencode-sessions-command-implement.md)
+- [Agent-Env 命令设计](./agent-env-command-design.md) + [实现](./opencode-agent-env-command-implement.md)
+
+## 事件机制
+
+- [环境事件机制设计](./environment-event-mechanism.md)
+- [环境事件机制实现](./environment-event-mechanism-implement.md)
 
 ## 现阶段仍有效的历史设计稿（位于 `docs/old/`）
 
