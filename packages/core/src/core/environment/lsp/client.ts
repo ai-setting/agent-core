@@ -513,6 +513,7 @@ export class LSPClient extends EventEmitter {
 
     // For markdown server, send configuration to enable diagnostics
     if (this.serverID === "markdown" || this.serverID === "vscode_markdown_languageserver") {
+      lspLogger.info(`LSP: Sending diagnostic configuration for ${this.serverID}`);
       this.sendNotification("workspace/didChangeConfiguration", {
         settings: {
           markdown: {
@@ -528,6 +529,7 @@ export class LSPClient extends EventEmitter {
           },
         },
       });
+      lspLogger.info(`LSP: Diagnostic configuration sent for ${this.serverID}`);
     }
 
     lspLogger.info(`LSP client initialized: ${this.serverID}`);
@@ -544,6 +546,8 @@ export class LSPClient extends EventEmitter {
     const uri = pathToFileURL(filePath).href;
     const languageId = getLanguageId(filePath) || "plaintext";
 
+    lspLogger.info(`LSP: Opening document`, { filePath, uri, languageId });
+
     try {
       const content = readFileSync(filePath, "utf-8");
       this.sendNotification("textDocument/didOpen", {
@@ -554,8 +558,10 @@ export class LSPClient extends EventEmitter {
           text: content,
         },
       });
+      lspLogger.info(`LSP: Document opened with content`, { filePath, contentLength: content.length });
     } catch {
       // File might not exist yet
+      lspLogger.warn(`LSP: File read failed, opening with empty content`, { filePath });
       this.sendNotification("textDocument/didOpen", {
         textDocument: {
           uri,
@@ -630,8 +636,11 @@ export class LSPClient extends EventEmitter {
    * Wait for diagnostics after document change
    */
   async waitForDiagnostics(filePath: string, timeoutMs = 3000): Promise<void> {
+    lspLogger.info(`LSP: Waiting for diagnostics`, { filePath, timeoutMs });
+    
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
+        lspLogger.warn(`LSP: Diagnostics timeout`, { filePath, timeoutMs });
         resolve();
       }, timeoutMs);
 
@@ -639,6 +648,7 @@ export class LSPClient extends EventEmitter {
         if (fp === filePath) {
           clearTimeout(timeout);
           this.off("diagnostics", handler);
+          lspLogger.info(`LSP: Diagnostics received`, { filePath, count: diagnostics.length });
           resolve();
         }
       };

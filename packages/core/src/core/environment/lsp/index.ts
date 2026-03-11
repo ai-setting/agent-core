@@ -65,7 +65,9 @@ export class LSPManager extends EventEmitter {
    * Check if LSP is needed for a file
    */
   needsLSP(filePath: string): boolean {
-    return needsLSPDiagnostics(filePath);
+    const result = needsLSPDiagnostics(filePath);
+    lspLogger.debug("LSP Manager: Checking if LSP needed", { filePath, result });
+    return result;
   }
 
   /**
@@ -73,19 +75,33 @@ export class LSPManager extends EventEmitter {
    */
   async getClients(filePath: string): Promise<LSPClient[]> {
     const ext = path.extname(filePath).toLowerCase();
+    lspLogger.debug("LSP Manager: Getting clients for file", { filePath, ext });
+    
     const results: LSPClient[] = [];
 
     for (const [id, server] of this.servers) {
-      if (!server.extensions.includes(ext)) continue;
-      if (this.broken.has(id)) continue;
+      if (!server.extensions.includes(ext)) {
+        lspLogger.debug("LSP Manager: Skipping server - extension not supported", { id, ext, serverExtensions: server.extensions });
+        continue;
+      }
+      if (this.broken.has(id)) {
+        lspLogger.debug("LSP Manager: Skipping server - marked as broken", { id });
+        continue;
+      }
 
       const rootFinder = getRootFinder(server);
       const root = await rootFinder(filePath);
-      if (!root) continue;
+      lspLogger.debug("LSP Manager: Root finder result", { id, filePath, root });
+      
+      if (!root) {
+        lspLogger.debug("LSP Manager: Skipping server - no root found", { id, filePath });
+        continue;
+      }
 
       const key = `${root}:${id}`;
       const existing = this.clients.get(key);
       if (existing) {
+        lspLogger.debug("LSP Manager: Using existing client", { key, id });
         results.push(existing.client);
         continue;
       }
@@ -94,6 +110,7 @@ export class LSPManager extends EventEmitter {
       if (client) results.push(client);
     }
 
+    lspLogger.info("LSP Manager: Clients found", { filePath, count: results.length });
     return results;
   }
 
@@ -152,7 +169,14 @@ export class LSPManager extends EventEmitter {
    * Touch a file - notify LSP and optionally wait for diagnostics
    */
   async touchFile(filePath: string, waitForDiagnostics = false): Promise<void> {
+    lspLogger.info("LSP Manager: touchFile called", { filePath, waitForDiagnostics });
+    
     const clients = await this.getClients(filePath);
+    lspLogger.info("LSP Manager: Got clients for touchFile", { filePath, clientCount: clients.length });
+
+    if (clients.length === 0) {
+      lspLogger.warn("LSP Manager: No clients available for touchFile", { filePath });
+    }
 
     await Promise.all(
       clients.map(async (client) => {
@@ -163,6 +187,8 @@ export class LSPManager extends EventEmitter {
         }
       })
     );
+    
+    lspLogger.info("LSP Manager: touchFile completed", { filePath });
   }
 
   /**
@@ -171,11 +197,13 @@ export class LSPManager extends EventEmitter {
    * For pull mode: actively requests diagnostics via textDocument/diagnostic
    */
   async getDiagnostics(): Promise<Record<string, LSPDiagnostic[]>> {
+    lspLogger.debug("LSP Manager: getDiagnostics called");
     const results: Record<string, LSPDiagnostic[]> = {};
 
     for (const { client, root } of this.clients.values()) {
       // Get all files in the workspace that have been opened
       const workspaceDiagnostics = client.getDiagnostics();
+      lspLogger.debug("LSP Manager: Diagnostics from client", { root, keys: Array.from(workspaceDiagnostics.keys()) });
       
       for (const [filePath, diagnostics] of workspaceDiagnostics) {
         if (diagnostics.length > 0) {
@@ -184,6 +212,7 @@ export class LSPManager extends EventEmitter {
       }
     }
 
+    lspLogger.info("LSP Manager: getDiagnostics completed", { totalFiles: Object.keys(results).length });
     return results;
   }
 

@@ -25,15 +25,92 @@ env.handle_action → BaseEnvironment.executeAction
     ↓
 write_file 写入文件
     ↓
-lsp:manager 创建 LSP client (针对文件类型)
+getLSPDiagnosticsForFile() 调用
     ↓
-LSP 服务器诊断文件
+lsp:manager 判断文件类型是否支持 LSP
+    ↓
+lsp:manager.getClients() 获取 LSP 客户端
+    ↓
+lsp:manager.touchFile() 打开文档并等待诊断
+    ↓
+lsp:client.openDocument() 打开文档
+    ↓
+lsp:client.waitForDiagnostics() 等待诊断结果
+    ↓
+lsp:manager.getDiagnostics() 获取诊断结果
     ↓
 返回结果 (文件写入成功 + LSP 诊断错误)
     ↓
 session.addMessage 保存结果
     ↓
 env.invokeLLM 继续处理...
+```
+
+### 关键日志点
+
+#### 1. 文件工具层 (file.ts)
+
+```
+# 入口日志
+LSP: Initializing LSP manager for diagnostics...
+LSP: LSP manager initialized successfully
+LSP: Checking if file needs LSP {filePath, needsLSP: true/false}
+LSP: File type not supported for LSP diagnostics
+
+# 触发诊断
+LSP: Calling touchFile to trigger diagnostics {filePath, wait: true}
+LSP: touchFile completed
+
+# 诊断结果
+LSP: Diagnostics processed {filePath, totalDiagnostics, errorCount}
+LSP: Returning diagnostics errors {errorCount}
+LSP: Error getting diagnostics {filePath, error}
+```
+
+#### 2. LSP Manager 层 (lsp/index.ts)
+
+```
+# 客户端获取
+LSP Manager: Getting clients for file {filePath, ext}
+LSP Manager: Skipping server - extension not supported {id, ext, serverExtensions}
+LSP Manager: Skipping server - marked as broken {id}
+LSP Manager: Root finder result {id, filePath, root}
+LSP Manager: Skipping server - no root found
+LSP Manager: Using existing client {key, id}
+LSP Manager: Clients found {filePath, count}
+
+# 文档操作
+LSP Manager: touchFile called {filePath, waitForDiagnostics}
+LSP Manager: Got clients for touchFile {filePath, clientCount}
+LSP Manager: No clients available for touchFile {filePath}
+
+# 获取诊断
+LSP Manager: getDiagnostics called
+LSP Manager: Diagnostics from client {root, keys}
+LSP Manager: getDiagnostics completed {totalFiles}
+```
+
+#### 3. LSP Client 层 (client.ts)
+
+```
+# 初始化
+Creating LSP client: {id} for {root}
+LSP client initialized: {id}
+LSP: Sending diagnostic configuration for {id}
+LSP: Diagnostic configuration sent for {id}
+
+# 文档操作
+LSP: Opening document {filePath, uri, languageId}
+LSP: Document opened with content {filePath, contentLength}
+LSP: File read failed, opening with empty content {filePath}
+
+# 诊断等待
+LSP: Waiting for diagnostics {filePath, timeoutMs}
+LSP: Diagnostics received {filePath, count}
+LSP: Diagnostics timeout {filePath, timeoutMs}
+
+# 诊断通知
+publishDiagnostics received {uri, filePath, diagnosticsCount}
 ```
 
 ### 关键日志片段
@@ -63,6 +140,31 @@ BaseEnvironment.executeAction: Tool result received {
 | `10:05:14.209` | `lsp:client` | 启动 LSP 服务器 |
 | `10:05:19.218` | `lsp:client` | LSP client 初始化完成 (~5秒) |
 | `10:05:19.245` | `BaseEnvironment.executeAction` | 返回工具结果 **包含 LSP 诊断** |
+
+## 排查问题指南
+
+### 常见问题
+
+#### 1. LSP 诊断未触发
+
+检查日志：
+- `LSP: Initializing LSP manager` - 是否初始化
+- `LSP: Checking if file needs LSP` - 文件类型是否支持
+- `LSP Manager: Clients found` - 是否有可用客户端
+- `LSP Manager: No clients available` - 没有客户端
+
+#### 2. 客户端创建失败
+
+检查日志：
+- `Creating LSP client` - 是否尝试创建
+- `Failed to start LSP server` - 启动失败原因
+
+#### 3. 诊断结果为空
+
+检查日志：
+- `LSP: Waiting for diagnostics` - 是否等待诊断
+- `LSP: Diagnostics timeout` - 是否超时
+- `publishDiagnostics received` - 是否收到诊断通知
 
 ## LSP 诊断输出格式
 
@@ -105,7 +207,7 @@ ERROR (9:20) No header found: fake-chapter-2
 
 ### LSP Manager
 
-- 位置：`packages/core/src/lsp/manager.ts`
+- 位置：`packages/core/src/lsp/index.ts`
 - 功能：根据文件扩展名创建对应的 LSP 客户端
 
 ### LSP Client

@@ -381,16 +381,24 @@ async function getLSPDiagnosticsForFile(
   const diagnostics: Record<string, LSPDiagnostic[]> = {};
 
   try {
+    // Lazy load LSP manager
     if (!lspManagerInstance) {
+      fileLogger.info("LSP: Initializing LSP manager for diagnostics...");
       const { lspManager: manager, needsLSPDiagnostics } = await import(
         "../../../lsp/index.js"
       );
       lspManagerInstance = manager;
       lspNeedsLSP = needsLSPDiagnostics;
+      fileLogger.info("LSP: LSP manager initialized successfully");
     }
 
     const needsLSP = lspNeedsLSP!;
-    if (!needsLSP(filePath)) {
+    
+    // Check if file type needs LSP
+    const needsLSPResult = needsLSP(filePath);
+    fileLogger.debug("LSP: Checking if file needs LSP", { filePath, needsLSP: needsLSPResult });
+    if (!needsLSPResult) {
+      fileLogger.debug("LSP: File type not supported for LSP diagnostics", { filePath });
       return { output, diagnostics };
     }
 
@@ -399,18 +407,28 @@ async function getLSPDiagnosticsForFile(
       getDiagnostics: () => Promise<Record<string, LSPDiagnostic[]>>;
     };
 
+    // Touch file to trigger diagnostics
+    fileLogger.info("LSP: Calling touchFile to trigger diagnostics", { filePath, wait: true });
     await lspManager.touchFile(filePath, true);
+    
+    // Get all diagnostics
     const allDiagnostics = await lspManager.getDiagnostics();
-    fileLogger.debug("LSP diagnostics received", { 
+    fileLogger.debug("LSP: Diagnostics received", { 
       filePath, 
       normalizedPath: normalizePath(filePath),
       allDiagnosticsKeys: Object.keys(allDiagnostics),
-      allDiagnostics 
+      hasDiagnostics: Object.keys(allDiagnostics).length > 0
     });
 
     const normalizedPath = normalizePath(filePath);
     const fileDiagnostics = allDiagnostics[normalizedPath] || [];
     const errors = fileDiagnostics.filter((d: LSPDiagnostic) => d.severity === 1);
+
+    fileLogger.info("LSP: Diagnostics processed", { 
+      filePath, 
+      totalDiagnostics: fileDiagnostics.length,
+      errorCount: errors.length 
+    });
 
     let resultOutput = output;
     if (errors.length > 0) {
@@ -421,10 +439,12 @@ async function getLSPDiagnosticsForFile(
           : "";
 
       resultOutput += `\n\nLSP errors detected, please fix:\n${limited.map(formatLSPDiagnostic).join("\n")}${suffix}`;
+      fileLogger.info("LSP: Returning diagnostics errors", { errorCount: errors.length });
     }
 
     return { output: resultOutput, diagnostics: { [normalizedPath]: fileDiagnostics } };
-  } catch {
+  } catch (error) {
+    fileLogger.error("LSP: Error getting diagnostics", { filePath, error: (error as Error).message });
     return { output: "", diagnostics: {} };
   }
 }
