@@ -363,17 +363,22 @@ export namespace LLMTransform {
     }
 
     // Add usage to request body for openai-compatible providers (e.g., MiniMax)
-    // This is different from streamOptions.includeUsage - some providers need it in the body
+    // This should be at top level, not in providerOptions - opencode sets it at top level
+    if (provider.sdkType === "openai-compatible" || provider.id === "minimax") {
+      result.includeUsage = true;
+      transformLogger.info("[generateProviderOptions] Added includeUsage at top level", {
+        providerId: provider.id,
+        sdkType: provider.sdkType,
+        includeUsage: result.includeUsage
+      });
+    }
+
+    // Legacy: also add to providerOptions for some providers
     if (provider.sdkType === "openai-compatible" || provider.id === "minimax") {
       if (!result.providerOptions) {
         result.providerOptions = {};
       }
       result.providerOptions.usage = { include: true };
-      transformLogger.info("[generateProviderOptions] Added usage include to providerOptions", {
-        providerId: provider.id,
-        sdkType: provider.sdkType,
-        providerOptions: result.providerOptions
-      });
     }
 
     return result;

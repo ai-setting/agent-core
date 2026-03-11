@@ -339,6 +339,8 @@ export async function invokeLLM(
       tools,
       temperature: providerOptions.temperature,
       maxTokens: providerOptions.maxTokens,
+      // Pass includeUsage at top level for openai-compatible providers
+      includeUsage: providerOptions.includeUsage,
       ...providerOptions.providerOptions,
       abortSignal: ctx.abort,
       maxRetries: 2,
@@ -351,6 +353,7 @@ export async function invokeLLM(
         const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
         invokeLLMLogger.info("[invokeLLM] onFinish callback", {
           providerOptionsUsage: providerOptions.providerOptions?.usage,
+          includeUsage: providerOptions.includeUsage,
           usage: JSON.stringify(usage),
           usageRaw: JSON.stringify((usage as any)?.raw),
           totalUsage: JSON.stringify(totalUsage),
@@ -391,6 +394,16 @@ export async function invokeLLM(
 
     for await (const part of result.fullStream) {
       const streamPart = part as any;
+      // Log all events for debugging
+      if (streamPart.type !== "text-delta" && streamPart.type !== "reasoning-delta") {
+        invokeLLMLogger.info("[invokeLLM] Stream event", { 
+          type: streamPart.type,
+          hasUsage: !!streamPart.usage,
+          usage: streamPart.usage ? JSON.stringify(streamPart.usage) : undefined,
+          hasTotalUsage: !!streamPart.totalUsage,
+          totalUsage: streamPart.totalUsage ? JSON.stringify(streamPart.totalUsage) : undefined,
+        });
+      }
       switch (streamPart.type) {
         case "text-delta":
           const textDelta = streamPart.text as string;
