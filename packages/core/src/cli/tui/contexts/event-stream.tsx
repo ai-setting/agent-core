@@ -224,6 +224,7 @@ export function EventStreamProvider(props: {
         // Reset text message - next text will create new message
         currentTextMessageId = null;
         // Create separate message for tool call
+        eventLogger.info("Tool call event received", { toolName: event.toolName, reason: event.reason });
         const toolReason = event.reason ? ` - ${event.reason}` : "";
         const toolMessage: Message = {
           id: `tool-${Date.now()}`,
