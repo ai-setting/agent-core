@@ -347,12 +347,14 @@ export async function invokeLLM(
         includeUsage: true,
       },
       // Use onFinish callback to get usage (more reliable for some providers)
-      onFinish: ({ usage, totalUsage }: { usage?: UsageInfo; totalUsage?: UsageInfo }) => {
+      onFinish: ({ usage, totalUsage }: { usage?: UsageInfo & { raw?: unknown }; totalUsage?: UsageInfo & { raw?: unknown } }) => {
         const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
         invokeLLMLogger.info("[invokeLLM] onFinish callback", {
           providerOptionsUsage: providerOptions.providerOptions?.usage,
           usage: JSON.stringify(usage),
+          usageRaw: JSON.stringify((usage as any)?.raw),
           totalUsage: JSON.stringify(totalUsage),
+          totalUsageRaw: JSON.stringify((totalUsage as any)?.raw),
           extractedUsage
         });
       },
