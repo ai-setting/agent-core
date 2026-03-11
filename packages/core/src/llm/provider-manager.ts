@@ -234,6 +234,7 @@ class ProviderManager {
             baseURL,
             apiKey,
             headers,
+            includeUsage: true, // Enable usage in stream responses for MiniMax etc.
             ...providerOptions,
           });
       }

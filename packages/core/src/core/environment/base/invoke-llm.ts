@@ -365,30 +365,12 @@ export async function invokeLLM(
       streamOptions: {
         includeUsage: true,
       },
-      // Use onFinish callback to get usage (more reliable for some providers)
-      onFinish: ({ usage, totalUsage }: { usage?: UsageInfo & { raw?: unknown }; totalUsage?: UsageInfo & { raw?: unknown } }) => {
-        const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
-        invokeLLMLogger.info("[invokeLLM] onFinish callback", {
-          providerOptionsUsage: providerOptions.providerOptions?.usage,
-          includeUsage: providerOptions.includeUsage,
-          usage: JSON.stringify(usage),
-          usageRaw: JSON.stringify((usage as any)?.raw),
-          totalUsage: JSON.stringify(totalUsage),
-          totalUsageRaw: JSON.stringify((totalUsage as any)?.raw),
-          extractedUsage
-        });
-      },
-    };
-    
-    invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
+      };
+     
+    invokeLLMLogger.info("[invokeLLM] Calling streamText", {
       modelId,
       providerId: provider.metadata.id,
-      temperature: streamTextOptions.temperature,
-      maxTokens: streamTextOptions.maxTokens,
       hasTools: !!tools,
-      includeUsage: streamTextOptions.includeUsage,
-      streamOptions: streamTextOptions.streamOptions,
-      providerOptions: streamTextOptions.providerOptions,
     });
       
       result = await streamText(streamTextOptions);
@@ -414,16 +396,6 @@ export async function invokeLLM(
 
     for await (const part of result.fullStream) {
       const streamPart = part as any;
-      // Log all events for debugging
-      if (streamPart.type !== "text-delta" && streamPart.type !== "reasoning-delta") {
-        invokeLLMLogger.info("[invokeLLM] Stream event", { 
-          type: streamPart.type,
-          hasUsage: !!streamPart.usage,
-          usage: streamPart.usage ? JSON.stringify(streamPart.usage) : undefined,
-          hasTotalUsage: !!streamPart.totalUsage,
-          totalUsage: streamPart.totalUsage ? JSON.stringify(streamPart.totalUsage) : undefined,
-        });
-      }
       switch (streamPart.type) {
         case "text-delta":
           const textDelta = streamPart.text as string;
@@ -467,13 +439,9 @@ export async function invokeLLM(
 
         case "finish-step":
           // Capture usage from finish-step event (more reliable for some providers like MiniMax)
-          invokeLLMLogger.info("[invokeLLM] finish-step raw usage", { 
-            usage: JSON.stringify(streamPart.usage) 
-          });
           const stepUsage = extractUsageInfo(streamPart.usage);
           if (stepUsage) {
             usageInfo = stepUsage;
-            invokeLLMLogger.info("[invokeLLM] finish-step usage", { usage: usageInfo });
           }
           break;
 
@@ -487,12 +455,6 @@ export async function invokeLLM(
           if (!usageInfo && streamPart.usage) {
             usageInfo = extractUsageInfo(streamPart.usage);
           }
-          invokeLLMLogger.info("[invokeLLM] Stream finished", { 
-            finishReason: streamPart.finishReason,
-            streamPartUsage: JSON.stringify(streamPart.usage),
-            streamPartTotalUsage: JSON.stringify(streamPart.totalUsage),
-            usage: usageInfo
-          });
           break;
       }
     }
@@ -503,34 +465,6 @@ export async function invokeLLM(
       reasoning: reasoningContent || undefined,
       model: `${providerId}/${modelId}`,
     };
-
-    // Log result.usage if available
-    invokeLLMLogger.info("[invokeLLM] Checking result.usage", {
-      hasUsage: !!result.usage,
-      usage: result.usage ? JSON.stringify(result.usage) : undefined,
-      hasTotalUsage: !!result.totalUsage,
-      totalUsage: result.totalUsage ? JSON.stringify(result.totalUsage) : undefined,
-      hasResponse: !!result.response,
-    });
-
-    // Try to get raw usage from finish-step
-    // MiniMax returns usage only in the last chunk with object: "chat.completion"
-    // and only has total_tokens
-    const finalUsage = (result as any).usage;
-    if (finalUsage && typeof finalUsage === 'object') {
-      invokeLLMLogger.info("[invokeLLM] Final usage from result.usage", {
-        finalUsage: JSON.stringify(finalUsage)
-      });
-    }
-
-    // Also try to get response metadata
-    if (result.response) {
-      Promise.resolve(result.response).then((res: any) => {
-        invokeLLMLogger.info("[invokeLLM] result.response resolved", {
-          headers: JSON.stringify(res?.headers),
-        });
-      }).catch(() => {});
-    }
 
     // Emit completed event with usage info (for both tool calls and non-tool calls cases)
     if (eventHandler?.onCompleted) {
