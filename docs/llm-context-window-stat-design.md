@@ -66,6 +66,29 @@ export interface ProviderConfig {
 
 > **注意**：`limits` 是配置在每个 provider 下面的，key 是具体的 modelId，value 是该模型的限制配置。
 
+---
+
+## 4. Provider 创建与 Usage 启用 (`packages/core/src/llm/provider-manager.ts`)
+
+### 4.1 创建 openai-compatible Provider
+
+在创建 openai-compatible 类型的 provider 时，需要启用 `includeUsage` 选项：
+
+```typescript
+case "openai-compatible":
+default:
+  return createOpenAICompatible({
+    name: config.name?.toLowerCase().replace(/\s+/g, "-") || "custom",
+    baseURL,
+    apiKey,
+    headers,
+    includeUsage: true, // 关键：需要在 provider 级别启用 usage
+    ...providerOptions,
+  });
+```
+
+> **重要**：`includeUsage` 需要在 **provider config** 中设置，而不仅仅是 `streamOptions`。这是因为 AI SDK 内部会根据这个配置决定是否在请求体中添加 `stream_options: { include_usage: true }`。
+
 ### 3.4 OpenAI 兼容厂商 Usage 配置
 
 对于 OpenAI 兼容的厂商（如 DeepSeek、ZhipuAI、Kimi 等），limits 配置方式相同：
@@ -447,3 +470,109 @@ case "finish":
 - **ZhipuAI (GLM)**: 支持 `includeUsage`
 - **Kimi (Moonshot)**: 支持 `includeUsage`
 - **Ollama (本地)**: 部分模型支持，需要测试
+
+---
+
+## 13. MiniMax Usage 获取问题排查与修复
+
+### 13.1 问题描述
+
+在使用 MiniMax (Moonshot AI) 作为 provider 时，发现 usage 信息始终为 0，即使配置了 `streamOptions.includeUsage: true`。
+
+### 13.2 根因分析
+
+1. **MiniMax API 行为**：MiniMax 在流式响应中，usage 信息在**最后一个 chunk** 中返回，该 chunk 的特点是：
+   - `choices: []`（空数组）
+   - `usage` 对象包含 `prompt_tokens`, `completion_tokens`, `total_tokens`
+
+2. **AI SDK 处理逻辑**：AI SDK (`@ai-sdk/openai-compatible`) 在处理流式响应时，当遇到 `choices: []` 的 chunk 时会**提前返回**（代码逻辑是 `if (choice?.delta == null) return;`），导致虽然 usage 被设置了，但代码流程被中断。
+
+3. **关键配置点**：需要在 **provider config** 中设置 `includeUsage: true`，而不是只在 `streamOptions` 中设置。
+
+### 13.3 解决方案
+
+#### 方案 1：在 Provider 创建时启用（推荐）
+
+在 `packages/core/src/llm/provider-manager.ts` 中创建 openai-compatible provider 时添加：
+
+```typescript
+case "openai-compatible":
+default:
+  return createOpenAICompatible({
+    name: config.name?.toLowerCase().replace(/\s+/g, "-") || "custom",
+    baseURL,
+    apiKey,
+    headers,
+    includeUsage: true, // 关键：需要在 provider 级别启用
+    ...providerOptions,
+  });
+```
+
+#### 方案 2：从 finish-step 事件提取 usage
+
+在 `packages/core/src/core/environment/base/invoke-llm.ts` 中从 `finish-step` 事件获取 usage：
+
+```typescript
+case "finish-step":
+  // MiniMax 等厂商在 finish-step 事件中返回 usage
+  const stepUsage = extractUsageInfo(streamPart.usage);
+  if (stepUsage) {
+    usageInfo = stepUsage;
+  }
+  break;
+```
+
+### 13.4 MiniMax API 返回格式
+
+MiniMax 流式响应的最后一个 chunk 格式如下：
+
+```json
+{
+  "id": "xxx",
+  "choices": [],
+  "usage": {
+    "prompt_tokens": 46,
+    "completion_tokens": 41,
+    "total_tokens": 87,
+    "completion_tokens_details": {
+      "reasoning_tokens": 38
+    },
+    "total_characters": 0
+  },
+  "object": "chat.completion.chunk",
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": ""
+  }
+}
+```
+
+### 13.5 Usage 提取辅助函数
+
+由于不同 provider 返回的 usage 格式不同（有的用 `inputTokens`，有的用 `prompt_tokens`），需要使用 `extractUsageInfo` 函数统一处理：
+
+```typescript
+function extractUsageInfo(usage: UsageInfo | undefined): UsageInfo | undefined {
+  if (!usage) return undefined;
+  
+  // 标准格式：直接属性
+  if (typeof usage.inputTokens === 'number') {
+    return {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    };
+  }
+  
+  // MiniMax 格式：使用 prompt_tokens/completion_tokens
+  if ((usage as any).prompt_tokens !== undefined) {
+    return {
+      inputTokens: (usage as any).prompt_tokens ?? 0,
+      outputTokens: (usage as any).completion_tokens ?? 0,
+      totalTokens: (usage as any).total_tokens ?? 0,
+    };
+  }
+  
+  return undefined;
+}
+```
