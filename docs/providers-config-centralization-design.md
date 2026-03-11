@@ -76,7 +76,18 @@
       "baseURL": "https://open.bigmodel.cn/api/paas/v4",
       "apiKey": "${ZHIPUAI_API_KEY}",  // 支持环境变量引用
       "models": ["glm-5", "glm-4", "glm-4-plus", "glm-3-turbo"],
-      "defaultModel": "glm-4"
+      "defaultModel": "glm-4",
+      // 模型限制配置（key 是 modelId）
+      "limits": {
+        "glm-4": {
+          "contextWindow": 128000,
+          "maxOutputTokens": 8192
+        },
+        "glm-3-turbo": {
+          "contextWindow": 32000,
+          "maxOutputTokens": 4096
+        }
+      }
     },
     "anthropic": {
       "name": "Anthropic",
@@ -84,7 +95,17 @@
       "baseURL": "https://api.anthropic.com/v1",
       "apiKey": "${ANTHROPIC_API_KEY}",
       "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3-5-sonnet"],
-      "defaultModel": "claude-3-5-sonnet"
+      "defaultModel": "claude-3-5-sonnet",
+      "limits": {
+        "claude-3-5-sonnet": {
+          "contextWindow": 200000,
+          "maxOutputTokens": 8192
+        },
+        "claude-3-opus": {
+          "contextWindow": 200000,
+          "maxOutputTokens": 8192
+        }
+      }
     },
     "openai": {
       "name": "OpenAI",
@@ -108,7 +129,13 @@
       "baseURL": "https://api.deepseek.com/v1",
       "apiKey": "${DEEPSEEK_API_KEY}",
       "models": ["deepseek-chat", "deepseek-coder"],
-      "defaultModel": "deepseek-chat"
+      "defaultModel": "deepseek-chat",
+      "limits": {
+        "deepseek-chat": {
+          "contextWindow": 64000,
+          "maxOutputTokens": 8192
+        }
+      }
     },
     "kimi": {
       "name": "Kimi",
@@ -116,7 +143,17 @@
       "baseURL": "https://api.moonshot.cn/v1",
       "apiKey": "${MOONSHOT_API_KEY}",
       "models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
-      "defaultModel": "moonshot-v1-8k"
+      "defaultModel": "moonshot-v1-8k",
+      "limits": {
+        "moonshot-v1-8k": {
+          "contextWindow": 128000,
+          "maxOutputTokens": 8192
+        },
+        "moonshot-v1-128k": {
+          "contextWindow": 128000,
+          "maxOutputTokens": 8192
+        }
+      }
     },
     "ollama": {
       "name": "Ollama",
@@ -134,6 +171,13 @@
 ```typescript
 // packages/core/src/config/types.ts 新增
 
+// Model Limits 配置（每个模型的限制）
+interface ModelLimits {
+  contextWindow: number;       // 上下文窗口大小
+  maxOutputTokens?: number;   // 最大输出 token
+  maxInputTokens?: number;    // 最大输入 token
+}
+
 // Provider 配置 (providers.jsonc)
 const ProviderConfigV2 = z.object({
   id: z.string().optional().describe("Provider ID (key from providers object)"),
@@ -143,6 +187,14 @@ const ProviderConfigV2 = z.object({
   apiKey: z.string().optional().describe("API key (supports ${ENV_VAR} syntax)"),
   models: z.array(z.string()).optional().describe("Available models"),
   defaultModel: z.string().optional().describe("Default model for this provider"),
+  // 新增：模型限制配置（key 是 modelId，value 是该模型的限制）
+  limits: z.record(z.string(), z.object({
+    contextWindow: z.number(),
+    maxOutputTokens: z.number().optional(),
+    maxInputTokens: z.number().optional(),
+  })).optional().describe("Model limits, keyed by modelId"),
+  // 新增：Provider 特定选项
+  providerOptions: z.record(z.unknown()).optional().describe("Provider-specific options for AI SDK"),
 });
 
 // Main config with providers.jsonc

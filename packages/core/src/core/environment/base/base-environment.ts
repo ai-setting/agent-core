@@ -1178,8 +1178,9 @@ export abstract class BaseEnvironment implements Environment {
         );
       },
       onCompleted: async (content, metadata) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onCompleted callback", { 
-          hasUsage: !!metadata.usage 
+        BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] onCompleted callback", { 
+          hasUsage: !!metadata.usage,
+          usage: metadata.usage 
         });
         this.emitStreamEvent({ 
           type: "completed", 
@@ -1195,7 +1196,8 @@ export abstract class BaseEnvironment implements Environment {
             const session = Session.get(ctx.session_id);
             if (session) {
               session.updateContextUsage(metadata.usage);
-              BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] Updated session context usage", { 
+              BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Updated session context usage", { 
+                sessionId: ctx.session_id,
                 inputTokens: metadata.usage.inputTokens,
                 outputTokens: metadata.usage.outputTokens,
                 totalTokens: metadata.usage.totalTokens,

@@ -317,6 +317,7 @@ await server.start();
 | 文档 | 描述 |
 |------|------|
 | [`llm-interleaved-reasoning.md`](./llm-interleaved-reasoning.md) | Interleaved Reasoning 处理 |
+| [`llm-context-window-stat-design.md`](./llm-context-window-stat-design.md) | LLM Context Window 实时统计 |
 | [`extensible-config-design.md`](./extensible-config-design.md) | 可扩展配置设计 |
 | [`commit-version-injection-and-help-mechanism-design.md`](./commit-version-injection-and-help-mechanism-design.md) | 版本注入与帮助机制 |
 | [`env-spec-design-and-implementation.md`](./env-spec-design-and-implementation.md) | Env Spec 设计与 MCP 实现 |

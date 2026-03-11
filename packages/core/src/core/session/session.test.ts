@@ -1,5 +1,5 @@
 /**
- * @fileoverview Unit tests for Session.toHistory lazy loading
+ * @fileoverview Unit tests for Session.toHistory lazy loading and context usage
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
@@ -83,5 +83,150 @@ describe("Session.toHistory lazy loading", () => {
     const history2 = await session.toHistory();
 
     expect(history1.length).toBe(history2.length);
+  });
+});
+
+describe("Session context usage", () => {
+  const testSessionId = "test-session-context-usage";
+
+  beforeEach(async () => {
+    await Storage.initialize({ mode: "memory" });
+  });
+
+  afterEach(() => {
+    Storage.clear();
+  });
+
+  it("should return undefined when no context usage recorded", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    const stats = session.getContextStats();
+    expect(stats).toBeUndefined();
+  });
+
+  it("should initialize context usage on first update", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    session.updateContextUsage({
+      inputTokens: 1000,
+      outputTokens: 500,
+      totalTokens: 1500,
+    });
+
+    const stats = session.getContextStats();
+    expect(stats).toEqual({
+      inputTokens: 1000,
+      outputTokens: 500,
+      totalTokens: 1500,
+      contextWindow: 8192,
+      usagePercent: 18,
+      requestCount: 1,
+      lastUpdated: expect.any(Number),
+    });
+  });
+
+  it("should accumulate usage on subsequent updates", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    session.updateContextUsage({
+      inputTokens: 1000,
+      outputTokens: 500,
+      totalTokens: 1500,
+    });
+
+    session.updateContextUsage({
+      inputTokens: 2000,
+      outputTokens: 1000,
+      totalTokens: 3000,
+    });
+
+    const stats = session.getContextStats();
+    expect(stats?.inputTokens).toBe(3000);
+    expect(stats?.outputTokens).toBe(1500);
+    expect(stats?.totalTokens).toBe(4500);
+    expect(stats?.requestCount).toBe(2);
+  });
+
+  it("should calculate usage percent correctly", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    session.updateContextUsage(
+      {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+      10000
+    );
+
+    const stats = session.getContextStats();
+    expect(stats?.contextWindow).toBe(10000);
+    expect(stats?.usagePercent).toBe(15);
+  });
+
+  it("should use provided limit over existing limit", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    session.updateContextUsage(
+      {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+      10000
+    );
+
+    session.updateContextUsage(
+      {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+      20000
+    );
+
+    const stats = session.getContextStats();
+    expect(stats?.contextWindow).toBe(20000);
+    expect(stats?.usagePercent).toBe(15);
+  });
+
+  it("should preserve existing limit when no new limit provided", () => {
+    const session = new Session({
+      id: testSessionId,
+      title: "Test Session",
+    });
+
+    session.updateContextUsage(
+      {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+      10000
+    );
+
+    session.updateContextUsage({
+      inputTokens: 1000,
+      outputTokens: 500,
+      totalTokens: 1500,
+    });
+
+    const stats = session.getContextStats();
+    expect(stats?.contextWindow).toBe(10000);
   });
 });

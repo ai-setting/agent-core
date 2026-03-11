@@ -17,7 +17,7 @@
   - 如有关键设计变更，在「决策记录」补一条
 - **更新时间**：在文档顶部附近加一行 `最后更新：YYYY-MM-DD`
 
-最后更新：2026-03-11（更新 MCP 进度、修正 Sub-agents 状态、新增 Command 开发文档链接）
+最后更新：2026-03-11（更新 MCP 进度、修正 Sub-agents 状态、新增 Command 开发文档链接、LLM Context Window 统计功能）
 
 ---
 
@@ -63,6 +63,7 @@
 | Prompt | prompt 仓库、system prompt 注入 | [DONE] | `prompts: Map` + `addPrompt/getPrompt`（BaseEnvironment 内） | `.../base/base-environment.ts` |
 | Tools | 工具注册/列举/执行统一入口 | [DONE] | `registerTool/getTools/handle_action`（BaseEnvironment） | `.../base/base-environment.ts` |
 | LLM | invoke_llm 作为工具 + stream hook | [DONE] | 流式事件通过 `onStreamEvent` 向上抛 | `.../base/invoke-llm.ts`、`.../base/base-environment.ts` |
+| LLM Context Window 统计 | 实时统计 Session token 使用量 | [DONE] | 支持配置 model limits，从 stream 捕获 usage，Session 累加统计并持久化 | `packages/core/src/config/sources/providers.ts`、`packages/core/src/llm/provider-manager.ts`、`packages/core/src/core/session/session.ts`、`packages/core/src/core/environment/base/invoke-llm.ts` |
 | 事件（统一流） | LLM + Tool 生命周期事件标准化 | [DONE] | `StreamEvent` 类型已定义，hook 已接入 | `packages/core/src/core/environment/index.ts` |
 | Server 事件总线 | publish/subscribe，支持 session scope | [DONE] | bus + global broadcast 已落地 | `packages/core/src/server/eventbus/*` |
 | SSE 推送 | `/events` 推送 EventBus 事件 | [DONE] | 已支持 sessionId 过滤 + heartbeat | `packages/core/src/server/routes/events.ts` |
@@ -181,3 +182,4 @@
 - 2026-02-26：新增 **Sessions Command**：实现 `/sessions` 命令，允许用户通过 TUI dialog 查看和管理历史会话列表。功能包括：会话列表展示（按更新时间倒序）、搜索过滤（按标题/目录）、选择切换会话、删除会话（带确认）。参考 OpenCode 的 `list session` 功能体验，支持键盘导航（↑↓/Enter/D/Esc）和相对时间显示（如 "2h ago"）。包含完整的后端 command 实现（`sessions.ts`）和前端 Dialog 组件（`SessionsDialog.tsx`），集成到 CommandDialog 和 CommandPalette。
 - 2026-03-11：**Environment 事件机制 Phase 1 完成**：EnvEvent 类型、EventTypes 常量、EventHandlerAgent 无状态处理已实现，EventBus 支持 Rule 路由和 AgentHandler。MCP EventSource 功能已完成，EventMcpManager 支持从配置加载 MCP clients。
 - 2026-03-11：**新增 Command 开发文档**：新增 `command-development-guide.md` 详细记录 Command 完整开发流程、`agent-env-command-design.md` 和实现文档。
+- 2026-03-11：**新增 LLM Context Window 实时统计功能**：实现 Session 级别的 token 使用量统计，支持从 `providers.jsonc` 配置模型 limits（contextWindow、maxOutputTokens），在 LLM 流式响应中捕获 usage 信息，累加到 Session 并持久化。设计文档见 `docs/llm-context-window-stat-design.md`。

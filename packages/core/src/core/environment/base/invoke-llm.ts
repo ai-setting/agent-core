@@ -646,6 +646,17 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
               });
             }
             
+            // Log usage info to file
+            if (metadata.usage) {
+              invokeLLMLogger.info("[invokeLLM] onCompleted with usage", {
+                sessionId: ctx.session_id || "default",
+                model: metadata.model,
+                inputTokens: metadata.usage.inputTokens,
+                outputTokens: metadata.usage.outputTokens,
+                totalTokens: metadata.usage.totalTokens,
+              });
+            }
+            
             // Update session context usage stats if usage info is available
             if (metadata.usage) {
               try {
@@ -665,6 +676,13 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
                   const contextWindowLimit = model?.limits?.contextWindow;
                   
                   session.updateContextUsage(metadata.usage, contextWindowLimit);
+                  invokeLLMLogger.info("[invokeLLM] Updated session context usage", {
+                    sessionId: ctx.session_id || "default",
+                    inputTokens: metadata.usage.inputTokens,
+                    outputTokens: metadata.usage.outputTokens,
+                    totalTokens: metadata.usage.totalTokens,
+                    contextWindow: contextWindowLimit,
+                  });
                 }
               } catch (err) {
                 invokeLLMLogger.warn(`[createInvokeLLM] Failed to update session context usage:`, err);
