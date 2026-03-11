@@ -369,6 +369,9 @@ export async function invokeLLM(
       temperature: streamTextOptions.temperature,
       maxTokens: streamTextOptions.maxTokens,
       hasTools: !!tools,
+      includeUsage: streamTextOptions.includeUsage,
+      streamOptions: streamTextOptions.streamOptions,
+      providerOptions: streamTextOptions.providerOptions,
     });
       
       result = await streamText(streamTextOptions);
