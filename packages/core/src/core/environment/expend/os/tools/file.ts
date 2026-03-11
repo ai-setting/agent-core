@@ -818,7 +818,7 @@ Usage:
         pattern: z.string().describe("The glob pattern to match files against"),
         path: z.string().optional().describe("The directory to search in. If not specified, the current working directory will be used."),
         maxResults: z.number().optional().describe("Maximum results to return (default: 100)"),
-        reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Find test files')"),
+        reason: z.string().describe("Brief reason with search pattern (max 30 chars, e.g., 'Find *.test.ts files')"),
       }),
       execute: async (args) => {
         try {
@@ -851,7 +851,7 @@ Usage:
         path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
         include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
         maxMatches: z.number().optional().describe("Maximum matches to return (default: 100)"),
-        reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Search func defs')"),
+        reason: z.string().describe("Brief reason with search pattern (max 30 chars, e.g., 'Search for function def')"),
       }),
       execute: async (args) => {
         try {
