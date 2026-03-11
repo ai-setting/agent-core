@@ -61,6 +61,12 @@ export interface UsageInfo {
     tokens?: number;
     [key: string]: unknown;
   };
+  /** MiniMax returns only total_tokens in streaming response */
+  raw?: {
+    total_tokens?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
 }
 
 /**
@@ -85,6 +91,17 @@ function extractUsageInfo(usage: UsageInfo | undefined): UsageInfo | undefined {
       inputTokens: usage.inputTokenDetails?.tokens ?? 0,
       outputTokens: usage.outputTokenDetails?.tokens ?? 0,
       totalTokens: usage.totalTokens ?? 0,
+    };
+  }
+
+  // MiniMax streaming format: only has total_tokens in raw
+  if (usage.raw && typeof usage.raw.total_tokens === 'number') {
+    // For streaming, total_tokens is the only info available
+    // We can't split input/output, so set both to 0 or estimate
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: usage.raw.total_tokens,
     };
   }
   
@@ -495,6 +512,16 @@ export async function invokeLLM(
       totalUsage: result.totalUsage ? JSON.stringify(result.totalUsage) : undefined,
       hasResponse: !!result.response,
     });
+
+    // Try to get raw usage from finish-step
+    // MiniMax returns usage only in the last chunk with object: "chat.completion"
+    // and only has total_tokens
+    const finalUsage = (result as any).usage;
+    if (finalUsage && typeof finalUsage === 'object') {
+      invokeLLMLogger.info("[invokeLLM] Final usage from result.usage", {
+        finalUsage: JSON.stringify(finalUsage)
+      });
+    }
 
     // Also try to get response metadata
     if (result.response) {
