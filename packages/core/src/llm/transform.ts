@@ -369,6 +369,11 @@ export namespace LLMTransform {
         result.providerOptions = {};
       }
       result.providerOptions.usage = { include: true };
+      transformLogger.info("[generateProviderOptions] Added usage include to providerOptions", {
+        providerId: provider.id,
+        sdkType: provider.sdkType,
+        providerOptions: result.providerOptions
+      });
     }
 
     return result;
