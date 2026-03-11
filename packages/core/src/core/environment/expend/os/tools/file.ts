@@ -525,7 +525,7 @@ Usage:
         path: z.string().describe("The path to the file to read"),
         offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
         limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
-        reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Read src/config.yaml')"),
+        reason: z.string().describe("Brief reason with file path (max 30 chars, e.g., 'Read src/config.yaml')"),
       }),
       execute: async (args) => {
         try {
@@ -625,7 +625,7 @@ Usage:
         append: z.boolean().optional().describe("Append to file instead of overwrite"),
         createDirs: z.boolean().optional().describe("Create parent directories if they don't exist"),
         showDiff: z.boolean().optional().describe("Show diff when overwriting existing file"),
-        reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Write src/index.ts')"),
+        reason: z.string().describe("Brief reason with file path (max 30 chars, e.g., 'Write src/index.ts')"),
       }),
       execute: async (args) => {
         try {
@@ -696,7 +696,7 @@ Usage:
         oldString: z.string().describe("The text to replace"),
         newString: z.string().describe("The text to replace it with (must be different from oldString)"),
         replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
-        reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Fix utils.ts bug')"),
+        reason: z.string().describe("Brief reason with file path (max 30 chars, e.g., 'Fix utils.ts bug')"),
       }),
       execute: async (args) => {
         try {
