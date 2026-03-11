@@ -52,6 +52,43 @@ export interface UsageInfo {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Some providers (like MiniMax) return token details in this format */
+  inputTokenDetails?: {
+    tokens?: number;
+    [key: string]: unknown;
+  };
+  outputTokenDetails?: {
+    tokens?: number;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * Extract usage info from AI SDK response
+ * Handles different provider formats (some use inputTokens directly, some use inputTokenDetails)
+ */
+function extractUsageInfo(usage: UsageInfo | undefined): UsageInfo | undefined {
+  if (!usage) return undefined;
+  
+  // Standard format: direct properties
+  if (typeof usage.inputTokens === 'number') {
+    return {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    };
+  }
+  
+  // MiniMax format: using tokenDetails
+  if (usage.inputTokenDetails || usage.outputTokenDetails) {
+    return {
+      inputTokens: usage.inputTokenDetails?.tokens ?? 0,
+      outputTokens: usage.outputTokenDetails?.tokens ?? 0,
+      totalTokens: usage.totalTokens ?? 0,
+    };
+  }
+  
+  return undefined;
 }
 
 export interface StreamEventHandler {
@@ -311,9 +348,11 @@ export async function invokeLLM(
       },
       // Use onFinish callback to get usage (more reliable for some providers)
       onFinish: ({ usage, totalUsage }: { usage?: UsageInfo; totalUsage?: UsageInfo }) => {
+        const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
         invokeLLMLogger.info("[invokeLLM] onFinish callback", {
           usage,
-          totalUsage
+          totalUsage,
+          extractedUsage
         });
       },
     };
@@ -395,12 +434,10 @@ export async function invokeLLM(
 
         case "finish":
           // Capture usage info from stream completion
-          if (streamPart.totalUsage) {
-            usageInfo = {
-              inputTokens: streamPart.totalUsage.inputTokens ?? 0,
-              outputTokens: streamPart.totalUsage.outputTokens ?? 0,
-              totalTokens: streamPart.totalUsage.totalTokens ?? 0,
-            };
+          // Use extractUsageInfo to handle different provider formats (MiniMax uses tokenDetails)
+          usageInfo = extractUsageInfo(streamPart.totalUsage);
+          if (!usageInfo && streamPart.usage) {
+            usageInfo = extractUsageInfo(streamPart.usage);
           }
           invokeLLMLogger.info("[invokeLLM] Stream finished", { 
             finishReason: streamPart.finishReason,
