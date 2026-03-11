@@ -350,8 +350,8 @@ export async function invokeLLM(
       onFinish: ({ usage, totalUsage }: { usage?: UsageInfo; totalUsage?: UsageInfo }) => {
         const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
         invokeLLMLogger.info("[invokeLLM] onFinish callback", {
-          usage,
-          totalUsage,
+          usage: JSON.stringify(usage),
+          totalUsage: JSON.stringify(totalUsage),
           extractedUsage
         });
       },
@@ -441,6 +441,8 @@ export async function invokeLLM(
           }
           invokeLLMLogger.info("[invokeLLM] Stream finished", { 
             finishReason: streamPart.finishReason,
+            streamPartUsage: JSON.stringify(streamPart.usage),
+            streamPartTotalUsage: JSON.stringify(streamPart.totalUsage),
             usage: usageInfo
           });
           break;
