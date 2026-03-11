@@ -30,6 +30,11 @@ export interface StreamEvent {
   error?: string;
   code?: string;
   model?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface EventStreamContextValue {
@@ -276,10 +281,14 @@ export function EventStreamProvider(props: {
       }
       
       case "stream.completed": {
-        eventLogger.info("Stream completed", { messageId: event.messageId });
+        eventLogger.info("Stream completed", { messageId: event.messageId, usage: event.usage });
         if (streamStartTime > 0) {
           store.setLastResponseTimeMs(Date.now() - streamStartTime);
           streamStartTime = 0;
+        }
+        // Store usage info
+        if (event.usage) {
+          store.setLastUsage(event.usage);
         }
         store.setIsStreaming(false);
         store.setStatus("Ready");

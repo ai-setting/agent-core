@@ -43,10 +43,6 @@ export interface Session {
 export type ViewType = "home" | "chat";
 
 export interface StoreState {
-  view: ViewType;
-  sessionId: string | null;
-  sessionTitle: string | null;
-  pendingUserQuery: string | null;
   messages: Message[];
   parts: Record<string, MessagePart[]>;
   isStreaming: boolean;
@@ -55,6 +51,11 @@ export interface StoreState {
   error: string | null;
   lastModelName: string | null;
   lastResponseTimeMs: number | null;
+  lastUsage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null;
 }
 
 // ============================================================================
@@ -75,6 +76,11 @@ export interface StoreContextValue {
   error: Accessor<string | null>;
   lastModelName: Accessor<string | null>;
   lastResponseTimeMs: Accessor<number | null>;
+  lastUsage: Accessor<{
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null>;
 
   // Setters
   setView: Setter<ViewType>;
@@ -89,6 +95,11 @@ export interface StoreContextValue {
   setError: Setter<string | null>;
   setLastModelName: Setter<string | null>;
   setLastResponseTimeMs: Setter<number | null>;
+  setLastUsage: Setter<{
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null>;
   
   // Actions
   addMessage: (message: Message) => void;
@@ -120,6 +131,11 @@ export function StoreProvider(props: { children: any }) {
   const [error, setError] = createSignal<string | null>(null);
   const [lastModelName, setLastModelName] = createSignal<string | null>(null);
   const [lastResponseTimeMs, setLastResponseTimeMs] = createSignal<number | null>(null);
+  const [lastUsage, setLastUsage] = createSignal<{
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null>(null);
 
   // Actions
   const addMessage = (message: Message) => {
@@ -204,6 +220,7 @@ export function StoreProvider(props: { children: any }) {
     error,
     lastModelName,
     lastResponseTimeMs,
+    lastUsage,
     setView,
     setSessionId,
     setSessionTitle,
@@ -216,6 +233,7 @@ export function StoreProvider(props: { children: any }) {
     setError,
     setLastModelName,
     setLastResponseTimeMs,
+    setLastUsage,
     addMessage,
     updateMessage,
     moveMessageToEnd,

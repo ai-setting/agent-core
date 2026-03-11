@@ -131,10 +131,21 @@ function AssistantMessage(props: { message: any }) {
     if (!isLastMessage()) return null;
     const model = store.lastModelName();
     const ms = store.lastResponseTimeMs();
-    if (!model && ms == null) return null;
+    const usage = store.lastUsage();
+    if (!model && ms == null && !usage) return null;
     const modelStr = model || "—";
     const timeStr = ms != null ? `${(ms / 1000).toFixed(1)}s` : "—";
-    return { modelStr, timeStr };
+    
+    // Build usage string
+    let usageStr = "";
+    if (usage) {
+      const inK = usage.inputTokens >= 1000 ? `${(usage.inputTokens / 1000).toFixed(1)}k` : usage.inputTokens;
+      const outK = usage.outputTokens >= 1000 ? `${(usage.outputTokens / 1000).toFixed(1)}k` : usage.outputTokens;
+      const totalK = usage.totalTokens >= 1000 ? `${(usage.totalTokens / 1000).toFixed(1)}k` : usage.totalTokens;
+      usageStr = ` · ${inK} → ${outK} (${totalK})`;
+    }
+    
+    return { modelStr, timeStr, usageStr };
   });
 
   return (
@@ -173,9 +184,9 @@ function AssistantMessage(props: { message: any }) {
       </box>
 
       <Show when={modelLine()}>
-        {(line: Accessor<{ modelStr: string; timeStr: string }>) => (
+        {(line: Accessor<{ modelStr: string; timeStr: string; usageStr: string }>) => (
           <box flexDirection="row" marginTop={1} alignItems="center">
-            <text fg={theme.theme().muted}>■ Build · {line().modelStr} · {line().timeStr}</text>
+            <text fg={theme.theme().muted}>■ Build · {line().modelStr} · {line().timeStr}{line().usageStr}</text>
           </box>
         )}
       </Show>
