@@ -487,6 +487,14 @@ export async function invokeLLM(
       model: `${providerId}/${modelId}`,
     };
 
+    // Log result.usage if available
+    invokeLLMLogger.info("[invokeLLM] Checking result.usage", {
+      hasUsage: !!result.usage,
+      usage: result.usage ? JSON.stringify(result.usage) : undefined,
+      hasTotalUsage: !!result.totalUsage,
+      totalUsage: result.totalUsage ? JSON.stringify(result.totalUsage) : undefined,
+    });
+
     // Emit completed event with usage info (for both tool calls and non-tool calls cases)
     if (eventHandler?.onCompleted) {
       eventHandler.onCompleted(fullContent, { 
