@@ -309,6 +309,13 @@ export async function invokeLLM(
       streamOptions: {
         includeUsage: true,
       },
+      // Use onFinish callback to get usage (more reliable for some providers)
+      onFinish: ({ usage, totalUsage }: { usage?: UsageInfo; totalUsage?: UsageInfo }) => {
+        invokeLLMLogger.info("[invokeLLM] onFinish callback", {
+          usage,
+          totalUsage
+        });
+      },
     };
     
     invokeLLMLogger.info("[invokeLLM] Calling streamText with options", {
