@@ -493,7 +493,17 @@ export async function invokeLLM(
       usage: result.usage ? JSON.stringify(result.usage) : undefined,
       hasTotalUsage: !!result.totalUsage,
       totalUsage: result.totalUsage ? JSON.stringify(result.totalUsage) : undefined,
+      hasResponse: !!result.response,
     });
+
+    // Also try to get response metadata
+    if (result.response) {
+      Promise.resolve(result.response).then((res: any) => {
+        invokeLLMLogger.info("[invokeLLM] result.response resolved", {
+          headers: JSON.stringify(res?.headers),
+        });
+      }).catch(() => {});
+    }
 
     // Emit completed event with usage info (for both tool calls and non-tool calls cases)
     if (eventHandler?.onCompleted) {
