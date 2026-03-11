@@ -57,6 +57,7 @@ function ToolMessage(props: { message: any }) {
   const theme = useTheme();
   
   const parts = () => store.parts()[props.message.id] || [];
+  const toolCallPart = () => parts().find((p: any) => p.type === "tool_call");
   const toolResult = () => parts().find((p: any) => p.type === "tool_result");
   
   const content = props.message.content || "";
@@ -67,6 +68,11 @@ function ToolMessage(props: { message: any }) {
     <box flexDirection="row" alignItems="center" marginBottom={0}>
       <Show when={hasResult}>
         <text fg={isSuccess ? theme.theme().success : theme.theme().error}>
+          {content}
+        </text>
+      </Show>
+      <Show when={!hasResult && content}>
+        <text fg={theme.theme().secondary}>
           {content}
         </text>
       </Show>
