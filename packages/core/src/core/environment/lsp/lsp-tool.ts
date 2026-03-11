@@ -57,6 +57,7 @@ export function createLSPTool(): ToolInfo {
       filePath: z.string().describe("The absolute or relative path to the file"),
       line: z.number().int().min(1).describe("The line number (1-based)"),
       character: z.number().int().min(1).describe("The character offset (1-based)"),
+      reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Find func def in util.ts')"),
     }),
     execute: async (args: { operation: LSPOperation; filePath: string; line: number; character: number }, ctx: ToolContext): Promise<{ success: boolean; output: string; error?: string; metadata?: ToolResultMetadata }> => {
       const workdir = ctx.workdir || process.cwd();

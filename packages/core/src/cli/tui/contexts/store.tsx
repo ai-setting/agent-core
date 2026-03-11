@@ -27,6 +27,7 @@ export interface MessagePart {
   delta?: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+  reason?: string;
   result?: unknown;
   success?: boolean;
   timestamp?: number;

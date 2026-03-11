@@ -435,13 +435,13 @@ describe("File Tools - Tool Definitions", () => {
       test("should have correct parameters", async () => {
         const toolInfo = await readTool.init?.({}) ?? { parameters: readTool.parameters };
         const paramsParse = toolInfo.parameters.parse;
-        expect(() => paramsParse({ path: testFile })).not.toThrow();
-        expect(() => paramsParse({ path: testFile, offset: 1 })).not.toThrow();
-        expect(() => paramsParse({ path: testFile, offset: "1", limit: "2" })).not.toThrow();
+        expect(() => paramsParse({ path: testFile, reason: "Read test" })).not.toThrow();
+        expect(() => paramsParse({ path: testFile, offset: 1, reason: "Read test" })).not.toThrow();
+        expect(() => paramsParse({ path: testFile, offset: "1", limit: "2", reason: "Read test" })).not.toThrow();
       });
 
       test("should execute successfully", async () => {
-        const result = await readTool.execute({ path: testFile, offset: 0, limit: 10 }, {});
+        const result = await readTool.execute({ path: testFile, offset: 0, limit: 10, reason: "Read test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("<file>");
         expect(result.output).toContain("00001| Line 1");
@@ -449,29 +449,43 @@ describe("File Tools - Tool Definitions", () => {
       });
 
       test("should handle pagination with offset and limit", async () => {
-        const result = await readTool.execute({ path: testFile, offset: 1, limit: 1 }, {});
+        const result = await readTool.execute({ path: testFile, offset: 1, limit: 1, reason: "Read test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("00002| Line 2");
         expect(result.output).not.toContain("00001| Line 1");
       });
 
       test("should handle string parameters with coercion", async () => {
-        const result = await readTool.execute({ path: testFile, offset: 0, limit: "2" }, {});
+        const result = await readTool.execute({ path: testFile, offset: 0, limit: "2", reason: "Read test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("00001| Line 1");
         expect(result.output).toContain("00002| Line 2");
       });
 
       test("should handle missing path parameter", async () => {
-        const result = await readTool.execute({}, {});
+        const result = await readTool.execute({ reason: "Read test" }, {});
         expect(result.success).toBe(false);
         expect(result.error).toContain("Missing required parameter");
       });
 
       test("should handle non-existent file", async () => {
-        const result = await readTool.execute({ path: join(testDir, "nonexistent.txt") }, {});
+        const result = await readTool.execute({ path: join(testDir, "nonexistent.txt"), reason: "Read test" }, {});
         expect(result.success).toBe(false);
         expect(result.error).toContain("File not found");
+      });
+
+      test("should have reason parameter in schema", () => {
+        const params = readTool.parameters;
+        expect((params as any).shape.reason).toBeDefined();
+        expect((params as any).shape.reason.isOptional()).toBe(false);
+      });
+
+      test("should accept reason parameter", async () => {
+        const result = await readTool.execute(
+          { path: testFile, reason: "Read src/config.yaml" },
+          {}
+        );
+        expect(result.success).toBe(true);
       });
     });
 
@@ -489,10 +503,10 @@ describe("File Tools - Tool Definitions", () => {
       test("should have correct parameters", async () => {
         const toolInfo = await writeTool.init?.({}) ?? { parameters: writeTool.parameters };
         const paramsParse = toolInfo.parameters.parse;
-        expect(() => paramsParse({ path: "test.txt", content: "hello" })).not.toThrow();
-        expect(() => paramsParse({ path: "test.txt", content: "hello", append: true })).not.toThrow();
-        expect(() => paramsParse({ path: "test.txt", content: "hello", createDirs: true })).not.toThrow();
-        expect(() => paramsParse({ path: "test.txt", content: "hello", showDiff: true })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", reason: "Write test" })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", append: true, reason: "Write test" })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", createDirs: true, reason: "Write test" })).not.toThrow();
+        expect(() => paramsParse({ path: "test.txt", content: "hello", showDiff: true, reason: "Write test" })).not.toThrow();
       });
 
       test("should return diagnostics with range info in metadata", async () => {
@@ -560,9 +574,9 @@ describe("File Tools - Tool Definitions", () => {
 
       test("should handle append mode", async () => {
         const outputFile = join(testDir, "append.txt");
-        await writeTool.execute({ path: outputFile, content: "First" }, {});
+        await writeTool.execute({ path: outputFile, content: "First", reason: "Write test" }, {});
         const result = await writeTool.execute(
-          { path: outputFile, content: "Second", append: true },
+          { path: outputFile, content: "Second", append: true, reason: "Write test" },
           {},
         );
         expect(result.success).toBe(true);
@@ -570,9 +584,24 @@ describe("File Tools - Tool Definitions", () => {
       });
 
       test("should handle missing required parameters", async () => {
-        const result = await writeTool.execute({ path: "test.txt" }, {});
+        const result = await writeTool.execute({ path: "test.txt", reason: "Write test" }, {});
         expect(result.success).toBe(false);
         expect(result.error).toContain("Missing required parameter");
+      });
+
+      test("should have reason parameter in schema", () => {
+        const params = writeTool.parameters;
+        expect((params as any).shape.reason).toBeDefined();
+        expect((params as any).shape.reason.isOptional()).toBe(false);
+      });
+
+      test("should accept reason parameter", async () => {
+        const outputFile = join(testDir, "reason-test.txt");
+        const result = await writeTool.execute(
+          { path: outputFile, content: "test content", reason: "Write src/index.ts" },
+          {}
+        );
+        expect(result.success).toBe(true);
       });
     });
 
@@ -587,19 +616,33 @@ describe("File Tools - Tool Definitions", () => {
       test("should have simplified single pattern parameter", async () => {
         const toolInfo = await globTool.init?.({}) ?? { parameters: globTool.parameters };
         const paramsParse = toolInfo.parameters.parse;
-        expect(() => paramsParse({ pattern: "*.ts" })).not.toThrow();
-        expect(() => paramsParse({ pattern: "*.ts", path: testDir })).not.toThrow();
-        expect(() => paramsParse({ pattern: "*.ts", maxResults: 10 })).not.toThrow();
+        expect(() => paramsParse({ pattern: "*.ts", reason: "Find test" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "*.ts", path: testDir, reason: "Find test" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "*.ts", maxResults: 10, reason: "Find test" })).not.toThrow();
       });
 
       test("should execute successfully", async () => {
-        const result = await globTool.execute({ pattern: "*.ts", path: testDir }, {});
+        const result = await globTool.execute({ pattern: "*.ts", path: testDir, reason: "Find test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("test.ts");
       });
 
       test("should handle default path", async () => {
-        const result = await globTool.execute({ pattern: "*.ts" }, {});
+        const result = await globTool.execute({ pattern: "*.ts", reason: "Find test" }, {});
+        expect(result.success).toBe(true);
+      });
+
+      test("should have reason parameter in schema", () => {
+        const params = globTool.parameters;
+        expect((params as any).shape.reason).toBeDefined();
+        expect((params as any).shape.reason.isOptional()).toBe(false);
+      });
+
+      test("should accept reason parameter", async () => {
+        const result = await globTool.execute(
+          { pattern: "*.ts", path: testDir, reason: "Find test files" },
+          {}
+        );
         expect(result.success).toBe(true);
       });
     });
@@ -616,13 +659,13 @@ describe("File Tools - Tool Definitions", () => {
       test("should have simplified parameters", async () => {
         const toolInfo = await grepTool.init?.({}) ?? { parameters: grepTool.parameters };
         const paramsParse = toolInfo.parameters.parse;
-        expect(() => paramsParse({ pattern: "Line", path: testDir })).not.toThrow();
-        expect(() => paramsParse({ pattern: "Line", include: "*.ts" })).not.toThrow();
-        expect(() => paramsParse({ pattern: "Line", maxMatches: 10 })).not.toThrow();
+        expect(() => paramsParse({ pattern: "Line", path: testDir, reason: "Search test" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "Line", include: "*.ts", reason: "Search test" })).not.toThrow();
+        expect(() => paramsParse({ pattern: "Line", maxMatches: 10, reason: "Search test" })).not.toThrow();
       });
 
       test("should execute successfully", async () => {
-        const result = await grepTool.execute({ pattern: "Line", path: testDir }, {});
+        const result = await grepTool.execute({ pattern: "Line", path: testDir, reason: "Search test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("Line 1");
       });
@@ -632,20 +675,45 @@ describe("File Tools - Tool Definitions", () => {
           pattern: "Line",
           path: testDir,
           include: "*.ts",
+          reason: "Search test",
         }, {});
         expect(result.success).toBe(true);
       });
 
       test("should handle missing pattern", async () => {
-        const result = await grepTool.execute({ path: testDir }, {});
+        const result = await grepTool.execute({ path: testDir, reason: "Search test" }, {});
         expect(result.success).toBe(false);
         expect(result.error).toBeDefined();
       });
 
       test("should return no matches result", async () => {
-        const result = await grepTool.execute({ pattern: "nonexistentpattern123", path: testDir }, {});
+        const result = await grepTool.execute({ pattern: "nonexistentpattern123", path: testDir, reason: "Search test" }, {});
         expect(result.success).toBe(true);
         expect(result.output).toContain("No files found");
+      });
+
+      test("should have reason parameter in schema", () => {
+        const params = grepTool.parameters;
+        expect((params as any).shape.reason).toBeDefined();
+        expect((params as any).shape.reason.isOptional()).toBe(false);
+      });
+
+      test("should accept reason parameter", async () => {
+        const result = await grepTool.execute(
+          { pattern: "Line", path: testDir, reason: "Search func defs" },
+          {}
+        );
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe("edit_file tool", () => {
+      const editTool = tools.find((t) => t.name === "edit_file")!;
+
+      test("should have reason parameter in schema", () => {
+        const params = editTool.parameters;
+        expect((params as any).shape.reason).toBeDefined();
+        expect((params as any).shape.reason.isOptional()).toBe(false);
       });
     });
   });

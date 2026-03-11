@@ -26,6 +26,9 @@ const WebFetchParamsSchema = z.object({
     .number()
     .optional()
     .describe("Maximum characters to return"),
+  reason: z
+    .string()
+    .describe("Brief reason for calling this tool (max 30 chars, e.g., 'Fetch API docs')"),
 });
 
 export type WebFetchParams = z.infer<typeof WebFetchParamsSchema>;

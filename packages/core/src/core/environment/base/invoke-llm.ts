@@ -614,12 +614,16 @@ export function createInvokeLLM(config: InvokeLLMConfig): ToolInfo {
           },
           onToolCall: (toolName, toolArgs, toolCallId) => {
             const env = (ctx as any).env;
+            const reason = typeof toolArgs === 'object' && toolArgs !== null 
+              ? (toolArgs as any).reason 
+              : undefined;
             if (env?.emitStreamEvent) {
               env.emitStreamEvent({ 
                 type: "tool_call", 
                 tool_name: toolName, 
                 tool_args: toolArgs, 
-                tool_call_id: toolCallId 
+                tool_call_id: toolCallId,
+                reason
               }, { 
                 session_id: ctx.session_id || "default",
                 message_id: (ctx.metadata as any)?.message_id 

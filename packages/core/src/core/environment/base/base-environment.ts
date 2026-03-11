@@ -1147,8 +1147,11 @@ export abstract class BaseEnvironment implements Environment {
       },
       onToolCall: (toolName, toolArgs, toolCallId) => {
         BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onToolCall callback", { toolName });
+        const reason = typeof toolArgs === 'object' && toolArgs !== null 
+          ? (toolArgs as any).reason 
+          : undefined;
         this.emitStreamEvent(
-          { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId },
+          { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId, reason },
           ctx
         );
       },

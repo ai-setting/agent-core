@@ -25,6 +25,21 @@ describe("TaskTool - Parameters Validation", () => {
     expect(params.subagent_type).toBe("general");
     expect(params.background).toBe(false);
   });
+
+  test("should have reason parameter in schema", () => {
+    expect(TaskToolParameters.shape.reason).toBeDefined();
+    expect(TaskToolParameters.shape.reason.isOptional()).toBe(false);
+  });
+
+  test("should accept reason parameter", () => {
+    const params = TaskToolParameters.parse({
+      description: "test",
+      prompt: "do something",
+      reason: "Delegate refactor task",
+    });
+    
+    expect(params.reason).toBe("Delegate refactor task");
+  });
 });
 
 describe("TaskTool - Tool Definition", () => {

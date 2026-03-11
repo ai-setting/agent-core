@@ -61,6 +61,12 @@ describe("WebFetch Tool - Tool Info", () => {
     const tool = createWebFetchTool();
     expect(tool.parameters).toBeDefined();
   });
+
+  test("should have reason parameter in schema", () => {
+    const tool = createWebFetchTool();
+    expect((tool.parameters as any).shape.reason).toBeDefined();
+    expect((tool.parameters as any).shape.reason.isOptional()).toBe(false);
+  });
 });
 
 describe("WebFetch Tool - Configuration", () => {

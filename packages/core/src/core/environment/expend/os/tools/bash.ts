@@ -310,6 +310,7 @@ Usage notes:
       timeout: z.number().optional().describe("Optional timeout in milliseconds (default: 60000)"),
       workdir: z.string().optional().describe("Working directory"),
       description: z.string().describe("Clear, concise description of what this command does in 5-10 words"),
+      reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Run unit tests')"),
     }),
     execute: async (args) => {
       const { shell, useBash } = getShellConfig(args.command);

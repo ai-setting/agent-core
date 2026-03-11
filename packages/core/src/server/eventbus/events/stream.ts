@@ -53,6 +53,7 @@ export const StreamToolCallEvent = define(
     toolName: z.string(),
     toolArgs: z.record(z.unknown()),
     toolCallId: z.string(),
+    reason: z.string().optional(),
   })
 );
 

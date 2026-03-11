@@ -314,6 +314,21 @@ describe("Bash Tool - Tool Integration", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
   });
+
+  test("should have reason parameter in schema", () => {
+    const tool = createBashTool();
+    expect((tool.parameters as any).shape.reason).toBeDefined();
+    expect((tool.parameters as any).shape.reason.isOptional()).toBe(false);
+  });
+
+  test("should accept reason parameter", async () => {
+    const tool = createBashTool();
+    const result = await tool.execute(
+      { command: "echo 'test'", reason: "Run unit tests" },
+      {} as any
+    );
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("Bash Tool - Performance", () => {

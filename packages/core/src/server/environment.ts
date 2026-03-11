@@ -951,6 +951,7 @@ export class ServerEnvironment extends BaseEnvironment {
             toolName: event.tool_name || "",
             toolArgs: event.tool_args || {},
             toolCallId: event.tool_call_id || "",
+            reason: event.reason,
           },
           sessionId
         );

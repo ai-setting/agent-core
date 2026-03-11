@@ -40,6 +40,7 @@ export const baseSkillTool: ToolInfo = {
   description: "Execute a skill.",
   parameters: z.object({
     skill: z.string().describe("The skill ID to execute"),
+    reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Get cmd dev help')"),
   }),
   async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
     const skillId = args.skill as string;

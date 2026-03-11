@@ -76,6 +76,11 @@ describe("skill-tool", () => {
       expect(baseSkillTool.name).toBe("skill");
     });
 
+    it("should have reason parameter in schema", () => {
+      expect((baseSkillTool.parameters as any).shape.reason).toBeDefined();
+      expect((baseSkillTool.parameters as any).shape.reason.isOptional()).toBe(false);
+    });
+
     it("should have execute function", () => {
       expect(typeof baseSkillTool.execute).toBe("function");
     });

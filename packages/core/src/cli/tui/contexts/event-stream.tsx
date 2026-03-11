@@ -24,6 +24,7 @@ export interface StreamEvent {
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolCallId?: string;
+  reason?: string;
   result?: unknown;
   success?: boolean;
   error?: string;
@@ -223,10 +224,11 @@ export function EventStreamProvider(props: {
         // Reset text message - next text will create new message
         currentTextMessageId = null;
         // Create separate message for tool call
+        const toolReason = event.reason ? ` - ${event.reason}` : "";
         const toolMessage: Message = {
           id: `tool-${Date.now()}`,
           role: "assistant",
-          content: `⚡ ${event.toolName || "unknown"}`,
+          content: `⚡ ${event.toolName || "unknown"}${toolReason}`,
           timestamp: Date.now(),
         };
         store.addMessage(toolMessage);
@@ -237,6 +239,7 @@ export function EventStreamProvider(props: {
             type: "tool_call",
             toolName: event.toolName || "unknown",
             toolArgs: event.toolArgs,
+            reason: event.reason,
             timestamp: Date.now(),
           });
         }

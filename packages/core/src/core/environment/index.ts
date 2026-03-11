@@ -18,6 +18,7 @@ export interface StreamEvent {
   tool_args?: Record<string, unknown>;
   tool_call_id?: string;
   tool_result?: unknown;
+  reason?: string;
   error?: string;
   code?: string;
   metadata?: Record<string, unknown>;

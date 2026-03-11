@@ -39,7 +39,9 @@ export function createTodoReadTool(): ToolInfo {
   return {
     name: "todo_read",
     description: "Read the current todo/task list for the session",
-    parameters: z.object({}),
+    parameters: z.object({
+      reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Check pending tasks')"),
+    }),
     execute: async (_args, context) => {
       const startTime = Date.now();
       const sessionId = context.session_id || "default";
@@ -90,6 +92,7 @@ export function createTodoWriteTool(): ToolInfo {
         createdAt: z.string().describe("Creation timestamp (ISO format)"),
         completedAt: z.string().optional().describe("Completion timestamp (ISO format)"),
       })).describe("The complete updated todo list"),
+      reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Update todo list')"),
     }),
     execute: async (args, context) => {
       const startTime = Date.now();
@@ -129,6 +132,7 @@ export function createTodoAddTool(): ToolInfo {
     parameters: z.object({
       content: z.string().describe("Task description"),
       priority: z.enum(["low", "medium", "high"]).optional().describe("Task priority (default: medium)"),
+      reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Add meeting reminder')"),
     }),
     execute: async (args, context) => {
       const startTime = Date.now();
