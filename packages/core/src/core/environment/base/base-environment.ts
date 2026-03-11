@@ -941,7 +941,29 @@ export abstract class BaseEnvironment implements Environment {
       const toolContext = this.toToolContext(context);
       (toolContext as any).env = this;
 
-      Promise.resolve(tool.execute(action.args, toolContext))
+      // Validate tool parameters before execution
+      let validatedArgs: Record<string, unknown>;
+      try {
+        validatedArgs = tool.parameters.parse(action.args);
+      } catch (parseError) {
+        const errorMsg = parseError instanceof z.ZodError 
+          ? `Invalid parameters: ${parseError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+          : `Parameter validation failed: ${(parseError as Error).message}`;
+        BaseEnvironment.baseLogger.error("[BaseEnvironment.executeAction] Parameter validation failed", {
+          toolName: action.tool_name,
+          args: action.args,
+          error: errorMsg
+        });
+        resolve({
+          success: false,
+          output: "",
+          error: errorMsg,
+          metadata: { execution_time_ms: 0 }
+        });
+        return;
+      }
+
+      Promise.resolve(tool.execute(validatedArgs, toolContext))
         .then((result) => {
           clearTimeout(timer);
           if (context.abort) {

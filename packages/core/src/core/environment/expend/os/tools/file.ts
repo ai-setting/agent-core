@@ -478,14 +478,18 @@ Usage:
 - Returns file paths and line numbers with at least one match sorted by modification time
 - Use this tool when you need to find files containing specific patterns
 - If you need to identify/count the number of matches within files, use the Bash tool with \`rg\` (ripgrep) directly. Do NOT use \`grep\`
-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead`;
+- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+
+IMPORTANT: When calling this tool, you MUST provide the "reason" parameter to explain WHY you are searching for this pattern. This is required for logging and debugging purposes. Example: reason="Search for function definitions"`;
 
   const globDescription = `- Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
 - Returns matching file paths sorted by modification time (most recent first)
 - Use this tool when you need to find files by name patterns
 - When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful`;
+- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful
+
+IMPORTANT: When calling this tool, you MUST provide the "reason" parameter to explain WHY you are searching for these files. This is required for logging and debugging purposes. Example: reason="Find test files to understand test patterns"`;
 
   const writeFileDescription = `Write a file to the local filesystem.
 
