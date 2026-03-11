@@ -361,8 +361,15 @@ export namespace LLMTransform {
         }
         break;
     }
-    
 
+    // Add usage to request body for openai-compatible providers (e.g., MiniMax)
+    // This is different from streamOptions.includeUsage - some providers need it in the body
+    if (provider.sdkType === "openai-compatible" || provider.id === "minimax") {
+      if (!result.providerOptions) {
+        result.providerOptions = {};
+      }
+      result.providerOptions.usage = { include: true };
+    }
 
     return result;
   }
