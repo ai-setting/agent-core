@@ -431,6 +431,9 @@ export async function invokeLLM(
 
         case "finish-step":
           // Capture usage from finish-step event (more reliable for some providers like MiniMax)
+          invokeLLMLogger.info("[invokeLLM] finish-step raw usage", { 
+            usage: JSON.stringify(streamPart.usage) 
+          });
           const stepUsage = extractUsageInfo(streamPart.usage);
           if (stepUsage) {
             usageInfo = stepUsage;
