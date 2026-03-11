@@ -350,6 +350,7 @@ export async function invokeLLM(
       onFinish: ({ usage, totalUsage }: { usage?: UsageInfo; totalUsage?: UsageInfo }) => {
         const extractedUsage = extractUsageInfo(usage) || extractUsageInfo(totalUsage);
         invokeLLMLogger.info("[invokeLLM] onFinish callback", {
+          providerOptionsUsage: providerOptions.providerOptions?.usage,
           usage: JSON.stringify(usage),
           totalUsage: JSON.stringify(totalUsage),
           extractedUsage
