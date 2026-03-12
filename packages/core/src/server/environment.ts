@@ -172,23 +172,24 @@ export class ServerEnvironment extends BaseEnvironment {
       if (config.activeEnvironment) {
         const { ConfigPaths } = await import("../config/paths.js");
         
-        // 设置环境名称和行为规范目录
+        // 设置环境名称
         this.envName = config.activeEnvironment;
+        
+        // 获取环境目录路径（优先使用配置中的路径，否则搜索 local + global）
+        const envBasePath = config._environmentPath || (await findEnvironmentPath(config.activeEnvironment || ""))?.path;
+        
+        // 设置行为规范目录（使用找到的实际路径）
         this.rulesDirectory = path.join(
-          ConfigPaths.environments,
-          config.activeEnvironment
+          envBasePath || ConfigPaths.environments
         );
+        serverLogger.info(`[ServerEnvironment] rulesDirectory: ${this.rulesDirectory}`);
         this.promptsDirectory = path.join(
-          ConfigPaths.environments,
-          config.activeEnvironment,
+          envBasePath || ConfigPaths.environments,
           "prompts"
         );
         
         // 加载行为规范（env rules + agent prompts）
         await this.loadBehaviorSpec();
-
-        // 获取环境目录路径（优先使用配置中的路径，否则搜索）
-        const envBasePath = config._environmentPath || (await findEnvironmentPath(config.activeEnvironment || ""))?.path;
         
         // 使用环境目录路径，不需要再加 activeEnvironment
         this.skillsDirectory = path.join(
