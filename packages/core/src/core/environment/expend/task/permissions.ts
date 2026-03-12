@@ -11,7 +11,7 @@ export function buildSubAgentPermissions(
   const permissions: SessionPermission[] = [
     { permission: "todowrite", pattern: "*", action: "deny" },
     { permission: "todoread", pattern: "*", action: "deny" },
-    { permission: "task", pattern: "*", action: "deny" },
+    { permission: "delegate_task", pattern: "*", action: "deny" },
   ];
 
   if (subAgent?.allowedTools && subAgent.allowedTools.length > 0) {

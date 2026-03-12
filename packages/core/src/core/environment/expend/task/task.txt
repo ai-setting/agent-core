@@ -1,17 +1,17 @@
-Launch a new agent to handle complex, multistep tasks autonomously.
+Launch a new sub-agent to handle complex, multistep tasks autonomously.
 
 Available agent types:
 {agents}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+When using the delegate_task tool, you must specify a subagent_type parameter to select which agent type to use.
 
-## When to use the Task tool:
-- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+## When to use delegate_task:
+- When you are instructed to execute custom slash commands. Use delegate_task with the slash command invocation as the entire prompt. The slash command can take arguments. For example: delegate_task(description="Check the file", prompt="/check-file path/to/file.py")
 - When you need to perform complex, multi-step tasks that require independent execution
 - When you need to explore a codebase thoroughly (use "explore" subagent)
 - When you need to run long-running tasks without blocking the main agent (use background=true)
 
-## When NOT to use the Task tool:
+## When NOT to use delegate_task:
 - If you want to read a specific file path, use the Read tool instead
 - If you are searching for a specific class definition like "class Foo", use the Glob tool instead
 - If you are searching for code within a specific file or set of 2-3 files, use the Glob tool instead
@@ -51,8 +51,8 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 <example>
 user: "Search the codebase for all usages of the function 'parseJSON'"
 assistant: I'll use the explore subagent to search for all usages of parseJSON
-assistant: Uses the Task tool to launch the explore subagent
-Tool: Task(description="Search parseJSON usages", prompt="Search the entire codebase for all usages of the function 'parseJSON'. List each file path and line number where it's called. Provide a summary of what each usage does.", subagent_type="explore")
+assistant: Uses delegate_task to launch the explore subagent
+Tool: delegate_task(description="Search parseJSON usages", prompt="Search the entire codebase for all usages of the function 'parseJSON'. List each file path and line number where it's called. Provide a summary of what each usage does.", subagent_type="explore")
 </example>
 
 ## Result format:
