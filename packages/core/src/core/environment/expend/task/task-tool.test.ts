@@ -47,7 +47,7 @@ describe("TaskTool - Tool Definition", () => {
     const mockEnv = createMockEnv();
     const { tool } = createTaskTool(mockEnv as any);
     
-    expect(tool.name).toBe("task");
+    expect(tool.name).toBe("delegate_task");
   });
 
   test("should have comprehensive description", () => {

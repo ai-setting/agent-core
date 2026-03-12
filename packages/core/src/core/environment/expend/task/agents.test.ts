@@ -66,9 +66,9 @@ describe("SubAgent - Permissions", () => {
     expect(toread?.action).toBe("deny");
   });
 
-  test("should deny task by default (prevent subagent creating subagent)", () => {
+  test("should deny delegate_task by default (prevent subagent creating subagent)", () => {
     const permissions = buildSubAgentPermissions(undefined);
-    const task = permissions.find(p => p.permission === "task");
+    const task = permissions.find(p => p.permission === "delegate_task");
     expect(task).toBeDefined();
     expect(task?.action).toBe("deny");
   });

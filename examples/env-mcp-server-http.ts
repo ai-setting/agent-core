@@ -57,7 +57,7 @@ const mockProfiles: EnvProfile[] = [
         id: "architect",
         role: "primary",
         promptId: "system:architect",
-        allowedTools: ["bash", "file_read", "file_write", "task"],
+        allowedTools: ["bash", "file_read", "file_write", "delegate_task"],
       },
     ],
   },

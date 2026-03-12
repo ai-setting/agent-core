@@ -39,7 +39,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
   const backgroundTaskManager = new BackgroundTaskManager(env);
 
   const tool: ToolInfo = {
-    name: "task",
+    name: "delegate_task",
     description: buildTaskDescription(),
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
