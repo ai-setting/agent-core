@@ -760,15 +760,15 @@ ${historyForLLM}
     // Priority: 1. Provided limit parameter, 2. Existing limit in contextUsage, 3. Default 8192
     const ctxLimit = limit || currentUsage?.contextWindow || 8192;
     
-    // Calculate total tokens for percentage calculation
-    const newTotalTokens = (currentUsage?.totalTokens || 0) + usage.totalTokens;
+    // Calculate total tokens for percentage calculation (use latest value, not accumulated)
+    const newTotalTokens = usage.totalTokens;
 
     if (currentUsage) {
-      // Accumulate usage
+      // Update with latest usage (not accumulated - the usage.totalTokens is already the full context size for this request)
       this._info.contextUsage = {
-        inputTokens: currentUsage.inputTokens + usage.inputTokens,
-        outputTokens: currentUsage.outputTokens + usage.outputTokens,
-        totalTokens: currentUsage.totalTokens + usage.totalTokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
         contextWindow: ctxLimit,
         usagePercent: Math.round((newTotalTokens / ctxLimit) * 100),
         requestCount: currentUsage.requestCount + 1,
