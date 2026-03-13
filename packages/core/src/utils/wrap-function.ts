@@ -86,9 +86,9 @@ export function wrapFunction<T extends (...args: any[]) => any>(
     const prefix = `${TRACE_LOG_PREFIX} ${tag} ${name}`;
 
     if (data !== undefined) {
-      logger.info(`${prefix} ${event}: ${truncateString(data)}`);
+      logger.debug(`${prefix} ${event}: ${truncateString(data)}`);
     } else {
-      logger.info(`${prefix} ${event}`);
+      logger.debug(`${prefix} ${event}`);
     }
   };
 

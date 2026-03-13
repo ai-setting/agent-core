@@ -100,6 +100,7 @@ export class Session {
   /**
    * Create a new session.
    */
+  @Traced({ name: "session.create", log: true, recordParams: true, recordResult: false })
   static create(options: SessionCreateOptions = {}): Session {
     return new Session(options);
   }
@@ -107,6 +108,7 @@ export class Session {
   /**
    * Get a session by ID.
    */
+  @Traced({ name: "session.get", log: true, recordParams: true, recordResult: false })
   static get(id: string): Session | undefined {
     return Storage.getSession(id);
   }
@@ -114,6 +116,7 @@ export class Session {
   /**
    * List all sessions.
    */
+  @Traced({ name: "session.list", log: true, recordParams: false, recordResult: false })
   static list(): Session[] {
     return Storage.listSessions();
   }
@@ -121,6 +124,7 @@ export class Session {
   /**
    * Create a child session.
    */
+  @Traced({ name: "session.createChild", log: true, recordParams: true, recordResult: false })
   static createChild(parentID: string, title?: string, directory?: string): Session {
     return new Session({
       parentID,
@@ -132,6 +136,7 @@ export class Session {
   /**
    * Fork a session from a specific message.
    */
+  @Traced({ name: "session.fork", log: true, recordParams: true, recordResult: false })
   static fork(sessionID: string, messageID?: string): Session {
     const original = Storage.getSession(sessionID);
     if (!original) {
@@ -179,6 +184,7 @@ export class Session {
   /**
    * Get child sessions.
    */
+  @Traced({ name: "session.getChildren", log: true, recordParams: true, recordResult: false })
   static getChildren(parentID: string): Session[] {
     const infos = Storage.getChildren(parentID);
     return infos.map((info) => Storage.getSession(info.id)).filter((s): s is Session => s !== undefined);
@@ -216,6 +222,7 @@ export class Session {
    * Add a message directly from AI SDK ModelMessage format.
    * This is the unified method for adding messages from the Agent.
    */
+  @Traced({ name: "session.addMessageFromModelMessage", log: true, recordParams: true, recordResult: false })
   addMessageFromModelMessage(message: ModelMessage): string {
     const id = ID.ascending("message");
     const now = Date.now();
@@ -315,6 +322,7 @@ export class Session {
   /**
    * Add a user message.
    */
+  @Traced({ name: "session.addUserMessage", log: true, recordParams: true, recordResult: false })
   addUserMessage(content: string, metadata?: Record<string, unknown>): string {
     const id = ID.ascending("message");
     const info: MessageInfo = {
@@ -337,6 +345,7 @@ export class Session {
   /**
    * Add an assistant message.
    */
+  @Traced({ name: "session.addAssistantMessage", log: true, recordParams: true, recordResult: false })
   addAssistantMessage(content: string, metadata?: Record<string, unknown>): string {
     const id = ID.ascending("message");
     const info: MessageInfo = {
@@ -359,6 +368,7 @@ export class Session {
   /**
    * Add reasoning content.
    */
+  @Traced({ name: "session.addReasoning", log: true, recordParams: true, recordResult: false })
   addReasoning(text: string, metadata?: Record<string, unknown>): string {
     const id = ID.ascending("message");
     const now = Date.now();
@@ -383,6 +393,7 @@ export class Session {
   /**
    * Add a file attachment.
    */
+  @Traced({ name: "session.addFile", log: true, recordParams: true, recordResult: false })
   addFile(url: string, mime: string, filename?: string): string {
     const id = ID.ascending("message");
     const info: MessageInfo = {
@@ -406,6 +417,7 @@ export class Session {
   /**
    * Add a tool call result.
    */
+  @Traced({ name: "session.addToolMessage", log: true, recordParams: true, recordResult: false })
   addToolMessage(
     toolName: string,
     callID: string,
@@ -440,6 +452,7 @@ export class Session {
   /**
    * Track a tool call in the current assistant message.
    */
+  @Traced({ name: "session.addToolCall", log: true, recordParams: true, recordResult: false })
   addToolCall(toolName: string, callID: string, input: Record<string, unknown>): void {
     const messageID = this._messageOrder[this._messageOrder.length - 1];
     const message = this._messages.get(messageID);
@@ -462,6 +475,7 @@ export class Session {
   /**
    * Update a tool call result.
    */
+  @Traced({ name: "session.updateToolResult", log: true, recordParams: true, recordResult: false })
   updateToolResult(callID: string, output: string, error?: string): void {
     const now = Date.now();
 
@@ -490,6 +504,7 @@ export class Session {
   /**
    * Get messages in chronological order.
    */
+  @Traced({ name: "session.getMessages", log: true, recordParams: true, recordResult: false })
   getMessages(limit?: number): MessageWithParts[] {
     const messages = this._messageOrder
       .map((id) => this._messages.get(id))
@@ -505,6 +520,7 @@ export class Session {
   /**
    * Get a specific message.
    */
+  @Traced({ name: "session.getMessage", log: true, recordParams: true, recordResult: false })
   getMessage(messageID: string): MessageWithParts | undefined {
     return this._messages.get(messageID);
   }
@@ -512,6 +528,7 @@ export class Session {
   /**
    * Get the last message.
    */
+  @Traced({ name: "session.getLastMessage", log: true, recordParams: false, recordResult: false })
   getLastMessage(): MessageWithParts | undefined {
     if (this._messageOrder.length === 0) {
       return undefined;
@@ -545,6 +562,7 @@ export class Session {
   /**
    * Delete this session and all its messages.
    */
+  @Traced({ name: "session.delete", log: true, recordParams: false, recordResult: false })
   delete(): void {
     const children = Storage.getChildren(this.id);
     for (const childInfo of children) {
@@ -558,6 +576,7 @@ export class Session {
   /**
    * Update session metadata.
    */
+  @Traced({ name: "session.setMetadata", log: true, recordParams: true, recordResult: false })
   setMetadata(key: string, value: unknown): void {
     this._metadata.set(key, value);
     this._info.metadata = Object.fromEntries(this._metadata);
@@ -568,6 +587,7 @@ export class Session {
   /**
    * Get session metadata.
    */
+  @Traced({ name: "session.getMetadata", log: true, recordParams: true, recordResult: false })
   getMetadata(key: string): unknown {
     return this._metadata.get(key);
   }
@@ -575,6 +595,7 @@ export class Session {
   /**
    * Update session title.
    */
+  @Traced({ name: "session.setTitle", log: true, recordParams: true, recordResult: false })
   setTitle(title: string): void {
     this._info.title = title;
     this._info.time.updated = Date.now();
@@ -584,6 +605,7 @@ export class Session {
   /**
    * Update file change summary.
    */
+  @Traced({ name: "session.setSummary", log: true, recordParams: true, recordResult: false })
   setSummary(additions: number, deletions: number, files: number): void {
     this._info.summary = { additions, deletions, files };
     this._info.time.updated = Date.now();
@@ -629,6 +651,7 @@ export class Session {
   /**
    * Load messages from storage (used during Storage initialization)
    */
+  @Traced({ name: "session.loadMessages", log: true, recordParams: true, recordResult: false })
   loadMessages(messages: MessageWithParts[]): void {
     for (const msg of messages) {
       this._messages.set(msg.info.id, msg);
@@ -639,6 +662,7 @@ export class Session {
   /**
    * Add a system message.
    */
+  @Traced({ name: "session.addSystemMessage", log: true, recordParams: true, recordResult: false })
   addSystemMessage(content: string, metadata?: Record<string, unknown>): string {
     const id = ID.ascending("message");
     const info: MessageInfo = {
@@ -672,6 +696,7 @@ export class Session {
    * @param options - Compaction configuration options
    * @returns The new compacted child session
    */
+  @Traced({ name: "session.compact", log: true, recordParams: true, recordResult: false })
   async compact(
     env: {
       handle_query: (input: string, ctx: any, history: Array<{ role: string; content: any }>) => Promise<string>;
@@ -735,6 +760,7 @@ ${historyForLLM}
    * Get context usage statistics for this session.
    * @returns ContextUsage object with aggregated token usage or undefined if no usage recorded
    */
+  @Traced({ name: "session.getContextStats", log: true, recordParams: false, recordResult: false })
   getContextStats(): ContextUsage | undefined {
     return this._info.contextUsage;
   }
@@ -745,6 +771,7 @@ ${historyForLLM}
    * @param usage - Usage information from the LLM response
    * @param limit - Optional context window limit for calculating usage percentage
    */
+  @Traced({ name: "session.updateContextUsage", log: true, recordParams: true, recordResult: false })
   updateContextUsage(
     usage: {
       inputTokens: number;

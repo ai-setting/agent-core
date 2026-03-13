@@ -125,13 +125,22 @@ class Logger {
   }
 
   private getRelativePath(fullPath: string): string {
-    const srcPath = "packages/core/src";
     const normalizedPath = fullPath.replace(/\\/g, "/");
-    const idx = normalizedPath.indexOf(srcPath);
-    if (idx !== -1) {
-      return normalizedPath.substring(idx + srcPath.length + 1);
+    
+    const rootMarkers = [
+      "packages/core/src",
+      "packages/core",
+      "packages",
+    ];
+    
+    for (const marker of rootMarkers) {
+      const idx = normalizedPath.indexOf(marker);
+      if (idx !== -1) {
+        return normalizedPath.substring(idx);
+      }
     }
-    return basename(fullPath);
+    
+    return normalizedPath;
   }
 
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
