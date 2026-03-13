@@ -150,9 +150,10 @@ describe("Session context usage", () => {
     });
 
     const stats = session.getContextStats();
-    expect(stats?.inputTokens).toBe(3000);
-    expect(stats?.outputTokens).toBe(1500);
-    expect(stats?.totalTokens).toBe(4500);
+    // Latest usage replaces previous (not accumulated)
+    expect(stats?.inputTokens).toBe(2000);
+    expect(stats?.outputTokens).toBe(1000);
+    expect(stats?.totalTokens).toBe(3000);
     expect(stats?.requestCount).toBe(2);
   });
 
@@ -202,7 +203,8 @@ describe("Session context usage", () => {
 
     const stats = session.getContextStats();
     expect(stats?.contextWindow).toBe(20000);
-    expect(stats?.usagePercent).toBe(15);
+    // usagePercent is calculated with the new contextWindow (1500/20000 = 8%)
+    expect(stats?.usagePercent).toBe(8);
   });
 
   it("should preserve existing limit when no new limit provided", () => {
