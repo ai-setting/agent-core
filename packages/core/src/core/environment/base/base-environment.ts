@@ -908,6 +908,17 @@ export abstract class BaseEnvironment implements Environment {
         action.args,
       );
 
+      const MAX_OUTPUT_SIZE = 5 * 1024;
+      if (result.success && typeof result.output === "string" && result.output.length > MAX_OUTPUT_SIZE) {
+        const truncated = result.output.substring(0, MAX_OUTPUT_SIZE);
+        result.output = truncated + `\n\n[Output truncated - original size: ${result.output.length} bytes]`;
+        BaseEnvironment.baseLogger.warn("[BaseEnvironment.handle_action] Tool output truncated", {
+          toolName: action.tool_name,
+          originalSize: result.output.length,
+          truncatedSize: MAX_OUTPUT_SIZE,
+        });
+      }
+
       this.metrics.record(action.tool_name, result);
       return result;
     } finally {
