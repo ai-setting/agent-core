@@ -7,6 +7,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "minimatch": "^10.2.3"
+  },
   "scripts": {
     "dev": "bun run --cwd packages/core dev",
     "build": "bun run --cwd packages/core build",
