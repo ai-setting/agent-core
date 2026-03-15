@@ -2,11 +2,16 @@
  * @fileoverview Skill loader for agent-core
  * 
  * Scans the skills directory and parses skill.md files.
+ * Supports:
+ * - Multi-level subdirectories (recursive scanning)
+ * - Case-insensitive skill.md filename (skill.md, SKILL.md, Skill.md, etc.)
  */
 
 import fs from "fs/promises";
 import path from "path";
 import type { SkillInfo, SkillFrontmatter } from "./types.js";
+
+const SKILL_FILENAME_REGEX = /^skill\.md$/i;
 
 export class SkillLoader {
   private skillsDir: string;
@@ -19,27 +24,53 @@ export class SkillLoader {
     const skills: SkillInfo[] = [];
 
     try {
-      const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-
-        const skillPath = path.join(this.skillsDir, entry.name, "skill.md");
-        try {
-          const content = await fs.readFile(skillPath, "utf-8");
-          const skillInfo = this.parseSkillMd(content, entry.name, skillPath);
-          if (skillInfo) {
-            skills.push(skillInfo);
-          }
-        } catch {
-          console.warn(`[SkillLoader] Failed to load skill: ${entry.name}`);
-        }
-      }
+      await this.scanDirectory(this.skillsDir, skills);
     } catch (error) {
       console.warn(`[SkillLoader] Failed to read skills directory: ${error}`);
     }
 
     return skills;
+  }
+
+  /**
+   * Recursively scan directory for skill.md files
+   */
+  private async scanDirectory(dir: string, skills: SkillInfo[]): Promise<void> {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively scan subdirectories
+          await this.scanDirectory(fullPath, skills);
+        } else if (entry.isFile() && SKILL_FILENAME_REGEX.test(entry.name)) {
+          // Found a skill.md file (case-insensitive)
+          const skillInfo = await this.parseSkillFile(fullPath);
+          if (skillInfo) {
+            skills.push(skillInfo);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[SkillLoader] Failed to scan directory ${dir}: ${error}`);
+    }
+  }
+
+  /**
+   * Parse skill.md file and extract skill info
+   */
+  private async parseSkillFile(skillPath: string): Promise<SkillInfo | null> {
+    try {
+      const content = await fs.readFile(skillPath, "utf-8");
+      // Derive skill ID from directory name (parent folder name)
+      const skillId = path.basename(path.dirname(skillPath));
+      return this.parseSkillMd(content, skillId, skillPath);
+    } catch (error) {
+      console.warn(`[SkillLoader] Failed to load skill file ${skillPath}: ${error}`);
+      return null;
+    }
   }
 
   private parseSkillMd(content: string, skillId: string, skillPath: string): SkillInfo | null {

@@ -4,7 +4,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { SkillLoader } from "./skill-loader.js";
-import { SkillInfo } from "./types.js";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -171,5 +170,217 @@ description: Test
     const skills = await loader.loadAll();
 
     expect(skills).toHaveLength(0);
+  });
+
+  describe("multi-level subdirectory support", () => {
+    it("should load skills from nested subdirectories", async () => {
+      const nestedDir = path.join(skillsDir, "level1", "level2", "nested-skill");
+      await fs.mkdir(nestedDir, { recursive: true });
+      await fs.writeFile(
+        path.join(nestedDir, "skill.md"),
+        `---
+name: Nested Skill
+description: A skill in a nested directory
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].id).toBe("nested-skill");
+      expect(skills[0].name).toBe("Nested Skill");
+    });
+
+    it("should load skills from multiple nested levels", async () => {
+      const deepDir = path.join(skillsDir, "a", "b", "c", "deep-skill");
+      await fs.mkdir(deepDir, { recursive: true });
+      await fs.writeFile(
+        path.join(deepDir, "skill.md"),
+        `---
+name: Deep Skill
+description: A deeply nested skill
+---
+
+# Content`
+      );
+
+      const shallowDir = path.join(skillsDir, "shallow-skill");
+      await fs.mkdir(shallowDir);
+      await fs.writeFile(
+        path.join(shallowDir, "skill.md"),
+        `---
+name: Shallow Skill
+description: A shallow skill
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(2);
+      const ids = skills.map(s => s.id).sort();
+      expect(ids).toEqual(["deep-skill", "shallow-skill"]);
+    });
+
+    it("should load multiple skills from different nested paths", async () => {
+      const dir1 = path.join(skillsDir, "category1", "sub1", "skill-a");
+      const dir2 = path.join(skillsDir, "category2", "skill-b");
+      const dir3 = path.join(skillsDir, "skill-c");
+
+      await fs.mkdir(dir1, { recursive: true });
+      await fs.mkdir(dir2, { recursive: true });
+      await fs.mkdir(dir3, { recursive: true });
+
+      await fs.writeFile(
+        path.join(dir1, "skill.md"),
+        `---
+name: Skill A
+description: Skill in sub1
+---
+
+# Content`
+      );
+
+      await fs.writeFile(
+        path.join(dir2, "skill.md"),
+        `---
+name: Skill B
+description: Skill in category2
+---
+
+# Content`
+      );
+
+      await fs.writeFile(
+        path.join(dir3, "skill.md"),
+        `---
+name: Skill C
+description: Root level skill
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(3);
+      const ids = skills.map(s => s.id).sort();
+      expect(ids).toEqual(["skill-a", "skill-b", "skill-c"]);
+    });
+  });
+
+  describe("case-insensitive skill.md support", () => {
+    it("should load skill.md (lowercase)", async () => {
+      const skillDir = path.join(skillsDir, "skill-lowercase");
+      await fs.mkdir(skillDir);
+      await fs.writeFile(
+        path.join(skillDir, "skill.md"),
+        `---
+name: Lowercase Skill
+description: skill.md (lowercase)
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].id).toBe("skill-lowercase");
+    });
+
+    it("should load SKILL.md (uppercase)", async () => {
+      const skillDir = path.join(skillsDir, "skill-uppercase");
+      await fs.mkdir(skillDir);
+      await fs.writeFile(
+        path.join(skillDir, "SKILL.MD"),
+        `---
+name: Uppercase Skill
+description: SKILL.MD (uppercase)
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].id).toBe("skill-uppercase");
+    });
+
+    it("should load Skill.md (mixed case)", async () => {
+      const skillDir = path.join(skillsDir, "skill-mixed");
+      await fs.mkdir(skillDir);
+      await fs.writeFile(
+        path.join(skillDir, "Skill.Md"),
+        `---
+name: Mixed Case Skill
+description: Skill.Md (mixed case)
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].id).toBe("skill-mixed");
+    });
+
+    it("should load skills with different case variations in same directory", async () => {
+      const dir1 = path.join(skillsDir, "case1");
+      const dir2 = path.join(skillsDir, "case2");
+      const dir3 = path.join(skillsDir, "case3");
+
+      await fs.mkdir(dir1);
+      await fs.mkdir(dir2);
+      await fs.mkdir(dir3);
+
+      await fs.writeFile(
+        path.join(dir1, "skill.md"),
+        `---
+name: Skill 1
+description: lowercase
+---
+
+# Content`
+      );
+
+      await fs.writeFile(
+        path.join(dir2, "SKILL.MD"),
+        `---
+name: Skill 2
+description: uppercase
+---
+
+# Content`
+      );
+
+      await fs.writeFile(
+        path.join(dir3, "Skill.md"),
+        `---
+name: Skill 3
+description: mixed case
+---
+
+# Content`
+      );
+
+      const loader = new SkillLoader(skillsDir);
+      const skills = await loader.loadAll();
+
+      expect(skills).toHaveLength(3);
+      const descriptions = skills.map(s => s.description).sort();
+      expect(descriptions).toEqual(["lowercase", "mixed case", "uppercase"]);
+    });
   });
 });
