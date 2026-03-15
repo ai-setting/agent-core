@@ -25,6 +25,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.36",
     "jsonc-parser": "^3.3.1",
+    "minimatch": "^10.2.3",
     "remeda": "^2.33.6",
     "xdg-basedir": "^5.1.0"
   }
