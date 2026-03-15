@@ -42,8 +42,8 @@ export class SkillLoader {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
 
-        if (entry.isDirectory()) {
-          // Recursively scan subdirectories
+        if (entry.isDirectory() || entry.isSymbolicLink()) {
+          // Recursively scan subdirectories (including symbolic links)
           await this.scanDirectory(fullPath, skills);
         } else if (entry.isFile() && SKILL_FILENAME_REGEX.test(entry.name)) {
           // Found a skill.md file (case-insensitive)
