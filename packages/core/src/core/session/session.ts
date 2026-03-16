@@ -537,7 +537,7 @@ export class Session {
   /**
    * Convert session messages to Agent Core history format.
    */
-  @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: false })
+  @Traced({ name: "session.toHistory", log: true, recordParams: false, recordResult: true })
   async toHistory(): Promise<any[]> {
     // Lazy load messages from storage on first call
     // Check if we have placeholder messages that need to be loaded
