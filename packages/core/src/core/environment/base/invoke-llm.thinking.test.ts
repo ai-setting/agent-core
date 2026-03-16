@@ -629,6 +629,21 @@ describe("processThinkingStream", () => {
     expect(r2.cleanedText).toBe("Text2");
   });
 
+  it("should handle thinking end with text after (</thinking>Hello)", () => {
+    // Simulate thinking that ends and then has text output
+    const state = { isOpen: true, content: "Let me think about this" };
+    const delta = "</thinking>Hello world";
+    
+    const result = processThinkingStream(delta, defaultConfig, state);
+    
+    // Thinking should be closed
+    expect(result.isThinkingTagOpen).toBe(false);
+    // Should have emitted final reasoning
+    expect(result.reasoningEvents.length).toBeGreaterThan(0);
+    // Cleaned text should have the text AFTER </thinking>
+    expect(result.cleanedText).toBe("Hello world");
+  });
+
   it("should simulate full streaming reasoning flow", () => {
     const reasoningEvents: string[] = [];
     let isOpen = false;
