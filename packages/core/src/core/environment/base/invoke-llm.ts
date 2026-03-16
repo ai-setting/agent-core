@@ -397,7 +397,7 @@ export async function invokeLLM(
           
           if (thinkingConfig?.enabled) {
             // Process thinking tags for streaming reasoning
-            const result = processThinkingStream(
+            const thinkingResult = processThinkingStream(
               textDelta,
               thinkingConfig,
               {
@@ -407,15 +407,19 @@ export async function invokeLLM(
             );
             
             // Update state
-            isThinkingTagOpen = result.isThinkingTagOpen;
-            currentThinkingContent = result.currentThinkingContent;
+            isThinkingTagOpen = thinkingResult.isThinkingTagOpen;
+            currentThinkingContent = thinkingResult.currentThinkingContent;
             
             // Update fullContent with cleaned text (without thinking tags)
-            fullContent += result.cleanedText;
+            fullContent += thinkingResult.cleanedText;
             
-            // Trigger reasoning events for content changes
-            if (result.newReasoningContent) {
-              reasoningContent += result.newReasoningContent;
+            // Trigger reasoning events for each streaming update
+            // This ensures reasoning is emitted immediately when:
+            // 1. Opening tag is detected
+            // 2. Thinking content changes (streaming)
+            // 3. Closing tag is detected
+            for (const reasoningDelta of thinkingResult.reasoningEvents) {
+              reasoningContent = reasoningDelta;  // Replace with latest
               if (eventHandler?.onReasoning) {
                 eventHandler.onReasoning(reasoningContent);
               }
@@ -423,7 +427,7 @@ export async function invokeLLM(
             
             // Also trigger text event with cleaned content
             if (eventHandler?.onText) {
-              eventHandler.onText(fullContent, result.cleanedText);
+              eventHandler.onText(fullContent, thinkingResult.cleanedText);
             }
           } else {
             // Original handling
@@ -867,12 +871,10 @@ function processThinkingFromText(
 
 /**
  * Process thinking tags from text delta with streaming support
- * Handles opening/closing tags and emits reasoning events during streaming
- * 
- * @param textDelta - The incoming text delta
- * @param config - thinkingInText configuration
- * @param state - Current thinking tag state
- * @returns Processed result with streaming events
+ * Emits reasoning events IMMEDIATELY when:
+ * 1. Opening tag is detected (starts reasoning)
+ * 2. Thinking content changes (streaming content)
+ * 3. Closing tag is detected (ends reasoning)
  */
 function processThinkingStream(
   textDelta: string,
@@ -889,30 +891,27 @@ function processThinkingStream(
   cleanedText: string;
   isThinkingTagOpen: boolean;
   currentThinkingContent: string;
-  newReasoningContent?: string;
+  reasoningEvents: string[];
 } {
   if (!config.enabled || !textDelta) {
     return {
       cleanedText: textDelta,
       isThinkingTagOpen: state.isOpen,
-      currentThinkingContent: state.content
+      currentThinkingContent: state.content,
+      reasoningEvents: []
     };
   }
 
   const tags = config.tags || ['thinking'];
   let remainingText = textDelta;
-  let newReasoningContent: string | undefined;
+  let reasoningEvents: string[] = [];
   let isOpen = state.isOpen;
   let currentContent = state.content;
 
   for (const tag of tags) {
     const openTag = `<${tag}>`;
     const closeTag = `</${tag}>`;
-    const openTagUpper = openTag.toUpperCase();
-    const closeTagUpper = closeTag.toUpperCase();
     
-    // Process the delta character by character to detect tag boundaries
-    // This is a simplified approach - find all tag positions
     let text = remainingText;
     let result = "";
     
@@ -922,69 +921,80 @@ function processThinkingStream(
     
     if (openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex)) {
       // Opening tag found first
+      const beforeOpen = text.substring(0, openIndex);
+      const afterOpen = text.substring(openIndex + openTag.length);
+      
       if (!isOpen) {
-        // Start of new thinking block
+        // First time seeing opening tag - start new thinking block
         isOpen = true;
         currentContent = "";
+        // Emit event to start reasoning
+        reasoningEvents.push("");
       }
-      // Add text before the opening tag to cleaned output
-      result += text.substring(0, openIndex);
-      // Skip the opening tag
-      text = text.substring(openIndex + openTag.length);
+      
+      // Add text before opening tag to cleaned output
+      result += beforeOpen;
+      
+      // Check if there's also a closing tag in this delta
+      const innerCloseIndex = afterOpen.toLowerCase().indexOf(closeTag.toLowerCase());
+      
+      if (innerCloseIndex !== -1) {
+        // Both open and close in same delta
+        const thinkingContent = afterOpen.substring(0, innerCloseIndex);
+        const afterClose = afterOpen.substring(innerCloseIndex + closeTag.length);
+        
+        // Add thinking content
+        currentContent += thinkingContent;
+        // Emit streaming reasoning event
+        reasoningEvents.push(currentContent);
+        
+        isOpen = false;
+        currentContent = "";
+        
+        // Rest is cleaned text
+        result += afterClose;
+      } else {
+        // Only opening tag, accumulate content
+        currentContent += afterOpen;
+        // Emit reasoning with current content (streaming)
+        reasoningEvents.push(currentContent);
+      }
     } else if (closeIndex !== -1) {
       // Closing tag found
-      // Add text before closing tag to cleaned output (if not removing)
-      result += text.substring(0, closeIndex);
+      const beforeClose = text.substring(0, closeIndex);
+      const afterClose = text.substring(closeIndex + closeTag.length);
       
-      // Extract content between last open and this close
-      if (isOpen && currentContent.length > 0) {
-        newReasoningContent = currentContent;
+      if (isOpen) {
+        // Add content before close to thinking
+        currentContent += beforeClose;
+        // Emit final reasoning event
+        reasoningEvents.push(currentContent);
+        
+        isOpen = false;
+        currentContent = "";
       }
       
-      isOpen = false;
-      currentContent = "";
-      
-      // Skip the closing tag
-      text = text.substring(closeIndex + closeTag.length);
-      
-      // Check if there's more content after (another thinking block)
-      const nextOpen = text.toLowerCase().indexOf(openTag.toLowerCase());
-      const nextClose = text.toLowerCase().indexOf(closeTag.toLowerCase());
-      
-      if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
-        // Another thinking block starts
-        isOpen = true;
-        // Add text between close and next open to result
-        result += text.substring(0, nextOpen);
-        text = text.substring(nextOpen + openTag.length);
-      } else {
-        // Rest is regular text
-        result += text;
-      }
+      // Rest is cleaned text
+      result += afterClose;
     } else if (isOpen) {
-      // No complete tag, but we're inside a thinking block
-      // All content goes to thinking
+      // We're inside thinking block, accumulate content
       currentContent += text;
-      // Don't add to cleaned output
+      // Emit streaming reasoning event
+      reasoningEvents.push(currentContent);
+      // Nothing goes to cleaned output
       result = "";
     } else {
-      // No tags at all
+      // Normal text, no thinking tags
       result += text;
     }
 
-    // Remove thinking tags from output if configured
-    if (config.removeFromOutput !== false) {
-      remainingText = result;
-    } else {
-      // Keep tags in output but still track thinking
-      remainingText = textDelta;
-    }
+    remainingText = result;
   }
 
   return {
     cleanedText: remainingText,
     isThinkingTagOpen: isOpen,
     currentThinkingContent: currentContent,
-    newReasoningContent
+    reasoningEvents
   };
 }
