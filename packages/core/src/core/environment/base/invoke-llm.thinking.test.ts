@@ -534,6 +534,19 @@ describe("processThinkingFromText", () => {
   });
 });
 
+// Test for "think" tag special handling
+describe("processThinkingFromText with think tag (minimax)", () => {
+  const config = { enabled: true, tags: ["think"], removeFromOutput: true };
+
+  it("should extract <think> content when tags configured as think", () => {
+    const text = "<think>Hello world</think>Hi there";
+    const result = processThinkingFromText(text, config);
+    
+    expect(result.thinkingContent).toBe("Hello world");
+    expect(result.cleanedText).toBe("Hi there");
+  });
+});
+
 /**
  * Streaming reasoning tests - for processThinkingStream function
  * Verifies that reasoning events are emitted:

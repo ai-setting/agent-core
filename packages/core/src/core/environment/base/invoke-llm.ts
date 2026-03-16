@@ -844,8 +844,20 @@ function processThinkingFromText(
   let extractedThinking = '';
 
   for (const tag of tags) {
-    const openTag = `<${tag}>`;
-    const closeTag = `</${tag}>`;
+    // Handle two cases:
+    // 1. Normal tag: "thinking" -> generates <thinking> and </thinking>
+    // 2. Special case: "think" -> maps to <think>/</think> (for minimax compatibility)
+    let openTag: string;
+    let closeTag: string;
+    
+    // Special handling for "think" -> maps to standard <think>/</think>
+    if (tag === 'think') {
+      openTag = '<think>';
+      closeTag = '</think>';
+    } else {
+      openTag = `<${tag}>`;
+      closeTag = `</${tag}>`;
+    }
     
     // Match all thinking tags (case-insensitive, global)
     const regex = new RegExp(`${openTag}([\\s\\S]*?)${closeTag}`, 'gi');
