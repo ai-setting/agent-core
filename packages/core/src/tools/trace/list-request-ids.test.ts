@@ -40,10 +40,11 @@ describe("list_request_ids tool", () => {
 
     expect(result.success).toBe(true);
     const parsed = JSON.parse(result.output as string);
-    expect(parsed).toHaveLength(3);
-    expect(parsed.map((r: any) => r.requestId)).toContain("req_123");
-    expect(parsed.map((r: any) => r.requestId)).toContain("req_456");
-    expect(parsed.map((r: any) => r.requestId)).toContain("req_789");
+    const requestIds = parsed.requestIds;
+    expect(requestIds).toHaveLength(3);
+    expect(requestIds.map((r: any) => r.requestId)).toContain("req_123");
+    expect(requestIds.map((r: any) => r.requestId)).toContain("req_456");
+    expect(requestIds.map((r: any) => r.requestId)).toContain("req_789");
   });
 
   it("should sort by lastLogTime descending", async () => {
@@ -52,9 +53,10 @@ describe("list_request_ids tool", () => {
 
     expect(result.success).toBe(true);
     const parsed = JSON.parse(result.output as string);
-    expect(parsed[0].requestId).toBe("req_789");
-    expect(parsed[1].requestId).toBe("req_456");
-    expect(parsed[2].requestId).toBe("req_123");
+    const requestIds = parsed.requestIds;
+    expect(requestIds[0].requestId).toBe("req_789");
+    expect(requestIds[1].requestId).toBe("req_456");
+    expect(requestIds[2].requestId).toBe("req_123");
   });
 
   it("should respect limit parameter", async () => {
@@ -63,7 +65,8 @@ describe("list_request_ids tool", () => {
 
     expect(result.success).toBe(true);
     const parsed = JSON.parse(result.output as string);
-    expect(parsed).toHaveLength(2);
+    const requestIds = parsed.requestIds;
+    expect(requestIds).toHaveLength(2);
   });
 
   it("should respect offset parameter", async () => {
@@ -72,9 +75,10 @@ describe("list_request_ids tool", () => {
 
     expect(result.success).toBe(true);
     const parsed = JSON.parse(result.output as string);
-    expect(parsed).toHaveLength(2);
-    expect(parsed[0].requestId).toBe("req_456");
-    expect(parsed[1].requestId).toBe("req_123");
+    const requestIds = parsed.requestIds;
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[0].requestId).toBe("req_456");
+    expect(requestIds[1].requestId).toBe("req_123");
   });
 
   it("should return first and last log time for each requestId", async () => {
@@ -83,9 +87,47 @@ describe("list_request_ids tool", () => {
 
     expect(result.success).toBe(true);
     const parsed = JSON.parse(result.output as string);
-    const req123 = parsed.find((r: any) => r.requestId === "req_123");
+    const requestIds = parsed.requestIds;
+    const req123 = requestIds.find((r: any) => r.requestId === "req_123");
     expect(req123.firstLogTime).toBe("2026-03-04 10:00:00.000");
     expect(req123.lastLogTime).toBe("2026-03-04 10:00:02.000");
+  });
+
+  it("should include firstLog by default", async () => {
+    const tool = createListRequestIdsTool({ logDir: testLogDir });
+    const result = await tool.execute({ filename: "test.log" }, {} as ToolContext);
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output as string);
+    const requestIds = parsed.requestIds;
+    const req123 = requestIds.find((r: any) => r.requestId === "req_123");
+    expect(req123).toBeDefined();
+    expect(req123.firstLog).toBeTruthy();
+    expect(req123.firstLog).toContain("req_123");
+    expect(req123.firstLog).toContain("test 123");
+  });
+
+  it("should include firstLog when includeFirstLog is true", async () => {
+    const tool = createListRequestIdsTool({ logDir: testLogDir });
+    const result = await tool.execute({ filename: "test.log", includeFirstLog: true }, {} as ToolContext);
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output as string);
+    const requestIds = parsed.requestIds;
+    const req123 = requestIds.find((r: any) => r.requestId === "req_123");
+    expect(req123.firstLog).toContain("req_123");
+    expect(req123.firstLog).toContain("test 123");
+  });
+
+  it("should not include firstLog when includeFirstLog is false", async () => {
+    const tool = createListRequestIdsTool({ logDir: testLogDir });
+    const result = await tool.execute({ filename: "test.log", includeFirstLog: false }, {} as ToolContext);
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output as string);
+    const requestIds = parsed.requestIds;
+    const req123 = requestIds.find((r: any) => r.requestId === "req_123");
+    expect(req123.firstLog).toBeUndefined();
   });
 
   it("should return error for non-existent file", async () => {

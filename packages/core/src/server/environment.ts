@@ -705,10 +705,8 @@ export class ServerEnvironment extends BaseEnvironment {
 
       // Import and create trace analysis tools
       const { createListRequestIdsTool } = await import("../tools/trace/list-request-ids.js");
-      const { createGetFirstLogTool } = await import("../tools/trace/get-first-log.js");
       const { createGetLogsForRequestTool } = await import("../tools/trace/get-logs-for-request.js");
       const listRequestIdsTool = createListRequestIdsTool();
-      const getFirstLogTool = createGetFirstLogTool();
       const getLogsForRequestTool = createGetLogsForRequestTool();
 
       // Import and create get_trace tool
@@ -727,7 +725,6 @@ export class ServerEnvironment extends BaseEnvironment {
         lspTool,
         fetchAgentCoreSourceTool,
         listRequestIdsTool,
-        getFirstLogTool,
         getLogsForRequestTool,
         getTraceTool,
         getSpanDetailTool,

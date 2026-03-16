@@ -47,7 +47,7 @@ Server commands, built-in commands (/models, /agent-env, /sessions).
 How to use fetch_agent_core_source tool to read and analyze source code.
 
 ### 6. Troubleshooting (troubleshooting)
-Log locations, debugging tools (list_request_ids, get_first_log_for_request, get_logs_for_request, get_trace), common issues. Use trace_analysis skill for log analysis.
+Log locations, debugging tools (list_request_ids, get_logs_for_request, get_trace), common issues. Use trace_analysis skill for log analysis.
 
 ---
 
@@ -86,17 +86,15 @@ fetch_agent_core_source({
 
 ### trace_analysis skill
 Use the trace_analysis skill for log and trace analysis. It provides:
-- list_request_ids: List all unique requestIds in a log file
-- get_first_log_for_request: Get first log entry for each requestId (contains user query)
+- list_request_ids: List all unique requestIds in a log file (includes first log by default)
 - get_logs_for_request: Get all logs for a specific requestId
 - get_trace: Get trace/call chain for a requestId
 
 ### Workflow
 
-1. Call list_request_ids to get recent requestIds
-2. Call get_first_log_for_request to show first log (with query) for each
-3. Let user select which requestId to investigate
-4. Call get_logs_for_request to get full logs
+1. Call list_request_ids to get recent requestIds (includes first log with user query by default)
+2. Let user select which requestId to investigate
+3. Call get_logs_for_request to get full logs
 
 ---
 
@@ -131,7 +129,7 @@ Or ask questions naturally.
 - 帮我看下日志、帮我查下日志
 - 最近的query日志、请求日志分析
 
-This skill provides structured workflows for log analysis using list_request_ids, get_first_log_for_request, get_logs_for_request, and get_trace tools.`,
+This skill provides structured workflows for log analysis using list_request_ids (includes firstLog by default), get_logs_for_request, and get_trace tools.`,
     content: `---
 name: trace_analysis
 description: 日志和Trace分析调试 Skill。Provides structured workflows for investigating request history and trace data.
@@ -144,19 +142,13 @@ This skill provides log and trace analysis capabilities for debugging.
 ## Available Tools
 
 ### list_request_ids
-List all unique requestIds in a log file, sorted by time (newest first). Returns each requestId with its first and last log timestamp.
+List all unique requestIds in a log file, sorted by time (newest first). Returns each requestId with its first and last log timestamp, and optionally the first log line (which typically contains the user's query).
 
 Parameters:
 - filename: Log filename (e.g., server.log, tui.log)
 - limit: Maximum number of requestIds to return (default: 50)
 - offset: Offset for pagination (use with limit to paginate through requestIds)
-
-### get_first_log_for_request
-Get the first log entry for each specified requestId. The first entry typically contains the user's query.
-
-Parameters:
-- filename: Log filename
-- requestIds: Array of requestIds to get first log for
+- includeFirstLog: Whether to include the first log line for each requestId (default: true)
 
 ### get_logs_for_request
 Get all log entries for a specific requestId. Supports pagination with offset and limit, and time range filtering.
@@ -209,14 +201,17 @@ list_request_ids({
 \`\`\`
 
 ### Step 2: Get Query Context
-Use \`get_first_log_for_request\` to see what the user asked:
+Use \`list_request_ids\` with includeFirstLog (default: true) to see what the user asked:
 
 \`\`\`
-get_first_log_for_request({
+list_request_ids({
   filename: "server.log",
-  requestIds: ["req_xxx"]
+  limit: 20,
+  includeFirstLog: true
 })
 \`\`\`
+
+Each result will include \`firstLog\` field with the user's query.
 
 ### Step 3: Get Call Flow Overview (Recommended First!)
 Use \`get_trace\` to get an overview of the execution flow:
@@ -307,11 +302,10 @@ get_logs_for_request({
 
 ### Problem: LLM response seems wrong
 
-1. \`list_request_ids\` → find requestId for the problematic query
-2. \`get_first_log_for_request\` → confirm what user asked
-3. \`get_trace\` → see if LLM was called, how long it took
-4. \`get_span_detail\` on env.invokeLLM span → see the full prompt and response
-5. \`get_logs_for_request\` → check for any errors in logs
+1. \`list_request_ids\` → find requestId for the problematic query (includes firstLog with user query)
+2. \`get_trace\` → see if LLM was called, how long it took
+3. \`get_span_detail\` on env.invokeLLM span → see the full prompt and response
+4. \`get_logs_for_request\` → check for any errors in logs
 
 ---
 

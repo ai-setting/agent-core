@@ -10,6 +10,7 @@ const ListRequestIdsParamsSchema = z.object({
   filename: z.string().describe("Log filename (e.g., server.log, tui.log, tools.log). Do NOT include path or directory prefix. The file must be in the configured log directory."),
   limit: z.number().optional().default(50).describe("Maximum number of requestIds to return"),
   offset: z.number().optional().default(0).describe("Offset for pagination (use with limit to paginate through requestIds)"),
+  includeFirstLog: z.boolean().optional().default(true).describe("Whether to include the first log line for each requestId"),
 });
 
 export type ListRequestIdsParams = z.infer<typeof ListRequestIdsParamsSchema>;
@@ -18,6 +19,7 @@ export interface RequestIdInfo {
   requestId: string;
   firstLogTime: string;
   lastLogTime: string;
+  firstLog?: string;
 }
 
 export interface ListRequestIdsConfig {
@@ -29,13 +31,15 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
 
   return {
     name: "list_request_ids",
-    description: "List all unique requestIds in a log file, sorted by time (newest first). Returns each requestId with its first and last log timestamp.",
+    description: "List all unique requestIds in a log file, sorted by time (newest first). Returns each requestId with its first and last log timestamp, and optionally the first log line (which typically contains the user's query).",
     parameters: ListRequestIdsParamsSchema,
     async execute(
       args: ListRequestIdsParams,
       _ctx: ToolContext,
     ): Promise<ToolResult> {
-      const { filename, limit, offset } = args;
+      // Parse args to apply defaults
+      const parsedArgs = ListRequestIdsParamsSchema.parse(args);
+      const { filename, limit, offset, includeFirstLog } = parsedArgs;
 
       const logFile = path.join(logDir, filename);
 
@@ -50,7 +54,8 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
         logFile,
         logDir,
         limit,
-        offset
+        offset,
+        includeFirstLog
       });
 
       if (!fs.existsSync(logFile)) {
@@ -66,7 +71,7 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
         const content = fs.readFileSync(logFile, "utf-8");
         const lines = content.split("\n");
         
-        const requestIdMap = new Map<string, { first: string; last: string }>();
+        const requestIdMap = new Map<string, { first: string; last: string; firstLine?: string }>();
         
         const requestIdRegex = /\[requestId=([^\]]+)\]/;
         
@@ -83,7 +88,11 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
           
           if (currentRequestId) {
             if (!requestIdMap.has(currentRequestId)) {
-              requestIdMap.set(currentRequestId, { first: timestamp, last: timestamp });
+              requestIdMap.set(currentRequestId, { 
+                first: timestamp, 
+                last: timestamp,
+                firstLine: includeFirstLog ? line : undefined 
+              });
             } else {
               const existing = requestIdMap.get(currentRequestId)!;
               existing.last = timestamp;
@@ -92,12 +101,16 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
         }
         
         const result: RequestIdInfo[] = [];
-        for (const [requestId, times] of requestIdMap) {
-          result.push({
+        for (const [requestId, data] of requestIdMap) {
+          const info: RequestIdInfo = {
             requestId,
-            firstLogTime: times.first,
-            lastLogTime: times.last,
-          });
+            firstLogTime: data.first,
+            lastLogTime: data.last,
+          };
+          if (includeFirstLog && data.firstLine) {
+            info.firstLog = data.firstLine;
+          }
+          result.push(info);
         }
         
         result.sort((a, b) => {
