@@ -63,6 +63,82 @@ describe("wrapFunction with caller location", () => {
     setLogDirOverride(null as any);
     Logger.setGlobalLevel(null);
   });
+
+  it("should log return value in quit log when recordResult is true", async () => {
+    const { setLogDirOverride, Logger } = await import("./logger.js");
+    setLogDirOverride(tempDir);
+    Logger.setGlobalLevel("debug");
+
+    const { wrapFunction: wf } = await import("./wrap-function.js");
+    const { setSpanCollector, SpanCollector, InMemorySpanStorage } = await import("./span-index.js");
+
+    const storage = new InMemorySpanStorage();
+    const collector = new SpanCollector(storage);
+    setSpanCollector(collector as any);
+
+    function addFunction(a: number, b: number): number {
+      return a + b;
+    }
+
+    // 用 wrapFunction 包装，启用日志和记录返回值
+    const wrappedFn = wf(addFunction, "add.func", { log: true, recordResult: true });
+
+    // 调用函数
+    const result = wrappedFn(2, 3);
+    expect(result).toBe(5);
+
+    // 检查日志文件
+    const logFile = join(tempDir, "server.log");
+    const content = readFileSync(logFile, "utf-8");
+
+    // 验证 quit 日志包含返回值
+    expect(content).toContain("<<< add.func quit");
+    expect(content).toContain("5");
+
+    setSpanCollector(null as any);
+    setLogDirOverride(null as any);
+    Logger.setGlobalLevel(null);
+  });
+
+  it("should NOT log return value in quit log when recordResult is false", async () => {
+    const { setLogDirOverride, Logger } = await import("./logger.js");
+    setLogDirOverride(tempDir);
+    Logger.setGlobalLevel("debug");
+
+    const { wrapFunction: wf } = await import("./wrap-function.js");
+    const { setSpanCollector, SpanCollector, InMemorySpanStorage } = await import("./span-index.js");
+
+    const storage = new InMemorySpanStorage();
+    const collector = new SpanCollector(storage);
+    setSpanCollector(collector as any);
+
+    function multiplyFunction(a: number, b: number): number {
+      return a * b;
+    }
+
+    // 用 wrapFunction 包装，启用日志但不记录返回值
+    const wrappedFn = wf(multiplyFunction, "multiply.func", { log: true, recordResult: false });
+
+    // 调用函数
+    const result = wrappedFn(3, 4);
+    expect(result).toBe(12);
+
+    // 检查日志文件
+    const logFile = join(tempDir, "server.log");
+    const content = readFileSync(logFile, "utf-8");
+
+    // 验证 quit 日志不包含返回值
+    expect(content).toContain("<<< multiply.func quit");
+    // quit 后面不应该有数字返回值
+    const quitLines = content.split("\n").filter(l => l.includes("<<< multiply.func quit"));
+    for (const line of quitLines) {
+      expect(line).not.toMatch(/quit:\s*\d+/);
+    }
+
+    setSpanCollector(null as any);
+    setLogDirOverride(null as any);
+    Logger.setGlobalLevel(null);
+  });
 });
 
 describe("wrapFunction with paramFilter", () => {
