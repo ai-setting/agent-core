@@ -30,11 +30,11 @@ describe("get_trace tool", () => {
     setSpanCollector(null as any);
   });
   
-  it("should return formatted trace in text format", async () => {
+  it("should return formatted trace with spanId", async () => {
     const tool = createGetTraceTool();
     
     const result = await tool.execute(
-      { requestId: testTraceId, format: "text" },
+      { requestId: testTraceId },
       {} as ToolContext
     );
     
@@ -42,20 +42,7 @@ describe("get_trace tool", () => {
     expect(result.output).toContain("agent.run");
     expect(result.output).toContain("tool:read");
     expect(result.output).toContain("tool:write");
-  });
-  
-  it("should return trace in JSON format", async () => {
-    const tool = createGetTraceTool();
-    
-    const result = await tool.execute(
-      { requestId: testTraceId, format: "json" },
-      {} as ToolContext
-    );
-    
-    expect(result.success).toBe(true);
-    const parsed = JSON.parse(result.output as string);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed[0].name).toBe("agent.run");
+    expect(result.output).toContain("spanId:");
   });
   
   it("should return error for non-existent trace", async () => {
@@ -90,11 +77,35 @@ describe("get_trace tool", () => {
     const partialId = testTraceId.slice(0, 10);
     
     const result = await tool.execute(
-      { requestId: partialId, format: "text" },
+      { requestId: partialId },
       {} as ToolContext
     );
     
     expect(result.success).toBe(true);
     expect(result.output).toContain("agent.run");
+  });
+  
+  it("should include total span count", async () => {
+    const tool = createGetTraceTool();
+    
+    const result = await tool.execute(
+      { requestId: testTraceId },
+      {} as ToolContext
+    );
+    
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("Total spans:");
+  });
+  
+  it("should include usage tip", async () => {
+    const tool = createGetTraceTool();
+    
+    const result = await tool.execute(
+      { requestId: testTraceId },
+      {} as ToolContext
+    );
+    
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("get_span_detail");
   });
 });

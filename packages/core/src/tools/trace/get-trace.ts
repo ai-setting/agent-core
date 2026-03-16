@@ -6,8 +6,7 @@ import { getSpanCollector } from "../../utils/span-collector.js";
 const getTraceLogger = createLogger("get-trace", "tools.log", "debug");
 
 const GetTraceParamsSchema = z.object({
-  requestId: z.string().describe("The requestId/traceId to query"),
-  format: z.enum(["text", "json"]).default("text").describe("Output format: text (human readable) or json"),
+  requestId: z.string().describe("The requestId/traceId to query. Can be exact match or partial match."),
 });
 
 export type GetTraceParams = z.infer<typeof GetTraceParamsSchema>;
@@ -15,15 +14,15 @@ export type GetTraceParams = z.infer<typeof GetTraceParamsSchema>;
 export function createGetTraceTool(): ToolInfo {
   return {
     name: "get_trace",
-    description: "Get the trace/call chain for a given requestId. Returns formatted call tree showing the execution flow with duration. Use requestId from log files or previous trace queries.",
+    description: "Get the trace/call chain for a given requestId. Returns formatted call tree showing the execution flow with duration. Use this first to understand the overall flow, then use get_span_detail to dive into specific spans.",
     parameters: GetTraceParamsSchema,
     async execute(
       args: GetTraceParams,
       _ctx: ToolContext,
     ): Promise<ToolResult> {
-      const { requestId, format } = args;
+      const { requestId } = args;
       
-      getTraceLogger.info("[get_trace] Querying trace", { requestId, format });
+      getTraceLogger.info("[get_trace] Querying trace", { requestId });
 
       const collector = getSpanCollector();
       
@@ -45,9 +44,12 @@ export function createGetTraceTool(): ToolInfo {
           t.traceId === requestId || requestId.includes(t.traceId) || t.traceId.includes(requestId)
         );
         
-        if (!matchingTrace) {
+        let traceId = matchingTrace?.traceId;
+        let spans: any[] = [];
+        
+        if (!traceId) {
           // Try to get trace directly by requestId even if not in recent list
-          const spans = collector.getTrace(requestId);
+          spans = collector.getTrace(requestId);
           if (spans.length === 0) {
             getTraceLogger.warn("[get_trace] Trace not found", { requestId });
             return {
@@ -56,42 +58,17 @@ export function createGetTraceTool(): ToolInfo {
               error: `Trace not found for requestId: ${requestId}`,
             };
           }
-          
-          // Found trace, format it
-          if (format === "json") {
-            const json = collector.exportTrace(requestId);
-            getTraceLogger.info("[get_trace] Trace found (json)", { requestId, spanCount: spans.length });
-            return {
-              success: true,
-              output: json,
-            };
-          } else {
-            const text = collector.formatTrace(requestId);
-            getTraceLogger.info("[get_trace] Trace found (text)", { requestId, spanCount: spans.length });
-            return {
-              success: true,
-              output: text,
-            };
-          }
+          traceId = requestId;
         }
         
-        const traceId = matchingTrace.traceId;
+        // Format trace with spanId info
+        const text = collector.formatTraceWithSpanId(traceId);
+        getTraceLogger.info("[get_trace] Trace found", { requestId, traceId });
         
-        if (format === "json") {
-          const json = collector.exportTrace(traceId);
-          getTraceLogger.info("[get_trace] Trace found (json)", { requestId, traceId });
-          return {
-            success: true,
-            output: json,
-          };
-        } else {
-          const text = collector.formatTrace(traceId);
-          getTraceLogger.info("[get_trace] Trace found (text)", { requestId, traceId });
-          return {
-            success: true,
-            output: text,
-          };
-        }
+        return {
+          success: true,
+          output: text,
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         getTraceLogger.error("[get_trace] Error querying trace", { requestId, error: message });

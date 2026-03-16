@@ -107,6 +107,28 @@ export class SpanCollector implements ISpanCollector {
     // Fallback to storage
     return this.storage.findByTraceId(traceId);
   }
+
+  /**
+   * Get a specific span by its spanId
+   */
+  getSpanById(spanId: string): Span | undefined {
+    // First check active spans
+    const activeSpan = this.activeSpans.get(spanId);
+    if (activeSpan) {
+      return activeSpan;
+    }
+    // Fallback to storage - need to search through all traces
+    const traces = this.storage.listTraces(1000);
+    for (const trace of traces) {
+      const spans = this.storage.findByTraceId(trace.traceId);
+      for (const span of spans) {
+        if (span.spanId === spanId) {
+          return span;
+        }
+      }
+    }
+    return undefined;
+  }
   
   private getActiveTrace(traceId: string): Span[] {
     // Get all spans for this trace from activeSpans
@@ -187,6 +209,62 @@ export class SpanCollector implements ISpanCollector {
     for (const span of spans) {
       formatSpan(span);
     }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Format trace with spanId for detailed investigation
+   * Use this to get spanId first, then use get_span_detail for specific span
+   */
+  formatTraceWithSpanId(traceId: string): string {
+    const spans = this.getTrace(traceId);
+    if (spans.length === 0) {
+      return "No trace found";
+    }
+
+    const lines: string[] = [];
+    lines.push(`\nTrace: ${traceId}`);
+    lines.push(`\n💡 Tip: Use get_span_detail with spanId to get detailed info\n`);
+
+    // Build a map of all spans (including children) for lookup
+    const allSpanIds: string[] = [];
+    const collectSpanIds = (span: Span) => {
+      allSpanIds.push(span.spanId);
+      if (span.children) {
+        for (const child of span.children) {
+          collectSpanIds(child);
+        }
+      }
+    };
+    for (const span of spans) {
+      collectSpanIds(span);
+    }
+
+    const formatSpan = (span: Span, indent: string = "") => {
+      const duration = span.endTime ? span.endTime - span.startTime : 0;
+      const statusIcon = span.status === SpanStatus.OK ? "✓" : "✗";
+      const durationStr = `[${duration}ms]`;
+      const spanIdShort = span.spanId.slice(-8); // Show last 8 chars
+
+      let line = `${indent}${statusIcon} ${span.name} ${durationStr} (spanId: ${spanIdShort})`;
+      if (span.error) {
+        line += ` - ${span.error}`;
+      }
+      lines.push(line);
+
+      if (span.children) {
+        for (const child of span.children) {
+          formatSpan(child, indent + "  ");
+        }
+      }
+    };
+
+    for (const span of spans) {
+      formatSpan(span);
+    }
+
+    lines.push(`\n📋 Total spans: ${allSpanIds.length}`);
 
     return lines.join("\n");
   }

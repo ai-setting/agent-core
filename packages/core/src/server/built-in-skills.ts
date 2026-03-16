@@ -168,118 +168,135 @@ Parameters:
 - limit: Maximum lines to return (default: 500)
 
 ### get_trace
-Get trace/call chain for a requestId. Returns formatted call chain visualization.
+Get the trace/call chain for a given requestId. Returns formatted call tree showing the execution flow with duration.
 
 Parameters:
-- requestId: The requestId/traceId to query
-- format: Output format (text or json)
+- requestId: The requestId/traceId to query (can be exact match or partial match)
 
-## Workflows
+Returns:
+- Formatted text with span tree and duration
+- Each span shows: name, duration, spanId (last 8 chars)
+- Shows total span count
+- **Tip: Use the spanId from this output to get detailed info with get_span_detail**
 
-### View Recent Logs
+### get_span_detail
+Get detailed information for a specific span by spanId. Use this after get_trace to dive into specific function calls.
 
-1. Call \`list_request_ids\` with appropriate limit to get recent requestIds
-2. Call \`get_first_log_for_request\` to show first log (with query) for each
-3. Present the results to user and let them select which requestId to investigate
-4. Call \`get_logs_for_request\` to get full logs for the selected requestId
-5. If needed, call \`get_trace\` to get the call chain visualization
+Parameters:
+- spanId: The spanId to get detailed information for (you can get this from get_trace output)
 
-### View Specific Request (Detailed)
+Returns:
+- Complete span info: spanId, traceId, parentSpanId
+- Timing: startTime, endTime, duration
+- Params/Attributes (the input parameters)
+- Result (if recorded - may be truncated for large data)
+- Error (if any)
+- Children list
 
-When user wants to view detailed logs for a specific request, follow this workflow to get complete information without any omissions:
+## 🔍 Recommended Workflow for Log Investigation
 
-#### Step 1: Get Complete Logs
-
-Use \`get_logs_for_request\` to get ALL logs for the requestId:
+### Step 1: Find the Request
+Use \`list_request_ids\` to find the requestId you're interested in:
 
 \`\`\`
-get_logs_for_request({
+list_request_ids({
   filename: "server.log",
-  requestId: "<target_requestId>",
-  offset: 0,
-  limit: 500  // Large enough to get all logs
+  limit: 20
 })
 \`\`\`
 
-**Important**:
-- First try with a smaller limit (e.g., 100) to estimate total lines
-- Adjust limit until you get all logs (check if result is truncated)
-- Note the total line count range
-
-#### Step 2: Get Complete Trace
-
-Use \`get_trace\` to get the full call chain:
-
-\`\`\`
-get_trace({
-  requestId: "<target_requestId>",
-  format: "text"  // or "json" for programmatic processing
-})
-\`\`\`
-
-#### Step 3: Get User Query
-
-Use \`get_first_log_for_request\` to get the original user question:
+### Step 2: Get Query Context
+Use \`get_first_log_for_request\` to see what the user asked:
 
 \`\`\`
 get_first_log_for_request({
   filename: "server.log",
-  requestIds: ["<target_requestId>"]
+  requestIds: ["req_xxx"]
 })
 \`\`\`
 
-#### Step 4: Integrate and Output
-
-Combine all three parts into a unified report:
+### Step 3: Get Call Flow Overview (Recommended First!)
+Use \`get_trace\` to get an overview of the execution flow:
 
 \`\`\`
-================================================================================
-                    Request Log Detail Report
-================================================================================
-RequestId: xxx
---------------------------------------------------------------------------------
-【User Query】
-<first log content>
-
-【Execution Trace】
-<complete call chain from get_trace>
-
-【Detailed Logs】
-<complete logs in chronological order>
-
-【Key Information Summary】
-- Total Duration: xxx
-- Tool Calls: xxx
-- LLM Invocations: xxx
-- Errors/Warnings: xxx
-================================================================================
+get_trace({
+  requestId: "req_xxx"
+})
 \`\`\`
 
-#### Key Principles
+This shows:
+- The complete call chain tree
+- Duration for each span
+- **spanId for each call** (shown in parentheses)
+- Total span count
 
-1. **No Omission**: Ensure the offset-limit range covers ALL log lines
-2. **Traceable**: Every span in trace should have corresponding entry in detailed logs
-3. **Structured**: Output should have clear sections and indexing
+Example output:
+\`\`\`
+Trace: req_xxx
+💡 Tip: Use get_span_detail with spanId to get detailed info
+
+✓ session.get [0ms] (spanId: span_xxx1)
+✓ env.handle_query [1784ms] (spanId: span_xxx2)
+  ✓ agent.run [1774ms] (spanId: span_xxx3)
+    ✓ env.invokeLLM [1761ms] (spanId: span_xxx4)
+
+📋 Total spans: 12
+\`\`\`
+
+### Step 4: Get Detailed Span Info
+Use \`get_span_detail\` with a spanId from Step 3 to get detailed info:
+
+\`\`\`
+get_span_detail({
+  spanId: "span_xxx4"
+})
+\`\`\`
+
+This shows:
+- Full params/attributes (input data)
+- Result (output data, if recorded)
+- Error details (if any)
+- Timing information
+
+### Step 5: Deep Dive with Logs
+If you need more context, use \`get_logs_for_request\` to see raw logs:
+
+\`\`\`
+get_logs_for_request({
+  filename: "server.log",
+  requestId: "req_xxx",
+  offset: 0,
+  limit: 100
+})
+\`\`\`
 
 ---
 
-### Browse Historical Logs (Large Time Range)
+## 💡 Tips for Effective Debugging
 
-When user wants to view logs from a specific time period or browse through older requests:
+1. **Always start with get_trace** - It gives you a quick overview of the call flow without overwhelming details
 
-1. Use \`list_request_ids\` with \`offset\` and \`limit\` for pagination:
-   - First call: \`list_request_ids({ filename: "server.log", limit: 20, offset: 0 })\`
-   - Next page: \`list_request_ids({ filename: "server.log", limit: 20, offset: 20 })\`
-   - And so on: offset: 40, 60, 80... to browse through older requests
+2. **Use spanId to drill down** - Instead of reading all logs, use get_span_detail on specific spans
 
-2. After finding interesting requestIds, use \`get_first_log_for_request\` to see what each request was about
+3. **Focus on slow spans** - Look for spans with long duration in get_trace output
 
-3. Then use \`get_logs_for_request\` with \`offset\` and \`limit\` to paginate through the logs for a specific requestId
+4. **Check for errors** - Look for ✗ status in trace, then use get_span_detail to see error messages
 
-**Tips for Large Log Files:**
-- Use smaller \`limit\` values (e.g., 10-20) for faster responses
-- Use \`offset\` to step through requestIds sequentially
-- Check the \`firstLogTime\` and \`lastLogTime\` in the response to identify the time range you're interested in
+5. **Understand the flow**: 
+   - High-level: list_request_ids → get_trace → get_span_detail
+   - Deep dive: add get_logs_for_request when needed
+
+---
+
+## Example Investigation
+
+### Problem: LLM response seems wrong
+
+1. \`list_request_ids\` → find requestId for the problematic query
+2. \`get_first_log_for_request\` → confirm what user asked
+3. \`get_trace\` → see if LLM was called, how long it took
+4. \`get_span_detail\` on env.invokeLLM span → see the full prompt and response
+5. \`get_logs_for_request\` → check for any errors in logs
 
 ---
 

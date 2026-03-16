@@ -715,6 +715,10 @@ export class ServerEnvironment extends BaseEnvironment {
       const { createGetTraceTool } = await import("../tools/trace/get-trace.js");
       const getTraceTool = createGetTraceTool();
 
+      // Import and create get_span_detail tool
+      const { createGetSpanDetailTool } = await import("../tools/trace/get-span-detail.js");
+      const getSpanDetailTool = createGetSpanDetailTool();
+
       // All tools are external - LLM capabilities are native to Environment
       const allTools = [
         ...osTools,
@@ -726,6 +730,7 @@ export class ServerEnvironment extends BaseEnvironment {
         getFirstLogTool,
         getLogsForRequestTool,
         getTraceTool,
+        getSpanDetailTool,
       ];
 
       for (const tool of allTools) {
