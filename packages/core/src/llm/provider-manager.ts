@@ -10,6 +10,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { loadProvidersConfig, type ProviderConfig } from "../config/sources/providers.js";
+import { Auth_getProvider } from "../config/auth.js";
 import type { 
   ProviderMetadata, 
   ProviderInstance, 
@@ -305,6 +306,78 @@ class ProviderManager {
       defaultModel: config.defaultModel || models[0]?.id || "",
       sdkType,
     };
+  }
+
+  /**
+   * Dynamically add or reload a single provider
+   * This is called after user sets API key via /connect command
+   * @param providerId - The provider ID to add/reload
+   * @returns true if provider was successfully added, false otherwise
+   */
+  async addProvider(providerId: string): Promise<boolean> {
+    providerLogger.info(`[ProviderManager] Adding provider: ${providerId}`);
+
+    try {
+      // 1. Reload providers config from file
+      const config = await loadProvidersConfig();
+      if (!config?.providers) {
+        providerLogger.warn(`[ProviderManager] No providers found in providers.jsonc`);
+        return false;
+      }
+
+      const providerConfig = config.providers[providerId];
+      if (!providerConfig) {
+        providerLogger.warn(`[ProviderManager] Provider ${providerId} not found in providers.jsonc`);
+        return false;
+      }
+
+      // 2. Get API key from auth.json (need to reload to get latest)
+      const auth = await Auth_getProvider(providerId);
+      let apiKey = auth?.key;
+
+      // If not in auth.json, check if providerConfig has direct API key
+      if (!apiKey && providerConfig.apiKey) {
+        // Try to resolve environment variable
+        apiKey = this.resolveEnvVar(providerConfig.apiKey);
+      }
+
+      if (!apiKey) {
+        providerLogger.warn(`[ProviderManager] No API key found for provider ${providerId}`);
+        return false;
+      }
+
+      // 3. Determine SDK type
+      const sdkType = providerConfig.sdkType || this.inferSDKType(providerId, providerConfig.baseURL);
+
+      // 4. Create AI SDK provider instance
+      const sdkProvider = this.createSDKProvider(sdkType, {
+        ...providerConfig,
+        apiKey,
+      });
+
+      if (!sdkProvider) {
+        providerLogger.error(`[ProviderManager] Failed to create SDK provider for ${providerId}`);
+        return false;
+      }
+
+      // 5. Get baseURL from auth config if available (user may have overridden)
+      const baseURL = auth?.baseURL || providerConfig.baseURL;
+
+      // 6. Create metadata
+      const metadata = this.createMetadata(providerId, { ...providerConfig, baseURL }, apiKey, sdkType);
+
+      // 7. Store provider instance (overwrite if exists)
+      this.providers.set(providerId, {
+        metadata,
+        sdk: sdkProvider,
+      });
+
+      providerLogger.info(`[ProviderManager] Provider ${providerId} added/updated successfully with ${metadata.models.length} models`);
+      return true;
+    } catch (error) {
+      providerLogger.error(`[ProviderManager] Failed to add provider ${providerId}:`, error);
+      return false;
+    }
   }
 
   /**

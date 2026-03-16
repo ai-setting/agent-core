@@ -68,7 +68,10 @@ export async function initWithEnvOverrides(): Promise<void> {
   // 1. 注册全局配置源（优先级 0）
   configRegistry.register(globalSource);
 
-  // 2. 注册项目级配置源（优先级 5，覆盖全局）
+  // 2. 注册 providers 配置源（加载 providers.jsonc）
+  configRegistry.register(providersSource);
+
+  // 3. 注册项目级配置源（优先级 5，覆盖全局）
   if (await pathExists(ConfigPaths.projectTongWorkConfig)) {
     configRegistry.register(createProjectSource());
   }

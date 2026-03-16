@@ -12,6 +12,7 @@ import {
   Auth_setProvider,
   Auth_removeProvider,
   Auth_getProvider,
+  Auth_reload,
 } from "../../../config/auth.js";
 import {
   Providers_load,
@@ -19,6 +20,7 @@ import {
   Providers_getAll,
   type ProviderInfo,
 } from "../../../config/providers.js";
+import { providerManager } from "../../../llm/provider-manager.js";
 import type { Config } from "../../../config/types.js";
 
 interface ConnectAction {
@@ -149,11 +151,27 @@ export const connectCommand: Command = {
           metadata: existing?.metadata || { displayName: providerInfo?.name || action.providerId },
         });
 
-        return {
-          success: true,
-          message: `API key set for provider`,
-          data: { providerId: action.providerId },
-        };
+        // Reload auth config to get latest API key
+        await Auth_reload();
+
+        // Dynamically add/reload the provider in ProviderManager
+        const added = await providerManager.addProvider(action.providerId);
+
+        if (added) {
+          return {
+            success: true,
+            message: `API key set for provider ${action.providerId} and provider loaded`,
+            data: { providerId: action.providerId, loaded: true },
+          };
+        } else {
+          // Provider was saved but couldn't be loaded (e.g., not in providers.jsonc)
+          // This is OK for custom providers that don't have a config yet
+          return {
+            success: true,
+            message: `API key set for provider ${action.providerId} (provider not loaded - may need to add provider config first)`,
+            data: { providerId: action.providerId, loaded: false },
+          };
+        }
       }
 
       default:

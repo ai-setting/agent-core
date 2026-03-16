@@ -13,6 +13,7 @@ import { connectCommand } from "../built-in/connect.js";
 import type { CommandContext } from "../types.js";
 import * as AuthModule from "../../../config/auth.js";
 import * as ProvidersModule from "../../../config/providers.js";
+import { providerManager } from "../../../llm/provider-manager.js";
 
 describe("Connect Command", () => {
   const mockContext: CommandContext = {
@@ -29,9 +30,11 @@ describe("Connect Command", () => {
   let authSetSpy: any;
   let authRemoveSpy: any;
   let authGetProviderSpy: any;
+  let authReloadSpy: any;
   let providersLoadSpy: any;
   let providersSaveSpy: any;
   let providersGetAllSpy: any;
+  let providerManagerAddProviderSpy: any;
 
   beforeEach(() => {
     // Reset mock storage
@@ -67,6 +70,14 @@ describe("Connect Command", () => {
       }));
       return [...builtIn, ...custom];
     });
+
+    // Mock ProviderManager.addProvider
+    providerManagerAddProviderSpy = spyOn(providerManager, "addProvider").mockImplementation(async () => true);
+
+    // Mock Auth_reload
+    authReloadSpy = spyOn(AuthModule, "Auth_reload").mockImplementation(async () => {
+      return mockAuthConfig;
+    });
   });
 
   afterEach(() => {
@@ -75,9 +86,11 @@ describe("Connect Command", () => {
     authSetSpy?.mockRestore();
     authRemoveSpy?.mockRestore();
     authGetProviderSpy?.mockRestore();
+    authReloadSpy?.mockRestore();
     providersLoadSpy?.mockRestore();
     providersSaveSpy?.mockRestore();
     providersGetAllSpy?.mockRestore();
+    providerManagerAddProviderSpy?.mockRestore();
   });
 
   describe("list action", () => {
@@ -231,6 +244,42 @@ describe("Connect Command", () => {
       // 验证 API key 已设置
       expect(authSetSpy).toHaveBeenCalled();
       expect(mockAuthConfig["test-provider"].key).toBe("new-api-key-123");
+      
+      // 验证 Auth_reload 被调用
+      expect(authReloadSpy).toHaveBeenCalled();
+      
+      // 验证 providerManager.addProvider 被调用
+      expect(providerManagerAddProviderSpy).toHaveBeenCalledWith("test-provider");
+      
+      // 验证返回结果包含 loaded 状态
+      expect((result.data as any).loaded).toBe(true);
+    });
+
+    it("should call providerManager.addProvider and return loaded status", async () => {
+      mockProvidersConfig["zhipuai"] = {
+        id: "zhipuai",
+        name: "ZhipuAI",
+        baseURL: "https://open.bigmodel.cn/api/paas/v4",
+      };
+
+      // Mock addProvider to return false (provider not loaded)
+      providerManagerAddProviderSpy.mockImplementation(async () => false);
+
+      const result = await connectCommand.execute(
+        mockContext,
+        JSON.stringify({
+          type: "set_key",
+          providerId: "zhipuai",
+          apiKey: "test-key",
+        })
+      );
+
+      expect(result.success).toBe(true);
+      expect(providerManagerAddProviderSpy).toHaveBeenCalledWith("zhipuai");
+      
+      // 即使 provider 没加载，也应该返回成功，但 loaded 为 false
+      expect((result.data as any).loaded).toBe(false);
+      expect(result.message).toContain("may need to add provider config");
     });
 
     it("should preserve baseURL from provider config when setting API key", async () => {
