@@ -246,8 +246,12 @@ export class SpanCollector implements ISpanCollector {
       const statusIcon = span.status === SpanStatus.OK ? "✓" : "✗";
       const durationStr = `[${duration}ms]`;
       const spanIdShort = span.spanId.slice(-8); // Show last 8 chars
+      
+      // Format timestamp to readable time
+      const startTimeStr = new Date(span.startTime).toISOString().slice(11, 23); // HH:MM:SS.mmm
+      const endTimeStr = span.endTime ? new Date(span.endTime).toISOString().slice(11, 23) : "ongoing";
 
-      let line = `${indent}${statusIcon} ${span.name} ${durationStr} (spanId: ${spanIdShort})`;
+      let line = `${indent}${statusIcon} ${span.name} ${durationStr} ${startTimeStr}→${endTimeStr} (spanId: ${spanIdShort})`;
       if (span.error) {
         line += ` - ${span.error}`;
       }
@@ -264,6 +268,12 @@ export class SpanCollector implements ISpanCollector {
       formatSpan(span);
     }
 
+    // Add time range info at the top
+    const firstSpan = spans[0];
+    const lastSpan = spans[spans.length - 1];
+    const overallStart = new Date(firstSpan.startTime).toISOString().slice(11, 23);
+    const overallEnd = lastSpan.endTime ? new Date(lastSpan.endTime).toISOString().slice(11, 23) : "ongoing";
+    lines.unshift(`📅 Time Range: ${overallStart} → ${overallEnd}`);
     lines.push(`\n📋 Total spans: ${allSpanIds.length}`);
 
     return lines.join("\n");

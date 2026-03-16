@@ -159,24 +159,27 @@ Parameters:
 - requestIds: Array of requestIds to get first log for
 
 ### get_logs_for_request
-Get all log entries for a specific requestId. Supports pagination with offset and limit.
+Get all log entries for a specific requestId. Supports pagination with offset and limit, and time range filtering.
 
 Parameters:
 - filename: Log filename
 - requestId: The requestId to get all logs for
 - offset: Line offset to start from (default: 0)
 - limit: Maximum lines to return (default: 500)
+- startTime: Filter logs from this time (optional). Format: '2026-03-16 11:43:59' or '11:43:59'
+- endTime: Filter logs until this time (optional). Format: '2026-03-16 11:44:00' or '11:44:00'
 
 ### get_trace
-Get the trace/call chain for a given requestId. Returns formatted call tree showing the execution flow with duration.
+Get the trace/call chain for a given requestId. Returns formatted call tree showing the execution flow with duration and timing info.
 
 Parameters:
 - requestId: The requestId/traceId to query (can be exact match or partial match)
 
 Returns:
-- Formatted text with span tree and duration
-- Each span shows: name, duration, spanId (last 8 chars)
-- Shows total span count
+- Formatted text with span tree, duration, and timestamps
+- Each span shows: name, duration, startTime→endTime, spanId (last 8 chars)
+- Shows overall time range at the top
+- Total span count
 - **Tip: Use the spanId from this output to get detailed info with get_span_detail**
 
 ### get_span_detail
@@ -282,9 +285,21 @@ get_logs_for_request({
 
 4. **Check for errors** - Look for ✗ status in trace, then use get_span_detail to see error messages
 
-5. **Understand the flow**: 
+5. **Use time range to filter logs** - When logs are too long, use get_trace to find the time range, then use startTime/endTime in get_logs_for_request to filter:
+   \`\`\`
+   get_logs_for_request({
+     filename: "server.log",
+     requestId: "req_xxx",
+     startTime: "11:43:59",  // or "2026-03-16 11:43:59"
+     endTime: "11:44:00",    // or "2026-03-16 11:44:00"
+     limit: 100
+   })
+   \`\`\`
+   This avoids getting truncated results due to too much data!
+
+6. **Understand the flow**: 
    - High-level: list_request_ids → get_trace → get_span_detail
-   - Deep dive: add get_logs_for_request when needed
+   - Deep dive: add get_logs_for_request when needed (use time range to limit!)
 
 ---
 

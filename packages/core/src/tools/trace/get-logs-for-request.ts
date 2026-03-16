@@ -11,6 +11,8 @@ const GetLogsForRequestParamsSchema = z.object({
   requestId: z.string().describe("The requestId to get all logs for"),
   offset: z.number().optional().default(0).describe("Line offset to start from"),
   limit: z.number().optional().default(500).describe("Maximum lines to return"),
+  startTime: z.string().optional().describe("Filter logs from this time (ISO format like '2026-03-16 11:43:59' or '11:43:59'). Only logs after this time will be returned."),
+  endTime: z.string().optional().describe("Filter logs until this time (ISO format like '2026-03-16 11:44:00' or '11:44:00'). Only logs before this time will be returned."),
 });
 
 export type GetLogsForRequestParams = z.infer<typeof GetLogsForRequestParamsSchema>;
@@ -24,13 +26,13 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
 
   return {
     name: "get_logs_for_request",
-    description: "Get all log entries for a specific requestId. Supports pagination with offset and limit parameters.",
+    description: "Get all log entries for a specific requestId. Supports pagination with offset and limit. Also supports time range filtering using startTime and endTime to avoid retrieving too much data.",
     parameters: GetLogsForRequestParamsSchema,
     async execute(
       args: GetLogsForRequestParams,
       _ctx: ToolContext,
     ): Promise<ToolResult> {
-      const { filename, requestId, offset, limit } = args;
+      const { filename, requestId, offset, limit, startTime, endTime } = args;
       
       const logFile = path.join(logDir, filename);
       
@@ -39,7 +41,9 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
         logFile, 
         requestId,
         offset,
-        limit
+        limit,
+        startTime,
+        endTime
       });
 
       if (!fs.existsSync(logFile)) {
@@ -57,10 +61,42 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
         
         const requestIdRegex = /\[requestId=([^\]]+)\]/;
         
+        // Parse time filter
+        let startTimestamp: number | undefined;
+        let endTimestamp: number | undefined;
+        
+        if (startTime) {
+          // Support both full date and time-only format
+          const today = new Date().toISOString().slice(0, 10);
+          const timeStr = startTime.includes(" ") ? startTime : `${today} ${startTime}`;
+          startTimestamp = new Date(timeStr).getTime();
+        }
+        
+        if (endTime) {
+          const today = new Date().toISOString().slice(0, 10);
+          const timeStr = endTime.includes(" ") ? endTime : `${today} ${endTime}`;
+          endTimestamp = new Date(timeStr).getTime();
+        }
+        
         const filteredLines = lines.filter(line => {
           if (!line.trim()) return false;
+          
+          // Filter by requestId
           const match = line.match(requestIdRegex);
-          return match && match[1] === requestId;
+          if (!match || match[1] !== requestId) return false;
+          
+          // Filter by time range if specified
+          if (startTimestamp !== undefined || endTimestamp !== undefined) {
+            // Extract timestamp from log line (format: "2026-03-16 11:43:59.388")
+            const timeMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+              const lineTimestamp = new Date(timeMatch[1]).getTime();
+              if (startTimestamp !== undefined && lineTimestamp < startTimestamp) return false;
+              if (endTimestamp !== undefined && lineTimestamp > endTimestamp) return false;
+            }
+          }
+          
+          return true;
         });
         
         // Filtered lines debug // 已精简
@@ -71,15 +107,29 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
         
         const output = limitedLines.join("\n");
         
+        // Build info message
+        let infoMsg = "";
+        if (startTimestamp || endTimestamp) {
+          const timeInfo = [
+            startTime ? `from ${startTime}` : "",
+            endTime ? `until ${endTime}` : ""
+          ].filter(Boolean).join(" ");
+          infoMsg = `\n\n📅 Time filter: ${timeInfo}`;
+        }
+        
         getLogsForRequestLogger.info("[get_logs_for_request] Complete", { 
           requestId,
           totalMatches: filteredLines.length,
           returnedLines: limitedLines.length
         });
 
+        const resultOutput = output 
+          ? output + infoMsg 
+          : "No matching lines found" + infoMsg;
+          
         return {
           success: true,
-          output: output || "No matching lines found",
+          output: resultOutput,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
