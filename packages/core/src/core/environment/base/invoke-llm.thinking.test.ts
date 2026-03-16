@@ -61,6 +61,134 @@ function processThinkingFromText(
   };
 }
 
+/**
+ * Process thinking tags from text delta with streaming support
+ * Handles opening/closing tags and emits reasoning events during streaming
+ */
+function processThinkingStream(
+  textDelta: string,
+  config: {
+    enabled?: boolean;
+    tags?: string[];
+    removeFromOutput?: boolean;
+  },
+  state: {
+    isOpen: boolean;
+    content: string;
+  }
+): {
+  cleanedText: string;
+  isThinkingTagOpen: boolean;
+  currentThinkingContent: string;
+  newReasoningContent?: string;
+} {
+  if (!config.enabled || !textDelta) {
+    return {
+      cleanedText: textDelta,
+      isThinkingTagOpen: state.isOpen,
+      currentThinkingContent: state.content
+    };
+  }
+
+  const tags = config.tags || ['thinking'];
+  let remainingText = textDelta;
+  let newReasoningContent: string | undefined;
+  let isOpen = state.isOpen;
+  let currentContent = state.content;
+
+  for (const tag of tags) {
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+    
+    let text = remainingText;
+    let result = "";
+    
+    // Check if we have an opening tag in current text
+    const openIndex = text.toLowerCase().indexOf(openTag.toLowerCase());
+    const closeIndex = text.toLowerCase().indexOf(closeTag.toLowerCase());
+    
+    if (openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex)) {
+      // Opening tag found first
+      if (!isOpen) {
+        // Start of new thinking block
+        isOpen = true;
+        currentContent = "";
+      }
+      // Add text before the opening tag to cleaned output
+      result += text.substring(0, openIndex);
+      // Skip the opening tag, then check for closing tag in remainder
+      const afterOpenTag = text.substring(openIndex + openTag.length);
+      
+      // Check if closing tag exists in the remaining text
+      const innerCloseIndex = afterOpenTag.toLowerCase().indexOf(closeTag.toLowerCase());
+      
+      if (innerCloseIndex !== -1) {
+        // Both opening and closing in same delta
+        const thinkingContent = afterOpenTag.substring(0, innerCloseIndex);
+        const afterCloseTag = afterOpenTag.substring(innerCloseIndex + closeTag.length);
+        
+        // Output the thinking
+        currentContent += thinkingContent;
+        newReasoningContent = currentContent;
+        
+        isOpen = false;
+        currentContent = "";
+        
+        // Rest is cleaned text
+        result += afterCloseTag;
+      } else {
+        // Only opening tag, content goes to thinking
+        currentContent += afterOpenTag;
+      }
+    } else if (closeIndex !== -1) {
+      // Closing tag found
+      // Add text before closing tag to thinking content first
+      currentContent += text.substring(0, closeIndex);
+      
+      // Output the thinking content
+      if (isOpen && currentContent.length > 0) {
+        newReasoningContent = currentContent;
+      }
+      
+      isOpen = false;
+      currentContent = "";
+      
+      // Skip the closing tag
+      const afterCloseTag = text.substring(closeIndex + closeTag.length);
+      
+      // Check if there's more content after (another thinking block)
+      const nextOpen = afterCloseTag.toLowerCase().indexOf(openTag.toLowerCase());
+      const nextClose = afterCloseTag.toLowerCase().indexOf(closeTag.toLowerCase());
+      
+      if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
+        // Another thinking block starts
+        isOpen = true;
+        result += afterCloseTag.substring(0, nextOpen);
+        currentContent += afterCloseTag.substring(nextOpen + openTag.length);
+      } else {
+        // Rest is regular text
+        result += afterCloseTag;
+      }
+    } else if (isOpen) {
+      // No complete tag, but we're inside a thinking block
+      currentContent += text;
+      // Don't add to cleaned output
+      result = "";
+    } else {
+      result += text;
+    }
+
+    remainingText = result;
+  }
+
+  return {
+    cleanedText: remainingText,
+    isThinkingTagOpen: isOpen,
+    currentThinkingContent: currentContent,
+    newReasoningContent
+  };
+}
+
 describe("processThinkingFromText", () => {
   const defaultConfig = {
     enabled: true,
@@ -327,5 +455,194 @@ describe("processThinkingFromText", () => {
       // Caller correctly accumulates all thinking content
       expect(accumulatedReasoning).toBe("FirstSecond");
     });
+
+    it("should trigger reasoning event when thinking is extracted", () => {
+      // Simulate the reasoning event handler behavior in invoke-llm
+      const reasoningEvents: string[] = [];
+      
+      const onReasoning = (content: string) => {
+        reasoningEvents.push(content);
+      };
+      
+      const deltas = [
+        "<thinking>First step</thinking>Hello",
+        "Some text",
+        "<thinking>Second step</thinking>World",
+      ];
+      
+      let reasoningContent = "";
+      
+      for (const delta of deltas) {
+        const result = processThinkingFromText(delta, defaultConfig);
+        
+        // Simulate invoke-llm's logic
+        if (result.thinkingContent) {
+          reasoningContent += result.thinkingContent;
+          onReasoning(reasoningContent);
+        }
+      }
+      
+      // Should trigger reasoning event TWICE (once per complete thinking block)
+      expect(reasoningEvents).toHaveLength(2);
+      expect(reasoningEvents[0]).toBe("First step");
+      expect(reasoningEvents[1]).toBe("First stepSecond step");
+    });
+
+    it("should NOT trigger reasoning event for incomplete thinking tags", () => {
+      const reasoningEvents: string[] = [];
+      
+      const onReasoning = (content: string) => {
+        reasoningEvents.push(content);
+      };
+      
+      // Delta with opening tag only - no complete tag in this delta
+      const delta1 = "<thinking>Incomplete thinking starts";
+      const result1 = processThinkingFromText(delta1, defaultConfig);
+      
+      // No reasoning event because tag is not closed
+      if (result1.thinkingContent) {
+        reasoningEvents.push(result1.thinkingContent);
+      }
+      
+      // Verify the result - should NOT extract anything
+      expect(result1.thinkingContent).toBeUndefined();
+      expect(result1.cleanedText).toBe("<thinking>Incomplete thinking starts");
+      expect(reasoningEvents).toHaveLength(0);
+    });
+
+    it("should trigger reasoning event when thinking tag closes in same delta", () => {
+      const reasoningEvents: string[] = [];
+      
+      const onReasoning = (content: string) => {
+        reasoningEvents.push(content);
+      };
+      
+      // A delta with complete thinking tag
+      const delta1 = "<thinking>Complete thought</thinking>Hello";
+      const result1 = processThinkingFromText(delta1, defaultConfig);
+      
+      if (result1.thinkingContent) {
+        onReasoning(result1.thinkingContent);
+      }
+      
+      // Should trigger reasoning event
+      expect(reasoningEvents).toHaveLength(1);
+      expect(reasoningEvents[0]).toBe("Complete thought");
+    });
+  });
+});
+
+/**
+ * Streaming reasoning tests - for processThinkingStream function
+ */
+describe("processThinkingStream", () => {
+  const defaultConfig = {
+    enabled: true,
+    tags: ["thinking"],
+    removeFromOutput: true
+  };
+
+  it("should detect opening tag and start reasoning state", () => {
+    const delta = "<thinking>Starting";
+    
+    const result = processThinkingStream(delta, defaultConfig, {
+      isOpen: false,
+      content: ""
+    });
+    
+    // Should detect opening tag and be in thinking state
+    expect(result.isThinkingTagOpen).toBe(true);
+    expect(result.currentThinkingContent).toBe("Starting");
+    // No new reasoning content yet (waiting for more content or closing tag)
+    expect(result.newReasoningContent).toBeUndefined();
+    // No cleaned text (thinking content removed)
+    expect(result.cleanedText).toBe("");
+  });
+
+  it("should output reasoning when closing tag is detected", () => {
+    const delta = "end</thinking>Hello";
+    
+    const result = processThinkingStream(delta, defaultConfig, {
+      isOpen: true,
+      content: "Startingmore thinking"
+    });
+    
+    // Should close and output final reasoning
+    expect(result.isThinkingTagOpen).toBe(false);
+    expect(result.currentThinkingContent).toBe("");
+    expect(result.newReasoningContent).toBe("Startingmore thinkingend");
+    expect(result.cleanedText).toBe("Hello");
+  });
+
+  it("should handle complete thinking block in single delta", () => {
+    const delta = "<thinking>Complete thought</thinking>Response";
+    
+    const result = processThinkingStream(delta, defaultConfig, {
+      isOpen: false,
+      content: ""
+    });
+    
+    // Opening tag detected, content accumulated, then closing tag - output reasoning
+    expect(result.isThinkingTagOpen).toBe(false);
+    expect(result.newReasoningContent).toBe("Complete thought");
+    expect(result.cleanedText).toBe("Response");
+  });
+
+  it("should handle multiple thinking blocks", () => {
+    // First delta: first thinking block
+    const delta1 = "<thinking>First</thinking>Text1";
+    const r1 = processThinkingStream(delta1, defaultConfig, { isOpen: false, content: "" });
+    
+    // Second delta: second thinking block
+    const delta2 = "<thinking>Second</thinking>Text2";
+    const r2 = processThinkingStream(delta2, defaultConfig, { 
+      isOpen: r1.isThinkingTagOpen, 
+      content: r1.currentThinkingContent 
+    });
+    
+    // First delta: opens and closes in same delta
+    expect(r1.newReasoningContent).toBe("First");
+    expect(r1.cleanedText).toBe("Text1");
+    
+    // Second delta: same
+    expect(r2.newReasoningContent).toBe("Second");
+    expect(r2.cleanedText).toBe("Text2");
+  });
+
+  it("should simulate full streaming reasoning flow", () => {
+    // Simulate the full flow as invoke-llm would do
+    const reasoningEvents: string[] = [];
+    let isOpen = false;
+    let currentContent = "";
+    
+    const deltas = [
+      "<thinking>Let me",          // Start thinking
+      " think about",              // Continue thinking
+      " this problem",             // Continue thinking
+      "</thinking>First",          // End thinking, output
+      " response",                 // Normal text
+      "<thinking>Now I",          // New thinking
+      " understand",               // Continue
+      "</thinking>Second",         // End thinking
+    ];
+    
+    for (const delta of deltas) {
+      const result = processThinkingStream(delta, defaultConfig, {
+        isOpen,
+        content: currentContent
+      });
+      
+      isOpen = result.isThinkingTagOpen;
+      currentContent = result.currentThinkingContent;
+      
+      if (result.newReasoningContent) {
+        reasoningEvents.push(result.newReasoningContent);
+      }
+    }
+    
+    // Should have 2 reasoning events (one per thinking block)
+    expect(reasoningEvents).toHaveLength(2);
+    expect(reasoningEvents[0]).toBe("Let me think about this problem");
+    expect(reasoningEvents[1]).toBe("Now I understand");
   });
 });

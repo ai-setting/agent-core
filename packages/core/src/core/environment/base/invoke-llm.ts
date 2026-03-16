@@ -379,6 +379,10 @@ export async function invokeLLM(
     let reasoningContent = "";
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
     let usageInfo: UsageInfo | undefined;
+    
+    // State for streaming reasoning from text delta
+    let isThinkingTagOpen = false;
+    let currentThinkingContent = "";
 
     invokeLLMLogger.info("[invokeLLM] Starting to process stream");
 
@@ -387,10 +391,46 @@ export async function invokeLLM(
       switch (streamPart.type) {
         case "text-delta":
           const textDelta = streamPart.text as string;
-          fullContent += textDelta;
-          // Text delta debug // 已精简
-          if (eventHandler?.onText) {
-            eventHandler.onText(fullContent, textDelta);
+          
+          // Check if model has thinkingInText configuration
+          const thinkingConfig = modelMetadata?.capabilities?.thinkingInText;
+          
+          if (thinkingConfig?.enabled) {
+            // Process thinking tags for streaming reasoning
+            const result = processThinkingStream(
+              textDelta,
+              thinkingConfig,
+              {
+                isOpen: isThinkingTagOpen,
+                content: currentThinkingContent
+              }
+            );
+            
+            // Update state
+            isThinkingTagOpen = result.isThinkingTagOpen;
+            currentThinkingContent = result.currentThinkingContent;
+            
+            // Update fullContent with cleaned text (without thinking tags)
+            fullContent += result.cleanedText;
+            
+            // Trigger reasoning events for content changes
+            if (result.newReasoningContent) {
+              reasoningContent += result.newReasoningContent;
+              if (eventHandler?.onReasoning) {
+                eventHandler.onReasoning(reasoningContent);
+              }
+            }
+            
+            // Also trigger text event with cleaned content
+            if (eventHandler?.onText) {
+              eventHandler.onText(fullContent, result.cleanedText);
+            }
+          } else {
+            // Original handling
+            fullContent += textDelta;
+            if (eventHandler?.onText) {
+              eventHandler.onText(fullContent, textDelta);
+            }
           }
           break;
 
@@ -822,5 +862,129 @@ function processThinkingFromText(
   return {
     cleanedText: remainingText,
     thinkingContent: extractedThinking || undefined
+  };
+}
+
+/**
+ * Process thinking tags from text delta with streaming support
+ * Handles opening/closing tags and emits reasoning events during streaming
+ * 
+ * @param textDelta - The incoming text delta
+ * @param config - thinkingInText configuration
+ * @param state - Current thinking tag state
+ * @returns Processed result with streaming events
+ */
+function processThinkingStream(
+  textDelta: string,
+  config: {
+    enabled?: boolean;
+    tags?: string[];
+    removeFromOutput?: boolean;
+  },
+  state: {
+    isOpen: boolean;
+    content: string;
+  }
+): {
+  cleanedText: string;
+  isThinkingTagOpen: boolean;
+  currentThinkingContent: string;
+  newReasoningContent?: string;
+} {
+  if (!config.enabled || !textDelta) {
+    return {
+      cleanedText: textDelta,
+      isThinkingTagOpen: state.isOpen,
+      currentThinkingContent: state.content
+    };
+  }
+
+  const tags = config.tags || ['thinking'];
+  let remainingText = textDelta;
+  let newReasoningContent: string | undefined;
+  let isOpen = state.isOpen;
+  let currentContent = state.content;
+
+  for (const tag of tags) {
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+    const openTagUpper = openTag.toUpperCase();
+    const closeTagUpper = closeTag.toUpperCase();
+    
+    // Process the delta character by character to detect tag boundaries
+    // This is a simplified approach - find all tag positions
+    let text = remainingText;
+    let result = "";
+    
+    // Check if we have an opening tag in current text
+    const openIndex = text.toLowerCase().indexOf(openTag.toLowerCase());
+    const closeIndex = text.toLowerCase().indexOf(closeTag.toLowerCase());
+    
+    if (openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex)) {
+      // Opening tag found first
+      if (!isOpen) {
+        // Start of new thinking block
+        isOpen = true;
+        currentContent = "";
+      }
+      // Add text before the opening tag to cleaned output
+      result += text.substring(0, openIndex);
+      // Skip the opening tag
+      text = text.substring(openIndex + openTag.length);
+    } else if (closeIndex !== -1) {
+      // Closing tag found
+      // Add text before closing tag to cleaned output (if not removing)
+      result += text.substring(0, closeIndex);
+      
+      // Extract content between last open and this close
+      if (isOpen && currentContent.length > 0) {
+        newReasoningContent = currentContent;
+      }
+      
+      isOpen = false;
+      currentContent = "";
+      
+      // Skip the closing tag
+      text = text.substring(closeIndex + closeTag.length);
+      
+      // Check if there's more content after (another thinking block)
+      const nextOpen = text.toLowerCase().indexOf(openTag.toLowerCase());
+      const nextClose = text.toLowerCase().indexOf(closeTag.toLowerCase());
+      
+      if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
+        // Another thinking block starts
+        isOpen = true;
+        // Add text between close and next open to result
+        result += text.substring(0, nextOpen);
+        text = text.substring(nextOpen + openTag.length);
+      } else {
+        // Rest is regular text
+        result += text;
+      }
+    } else if (isOpen) {
+      // No complete tag, but we're inside a thinking block
+      // All content goes to thinking
+      currentContent += text;
+      // Don't add to cleaned output
+      result = "";
+    } else {
+      // No tags at all
+      result += text;
+    }
+
+    // Remove thinking tags from output if configured
+    if (config.removeFromOutput !== false) {
+      remainingText = result;
+    } else {
+      // Keep tags in output but still track thinking
+      remainingText = textDelta;
+    }
+  }
+
+  return {
+    cleanedText: remainingText,
+    isThinkingTagOpen: isOpen,
+    currentThinkingContent: currentContent,
+    newReasoningContent
   };
 }
