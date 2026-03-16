@@ -285,6 +285,14 @@ class ProviderManager {
         capabilities.interleaved = customInterleaved;
       }
 
+      // Support thinkingInText configuration
+      // This is used for models like MiniMax 2.5 that put thinking tags in text delta
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const customThinkingInText = (customCaps as any).thinkingInText;
+      if (customThinkingInText) {
+        capabilities.thinkingInText = customThinkingInText;
+      }
+
       return {
         id: modelId,
         capabilities,

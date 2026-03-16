@@ -45,6 +45,12 @@ export interface ProviderConfig {
       image?: boolean;
       audio?: boolean;
     };
+    /** Thinking 标签配置（用于从 text delta 中提取 thinking 内容） */
+    thinkingInText?: {
+      enabled?: boolean;
+      tags?: string[];
+      removeFromOutput?: boolean;
+    };
   };
   /** Model limits configuration (contextWindow, maxOutputTokens, etc.) */
   limits?: Record<string, ModelLimits>;
