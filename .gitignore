@@ -41,3 +41,7 @@ bun.lockb
 packages/app/cli/src.exe
 *.exe
 dist/
+
+# Worktrees
+.worktrees/
+worktrees/
