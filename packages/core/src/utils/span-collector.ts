@@ -15,13 +15,30 @@ export interface ISpanCollector {
   formatTraceTable(): string;
 }
 
+/**
+ * Get span storage based on environment variable.
+ * - AGENT_CORE_SPAN_STORAGE=memory -> use InMemorySpanStorage
+ * - Otherwise (default) -> use SQLiteSpanStorage with path from ConfigPaths
+ */
+function createSpanStorage(): SpanStorage {
+  const storageType = process.env.AGENT_CORE_SPAN_STORAGE?.toLowerCase();
+  
+  if (storageType === "memory") {
+    return new InMemorySpanStorage();
+  }
+  
+  // Default: SQLite storage
+  const dbPath = process.env.AGENT_CORE_SPAN_DB_PATH || undefined;
+  return new SQLiteSpanStorage(dbPath);
+}
+
 export class SpanCollector implements ISpanCollector {
   private storage: SpanStorage;
   private currentContext: SpanContext | undefined;
   private activeSpans = new Map<string, Span>();
 
   constructor(storage?: SpanStorage) {
-    this.storage = storage || new SQLiteSpanStorage();
+    this.storage = storage || createSpanStorage();
   }
 
   async initialize(): Promise<void> {
