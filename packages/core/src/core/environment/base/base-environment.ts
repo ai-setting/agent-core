@@ -1136,7 +1136,7 @@ export abstract class BaseEnvironment implements Environment {
    * Invoke LLM as a native environment capability
    * This is the primary way for agents to interact with LLM
     */
-  @Traced({ name: "env.invokeLLM", log: true, recordParams: true, recordResult: false })
+  @Traced({ name: "env.invokeLLM", log: true, recordParams: true, recordResult: true })
   async invokeLLM(
     messages: ModelMessage[],
     tools?: ToolInfo[],
