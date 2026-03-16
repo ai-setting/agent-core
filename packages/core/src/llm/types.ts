@@ -48,6 +48,19 @@ export interface ModelCapabilities {
    * in the specified field of providerOptions
    */
   interleaved?: InterleavedReasoning;
+  /** 
+   * Thinking 标签配置（用于从 text delta 中提取 thinking 内容）
+   * 某些 provider 如 MiniMax 2.5 会将 thinking 放到 text delta 中
+   * 需要配置要检测的标签格式
+   */
+  thinkingInText?: {
+    /** 是否启用从 text delta 中提取 thinking */
+    enabled: boolean;
+    /** thinking 标签格式数组，支持自定义标签如 ['thinking', 'reasoning', 'reflection'] */
+    tags?: string[];
+    /** 是否从输出中移除 thinking 标签内容（默认 true） */
+    removeFromOutput?: boolean;
+  };
 }
 
 /**
