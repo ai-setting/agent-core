@@ -773,3 +773,54 @@ export function createSystem1IntuitiveReasoning(config: InvokeLLMConfig): ToolIn
     },
   };
 }
+
+/**
+ * Process thinking tags from text delta
+ * Extracts thinking content from text and triggers reasoning events
+ * Used for models like MiniMax 2.5 that put thinking in text delta
+ * 
+ * @param textDelta - The incoming text delta
+ * @param config - thinkingInText configuration
+ * @returns Cleaned text and extracted thinking content
+ */
+function processThinkingFromText(
+  textDelta: string,
+  config: {
+    enabled?: boolean;
+    tags?: string[];
+    removeFromOutput?: boolean;
+  }
+): { cleanedText: string; thinkingContent?: string } {
+  if (!config.enabled || !textDelta) {
+    return { cleanedText: textDelta };
+  }
+
+  const tags = config.tags || ['thinking'];
+  let remainingText = textDelta;
+  let extractedThinking = '';
+
+  for (const tag of tags) {
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+    
+    // Match all thinking tags (case-insensitive, global)
+    const regex = new RegExp(`${openTag}([\\s\\S]*?)${closeTag}`, 'gi');
+    let match;
+    
+    while ((match = regex.exec(remainingText)) !== null) {
+      // Extract content inside tags
+      const content = match[1];
+      extractedThinking += content;
+      
+      // Remove thinking tags from output if configured (use replaceAll for all matches)
+      if (config.removeFromOutput !== false) {
+        remainingText = remainingText.replaceAll(match[0], '');
+      }
+    }
+  }
+
+  return {
+    cleanedText: remainingText,
+    thinkingContent: extractedThinking || undefined
+  };
+}
