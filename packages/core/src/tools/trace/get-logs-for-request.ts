@@ -90,7 +90,15 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
             // Extract timestamp from log line (format: "2026-03-16 11:43:59.388")
             const timeMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
             if (timeMatch) {
-              const lineTimestamp = new Date(timeMatch[1]).getTime();
+              // Parse to Date and preserve milliseconds for accurate comparison
+              const dateStr = timeMatch[1];
+              // Check if line has milliseconds
+              const msMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/);
+              const ms = msMatch ? parseInt(msMatch[1].slice(-3), 10) : 0;
+              
+              const lineDate = new Date(dateStr);
+              const lineTimestamp = lineDate.getTime() + ms;
+              
               if (startTimestamp !== undefined && lineTimestamp < startTimestamp) return false;
               if (endTimestamp !== undefined && lineTimestamp > endTimestamp) return false;
             }
