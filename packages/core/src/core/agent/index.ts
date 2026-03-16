@@ -155,10 +155,10 @@ export class Agent {
     }
 
     iteration++;
-    agentLogger.debug(`Iteration ${iteration}/${this.config.maxIterations}`);
+    // Iteration debug // 已精简
 
       try {
-        agentLogger.debug(`Invoking LLM (iteration ${iteration})`);
+        // Invoking LLM debug // 已精简
         
         // Get current model from environment
         let providerId = "gpt-4";
@@ -192,22 +192,18 @@ export class Agent {
         consecutiveErrors = 0;
 
         const output = llmResult.output as unknown as LLMOutput;
-        agentLogger.debug(`LLM output received`, {
-          contentLength: output.content?.length || 0,
-          hasToolCalls: !!(output.tool_calls && output.tool_calls.length > 0),
-          toolCallsCount: output.tool_calls?.length || 0,
-        });
+        // LLM output received debug // 已精简
 
         const hasToolCalls = output.tool_calls && output.tool_calls.length > 0;
 
         if (!hasToolCalls) {
-          agentLogger.debug(`No tool calls, returning content: "${output.content}"`);
+          // No tool calls debug // 已精简
           this.notifyMessageAdded({ role: "assistant", content: output.content || "" });
           return output.content || "(no response)";
         }
 
         const toolCalls = output.tool_calls!;
-        agentLogger.debug(`Processing ${toolCalls.length} tool_calls: ${toolCalls.map(tc => tc.function.name).join(", ")}`);
+        // Processing tool_calls debug // 已精简
 
         // Build assistant message with content array containing text and tool-call parts
         const assistantContent: any[] = [];
@@ -250,12 +246,12 @@ export class Agent {
           content: assistantContent.length > 0 ? assistantContent : [{ type: "text", text: output.content || "" }]
         });
 
-        agentLogger.debug(`Processing ${toolCalls.length} tool_calls from LLM`);
+        // Processing tool_calls from LLM debug // 已精简
         
         for (const toolCall of toolCalls) {
           let toolArgs: Record<string, unknown> = {};
 
-          agentLogger.debug(`Tool call: ${toolCall.function.name}(${toolCall.function.arguments.substring(0, 100)})`);
+          // Tool call debug // 已精简
 
           try {
             toolArgs = JSON.parse(toolCall.function.arguments);
@@ -294,9 +290,9 @@ export class Agent {
           // Check if tool is allowed (if tools list is provided)
           if (this.tools.length > 0) {
             const isAllowed = this.tools.some(t => t.name === toolCall.function.name);
-            agentLogger.debug(`Tool ${toolCall.function.name} allowed: ${isAllowed}`);
+            // Tool allowed debug // 已精简
             if (!isAllowed) {
-              agentLogger.debug(`Rejecting tool call for ${toolCall.function.name}`);
+              // Rejecting tool call debug // 已精简
               const errorMessage = `Tool "${toolCall.function.name}" is not available. Available tools: ${this.tools.map(t => t.name).join(", ")}`;
             messages.push({
               role: "tool",
@@ -357,10 +353,10 @@ export class Agent {
             content: [{ type: "tool-result", toolCallId: toolCall.id, toolName: toolCall.function.name, output: { type: "text", value: toolOutputText } }],
           });
 
-          agentLogger.debug(`Tool ${toolCall.function.name} completed successfully`);
+          // Tool completed debug // 已精简
         }
 
-        agentLogger.debug("Processed all tool calls, continuing to next iteration");
+        // Processed all tool calls debug // 已精简
 
       } catch (error) {
         consecutiveErrors++;

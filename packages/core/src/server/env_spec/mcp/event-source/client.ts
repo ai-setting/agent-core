@@ -161,7 +161,7 @@ export class EventMcpClient {
       }
     };
     
-    serverLogger.debug(`[EventMcpClient] Notification handler set up for ${this.name}`);
+// DEBUG `[EventMcpClient] Notification handler set up for ${this.name}` // 已精简
   }
 
   /**
@@ -237,7 +237,7 @@ export class EventMcpClient {
     const requestId = this.trace.generateRequestId();
     
     await this.trace.runWithNewContextAsync(requestId, undefined, async () => {
-      serverLogger.debug(`[MCP:${this.name}] Received event`, { type: rawEvent.type, requestId });
+// DEBUG `[MCP:${this.name}] Received event`, { type: rawEvent.type, requestId } // 已精简
 
       const envEvent: EnvEvent = {
         id: (rawEvent.id as string) || crypto.randomUUID(),

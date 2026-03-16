@@ -27,7 +27,7 @@ app.get("/", async (c) => {
     const registry = CommandRegistry.getInstance();
     const commands = registry.listInfo();
 
-    serverLogger.debug("[Commands Route] List commands", { count: commands.length });
+// DEBUG "[Commands Route] List commands", { count: commands.length } // 已精简
     return c.json(commands);
   } catch (error) {
     serverLogger.error("[Commands Route] Failed to list commands", { error: String(error) });

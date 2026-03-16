@@ -80,15 +80,14 @@ export class EventHandlerAgent {
     eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
 
     for (const msg of messages) {
-      const msgStr = JSON.stringify(msg).substring(0, 200);
-      eventHandlerLogger.debug(`Adding message: role=${(msg as any).role}`);
+      // Adding message debug // 已精简
       
       const modelMessage: ModelMessage = msg as any;
       session.addMessageFromModelMessage(modelMessage);
     }
 
     const history = await session.toHistory();
-    eventHandlerLogger.debug(`toHistory returned ${history.length} messages`);
+    // toHistory debug // 已精简
     
     const query = `Process event: ${event.type}`;
     
@@ -98,7 +97,7 @@ export class EventHandlerAgent {
         {
           session_id: sessionId,
           onMessageAdded: (message: ModelMessage) => {
-            eventHandlerLogger.debug(`onMessageAdded: role=${message.role}`);
+            // onMessageAdded debug // 已精简
             session.addMessageFromModelMessage(message);
           },
         },
@@ -206,7 +205,7 @@ After handling this error, please reply to the user who triggered this event (e.
           {
             session_id: newSession.id,
             onMessageAdded: (message: ModelMessage) => {
-              eventHandlerLogger.debug(`Retry onMessageAdded: role=${message.role}`);
+              // Retry onMessageAdded debug // 已精简
               newSession.addMessageFromModelMessage(message);
             },
           },
@@ -266,7 +265,7 @@ Please handle the event and reply to the user who triggered it.`;
         {
           session_id: newSession.id,
           onMessageAdded: (message: ModelMessage) => {
-            eventHandlerLogger.debug(`Fresh session onMessageAdded: role=${message.role}`);
+            // Fresh session onMessageAdded debug // 已精简
             newSession.addMessageFromModelMessage(message);
           },
         },

@@ -80,7 +80,7 @@ export class FileStorage {
     const content = JSON.stringify(info, null, 2);
     await fs.writeFile(tempFilePath, content, "utf-8");
     await fs.rename(tempFilePath, filePath);
-    storageLogger.debug(`Session info saved to ${filePath}`);
+    // Session info saved debug // 已精简
   }
 
   async getSessionInfo(id: string): Promise<SessionInfo | undefined> {
@@ -177,7 +177,7 @@ export class FileStorage {
     const content = JSON.stringify(message, null, 2);
     await fs.writeFile(tempFilePath, content, "utf-8");
     await fs.rename(tempFilePath, filePath);
-    storageLogger.debug(`Message ${message.info.id} saved for session ${sessionID}`);
+    // Message saved debug // 已精简
   }
 
   async getMessage(sessionID: string, messageID: string): Promise<MessageWithParts | undefined> {

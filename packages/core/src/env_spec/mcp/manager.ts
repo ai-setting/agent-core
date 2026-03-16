@@ -179,7 +179,7 @@ export class McpManager {
     try {
       // 创建传输层并连接
       const transport = this.createTransport(config, cwd)
-      serverLogger.debug(`[MCP] Transport created for ${name}`)
+      // Transport created debug // 已精简
 
       // 设置 stderr 监听器来捕获错误
       if (config.type === "local" && (transport as any).stderr) {
@@ -194,19 +194,19 @@ export class McpManager {
       }
       
       const client = new Client({ name: "agent-core", version: "1.0.0" })
-      serverLogger.debug(`[MCP] Connecting client for ${name}...`)
+      // Connecting client debug // 已精简
       await client.connect(transport)
-      serverLogger.debug(`[MCP] Client connected for ${name}`)
+      // Client connected debug // 已精简
 
       this.clients.set(name, client)
       this.transports.set(name, transport)
 
       // 获取工具列表并转换
-      serverLogger.debug(`[MCP] Listing tools for ${name}...`)
+      // Listing tools debug // 已精简
       const toolsResult = await client.listTools()
 
       const mcpTools = toolsResult.tools as McpTool[]
-      serverLogger.debug(`[MCP] Found ${mcpTools?.length ?? 0} tools for ${name}`)
+      // Found tools debug // 已精简
       
       const options: McpToolConversionOptions = {
         timeout: config.timeout,
@@ -214,7 +214,7 @@ export class McpManager {
       }
 
       for (const mcpTool of mcpTools || []) {
-        serverLogger.debug(`[MCP] Converting tool: ${mcpTool.name}`)
+        // Converting tool debug // 已精简
         const toolInfo = convertMcpTool(mcpTool, client, name, options)
         this.tools.set(toolInfo.name, toolInfo)
       }

@@ -234,24 +234,22 @@ export class Session {
 
     const parts: Part[] = [];
 
-    // Log received message
-    const msgStr = JSON.stringify(message).substring(0, 300);
-    sessionLogger.debug(`addMessageFromModelMessage: role=${role}, content=${msgStr}`);
-
+    // addMessageFromModelMessage debug // 已精简
+    
     const normalizeToolCallId = (id: string): string => {
       return id.replace(/[^a-zA-Z0-9_-]/g, "_");
     };
 
     const content = message.content;
     
-    sessionLogger.debug(`addMessageFromModelMessage: role=${role}, content type=${typeof content}, isArray=${Array.isArray(content)}`);
+    // content debug // 已精简
     if (Array.isArray(content)) {
       for (const part of content) {
-        sessionLogger.debug(`  part type=${part.type}`);
+        // part type debug // 已精简
         if (part.type === "tool-call") {
-          sessionLogger.debug(`    toolCallId=${part.toolCallId}, normalized=${normalizeToolCallId(part.toolCallId || "")}`);
+          // toolCallId debug // 已精简
         } else if (part.type === "tool-result") {
-          sessionLogger.debug(`    toolCallId=${part.toolCallId}, normalized=${normalizeToolCallId(part.toolCallId || "")}`);
+          // toolCallId debug // 已精简
         }
       }
     }

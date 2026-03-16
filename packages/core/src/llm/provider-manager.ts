@@ -55,7 +55,7 @@ class ProviderManager {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      providerLogger.debug("ProviderManager already initialized");
+// DEBUG "ProviderManager already initialized" // 已精简
       return;
     }
 

@@ -149,7 +149,7 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
       case "tool": {
         const toolPart = part as ToolPart;
         const normalizedCallId = normalizeToolCallId(toolPart.callID || `call_${Date.now()}`);
-        historyLogger.debug(`convertAssistantMessage: tool-call callID=${toolPart.callID}, normalized=${normalizedCallId}, state=${toolPart.state}`);
+        // convertAssistantMessage: tool-call // 已精简
         parts.push({
           type: "tool-call",
           toolCallId: normalizedCallId,
@@ -178,9 +178,9 @@ function convertAssistantMessage(msg: MessageWithParts): ModelMessage {
 function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   const toolPart = msg.parts.find((p): p is ToolPart => p.type === "tool");
 
-  historyLogger.debug(`convertToolMessage: messageId=${msg.info.id}, role=${msg.info.role}, parts.length=${msg.parts.length}`);
+  // convertToolMessage debug // 已精简
   if (msg.parts.length > 0) {
-    historyLogger.debug(`convertToolMessage: parts types = ${msg.parts.map(p => p.type).join(", ")}`);
+    // convertToolMessage parts types debug // 已精简
   }
 
   if (!toolPart) {
@@ -212,7 +212,7 @@ function convertToolMessage(msg: MessageWithParts): ModelMessage | null {
   }
 
   const normalizedCallId = normalizeToolCallId(toolPart.callID || "");
-  historyLogger.debug(`convertToolMessage: returning tool-result with toolCallId=${normalizedCallId}, state=${toolPart.state}`);
+  // convertToolMessage returning debug // 已精简
 
   return {
     role: "tool",

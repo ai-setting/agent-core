@@ -83,13 +83,13 @@ export async function processEventInSession<T>(
       const activeSessionManager = env.getActiveSessionManager();
       sessionId = activeSessionManager.getActiveSession(clientId);
       if (sessionId) {
-        eventProcessorLogger.debug(`Using active session from clientId ${clientId}: ${sessionId}`);
+// DEBUG `Using active session from clientId ${clientId}: ${sessionId}` // 已精简
       }
     }
   }
   
   if (!sessionId) {
-    eventProcessorLogger.debug("No trigger_session_id in event metadata and no active session available");
+// DEBUG "No trigger_session_id in event metadata and no active session available" // 已精简
     return;
   }
 

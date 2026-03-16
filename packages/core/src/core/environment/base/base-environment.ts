@@ -80,7 +80,7 @@ export interface BaseEnvironmentConfig {
    * Hook for handling stream events from LLM
    * Called during invoke_llm streaming response
    */
-  onStreamEvent?: (event: StreamEvent, context: Context) => void | Promise<void>;
+  onStreamEvent?: (event: StreamEvent, effectiveContext: Context) => void | Promise<void>;
   /**
    * Hook for session lifecycle events (created, updated, deleted)
    * Called when session operations complete
@@ -786,7 +786,7 @@ export abstract class BaseEnvironment implements Environment {
     recordResult: false,
     paramFilter: (args) => ({ query: args[0] })
   })
-  async handle_query(query: string, context?: Context, history?: ModelMessage[]): Promise<string> {
+  async handle_query(query: string, effectiveContext?: Context, history?: ModelMessage[]): Promise<string> {
     await this.ensureLLMInitialized();
 
     // Reload skills before each query to support dynamic skill addition
@@ -812,7 +812,7 @@ export abstract class BaseEnvironment implements Environment {
       // Emit text event to frontend
       this.emitStreamEvent(
         { type: "text", content: notification, delta: "" },
-        { session_id: context?.session_id || "default", message_id: msgId }
+        { session_id: effectiveContext?.session_id || "default", message_id: msgId }
       );
 
       // Add assistant message to history
@@ -831,13 +831,13 @@ export abstract class BaseEnvironment implements Environment {
     };
 
     // Get or create abort signal for this session
-    const sessionId = context?.session_id;
+    const sessionId = effectiveContext?.session_id;
     if (sessionId && !sessionAbortManager.has(sessionId)) {
       sessionAbortManager.create(sessionId);
     }
 
     const agentContext = {
-      ...context,
+      ...effectiveContext,
       message_id: `msg_${Date.now()}`,
       abort: sessionId ? sessionAbortManager.get(sessionId) : undefined,
     };
@@ -931,7 +931,7 @@ export abstract class BaseEnvironment implements Environment {
   private async executeWithTimeout(
     tool: Tool,
     action: Action,
-    context: Context,
+    effectiveContext: Context,
     timeoutMs: number,
   ): Promise<ToolResult> {
     return new Promise((resolve, reject) => {
@@ -944,12 +944,12 @@ export abstract class BaseEnvironment implements Environment {
         reject(new Error("Tool execution aborted"));
       };
 
-      if (context.abort) {
-        context.abort.addEventListener("abort", abortHandler);
+      if (effectiveContext.abort) {
+        effectiveContext.abort.addEventListener("abort", abortHandler);
       }
 
-      // Pass env instance to tool context
-      const toolContext = this.toToolContext(context);
+      // Pass env instance to tool effectiveContext
+      const toolContext = this.toToolContext(effectiveContext);
       (toolContext as any).env = this;
 
       // Validate tool parameters before execution
@@ -977,8 +977,8 @@ export abstract class BaseEnvironment implements Environment {
       Promise.resolve(tool.execute(validatedArgs, toolContext))
         .then((result) => {
           clearTimeout(timer);
-          if (context.abort) {
-            context.abort.removeEventListener("abort", abortHandler);
+          if (effectiveContext.abort) {
+            effectiveContext.abort.removeEventListener("abort", abortHandler);
           }
           // 截断过长结果，保留前 300 字符
           const resultStr = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
@@ -996,13 +996,13 @@ export abstract class BaseEnvironment implements Environment {
             tool_name: action.tool_name,
             tool_result: result.output,
             metadata: result.metadata,
-          }, context);
+          }, effectiveContext);
           resolve(result);
         })
         .catch((error) => {
           clearTimeout(timer);
-          if (context.abort) {
-            context.abort.removeEventListener("abort", abortHandler);
+          if (effectiveContext.abort) {
+            effectiveContext.abort.removeEventListener("abort", abortHandler);
           }
           BaseEnvironment.baseLogger.error("[BaseEnvironment.executeAction] Tool execution error", {
             toolName: action.tool_name,
@@ -1012,7 +1012,7 @@ export abstract class BaseEnvironment implements Environment {
             type: "error",
             content: error instanceof Error ? error.message : String(error),
             tool_name: action.tool_name,
-          }, context);
+          }, effectiveContext);
           reject(error);
         });
     });
@@ -1036,16 +1036,16 @@ export abstract class BaseEnvironment implements Environment {
     return this.sandboxProvider;
   }
 
-  private toToolContext(context: Context): ToolContext {
+  private toToolContext(effectiveContext: Context): ToolContext {
     return {
-      workdir: context.workdir,
-      user_id: context.user_id,
-      session_id: context.session_id,
-      abort: context.abort,
+      workdir: effectiveContext.workdir,
+      user_id: effectiveContext.user_id,
+      session_id: effectiveContext.session_id,
+      abort: effectiveContext.abort,
       metadata: {
-        ...context.metadata,
-        session_id: context.session_id,
-        message_id: context.message_id,
+        ...effectiveContext.metadata,
+        session_id: effectiveContext.session_id,
+        message_id: effectiveContext.message_id,
       },
       sandbox: this.sandboxConfig,
       sandboxProvider: this.sandboxProvider,
@@ -1148,7 +1148,7 @@ export abstract class BaseEnvironment implements Environment {
       BaseEnvironment.baseLogger.info(`  message[${i}]: role=${messages[i].role}, content type=${typeof messages[i].content}`);
     }
     await this.ensureLLMInitialized();
-    BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] LLM initialized", { hasConfig: !!this.llmConfig });
+    // LLM initialized debug // 已精简
 
     if (!this.llmConfig) {
       BaseEnvironment.baseLogger.warn("[BaseEnvironment.invokeLLM] LLM not configured");
@@ -1162,30 +1162,34 @@ export abstract class BaseEnvironment implements Environment {
       };
     }
 
-    const ctx = context || ({} as Context);
-    BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] Calling invokeLLM", { messageCount: messages.length });
+    // Calling invokeLLM debug // 已精简
+
+    const effectiveContext: Context = context || { 
+      session_id: "default", 
+      message_id: `msg_${Date.now()}` 
+    };
 
     const eventHandler: StreamEventHandler = {
       onStart: (metadata) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onStart callback");
-        this.emitStreamEvent({ type: "start", metadata }, ctx);
+        // onStart callback debug // 已精简
+        this.emitStreamEvent({ type: "start", metadata }, effectiveContext);
       },
       onText: (content, delta) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onText callback", { contentLength: content.length });
-        this.emitStreamEvent({ type: "text", content, delta }, ctx);
+        // onText callback debug // 已精简
+        this.emitStreamEvent({ type: "text", content, delta }, effectiveContext);
       },
       onReasoning: (content) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onReasoning callback", { contentLength: content.length });
-        this.emitStreamEvent({ type: "reasoning", content }, ctx);
+        // onReasoning callback debug // 已精简
+        this.emitStreamEvent({ type: "reasoning", content }, effectiveContext);
       },
       onToolCall: (toolName, toolArgs, toolCallId) => {
-        BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] onToolCall callback", { toolName });
+        // onToolCall callback debug // 已精简
         const reason = typeof toolArgs === 'object' && toolArgs !== null 
           ? (toolArgs as any).reason 
           : undefined;
         this.emitStreamEvent(
           { type: "tool_call", tool_name: toolName, tool_args: toolArgs, tool_call_id: toolCallId, reason },
-          ctx
+          effectiveContext
         );
       },
       onCompleted: async (content, metadata) => {
@@ -1198,24 +1202,24 @@ export abstract class BaseEnvironment implements Environment {
           content, 
           metadata,
           usage: metadata.usage 
-        }, ctx);
+        }, effectiveContext);
         
-        // Update session context usage stats if usage info is available
-        if (metadata.usage && ctx.session_id) {
+        // Update session effectiveContext usage stats if usage info is available
+        if (metadata.usage && effectiveContext?.session_id) {
           try {
             const { Session } = await import("../../session/session.js");
-            const session = Session.get(ctx.session_id);
+            const session = Session.get(effectiveContext.session_id);
             if (session) {
               session.updateContextUsage(metadata.usage);
-              BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Updated session context usage", { 
-                sessionId: ctx.session_id,
+              BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Updated session effectiveContext usage", { 
+                sessionId: effectiveContext.session_id,
                 inputTokens: metadata.usage.inputTokens,
                 outputTokens: metadata.usage.outputTokens,
                 totalTokens: metadata.usage.totalTokens,
               });
             }
           } catch (err) {
-            BaseEnvironment.baseLogger.warn(`[BaseEnvironment.invokeLLM] Failed to update session context usage:`, err);
+            BaseEnvironment.baseLogger.warn(`[BaseEnvironment.invokeLLM] Failed to update session effectiveContext usage:`, err);
           }
         }
       },
@@ -1231,15 +1235,15 @@ export abstract class BaseEnvironment implements Environment {
       },
       {
         workdir: process.cwd(),
-        session_id: ctx.session_id,
-        message_id: ctx.message_id,
-        metadata: ctx.metadata,
-        abort: ctx.abort,
+        session_id: effectiveContext?.session_id,
+        message_id: effectiveContext?.message_id,
+        metadata: effectiveContext?.metadata,
+        abort: effectiveContext?.abort,
       },
       eventHandler
     );
     
-    BaseEnvironment.baseLogger.debug("[BaseEnvironment.invokeLLM] invokeLLM returned", { success: result.success });
+    // invokeLLM returned debug // 已精简
     return result;
   }
 
@@ -1507,12 +1511,12 @@ export abstract class BaseEnvironment implements Environment {
     }
   }
 
-  onStreamEvent?(event: StreamEvent, context: Context): void | Promise<void>;
+  onStreamEvent?(event: StreamEvent, effectiveContext: Context): void | Promise<void>;
   onSessionEvent?(event: SessionEvent): void | Promise<void>;
 
-  protected emitStreamEvent(event: StreamEvent, context: Context): void | Promise<void> {
+  protected emitStreamEvent(event: StreamEvent, effectiveContext: Context): void | Promise<void> {
     if (this.onStreamEvent) {
-      return this.onStreamEvent(event, context);
+      return this.onStreamEvent(event, effectiveContext);
     }
   }
 

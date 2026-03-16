@@ -1,6 +1,69 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { wrapFunction, Traced } from "./wrap-function.js";
 import { SpanCollector, setSpanCollector, InMemorySpanStorage } from "./span-index.js";
+import { existsSync, readFileSync, rmSync, mkdirSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
+
+describe("wrapFunction with caller location", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = join(tmpdir(), `wrap-function-test-${Date.now()}`);
+    mkdirSync(tempDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should log with original function location, not wrap-function.ts", async () => {
+    // 需要动态导入以设置 log directory override
+    const { setLogDirOverride, Logger } = await import("./logger.js");
+    setLogDirOverride(tempDir);
+    Logger.setGlobalLevel("debug");
+
+    const { wrapFunction: wf } = await import("./wrap-function.js");
+    const { setSpanCollector, SpanCollector, InMemorySpanStorage } = await import("./span-index.js");
+
+    const storage = new InMemorySpanStorage();
+    const collector = new SpanCollector(storage);
+    setSpanCollector(collector as any);
+
+    // 创建一个在本文件中定义的函数，用于验证日志位置
+    function myTestFunction(x: number): number {
+      return x * 2;
+    }
+
+    // 用 wrapFunction 包装，启用日志
+    const wrappedFn = wf(myTestFunction, "my.test.func", { log: true });
+
+    // 调用函数
+    wrappedFn(42);
+
+    // 检查日志文件
+    const logFile = join(tempDir, "server.log");
+    const content = readFileSync(logFile, "utf-8");
+
+    // 验证日志包含原函数位置（wrap-function.test.ts），而不是 wrap-function.ts
+    expect(content).toContain("[traced:my.test.func]");
+    expect(content).toContain(">>> my.test.func enter");
+    // 应该包含测试文件的位置
+    expect(content).toContain("wrap-function.test.ts");
+    // 不应该包含 wrap-function.ts 作为调用位置
+    const lines = content.split("\n").filter(l => l.includes("my.test.func"));
+    for (const line of lines) {
+      // 排除 logger.ts 本身的位置显示
+      if (line.includes("[") && !line.includes("logger.ts")) {
+        expect(line).not.toMatch(/wrap-function\.ts:\d+/);
+      }
+    }
+
+    setSpanCollector(null as any);
+    setLogDirOverride(null as any);
+    Logger.setGlobalLevel(null);
+  });
+});
 
 describe("wrapFunction with paramFilter", () => {
   let collector: SpanCollector;

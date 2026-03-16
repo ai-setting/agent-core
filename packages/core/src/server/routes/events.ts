@@ -68,7 +68,7 @@ app.get("/", async (c) => {
               type: event.type,
               ...(event.properties as object),
             };
-            sseLogger.debug("Sending event to client", { sessionId, type: event.type });
+// DEBUG "Sending event to client", { sessionId, type: event.type } // 已精简
             await stream.writeSSE({ 
               data: JSON.stringify(flattenedEvent) 
             });
@@ -85,7 +85,7 @@ app.get("/", async (c) => {
               type: data.payload.type,
               ...(data.payload.properties as object),
             };
-            sseLogger.debug("Sending event to client", { type: data.payload.type });
+// DEBUG "Sending event to client", { type: data.payload.type } // 已精简
             await stream.writeSSE({ 
               data: JSON.stringify(flattenedEvent) 
             });

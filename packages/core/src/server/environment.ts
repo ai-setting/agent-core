@@ -1225,7 +1225,7 @@ Please confirm the task has been stopped and ask if the user needs any other hel
       handler: {
         type: "function",
         fn: async (event) => {
-          serverLogger.debug(`[TimerEvent] Received: ${event.type}`, { id: event.id, payload: event.payload, metadata: event.metadata });
+// DEBUG `[TimerEvent] Received: ${event.type}`, { id: event.id, payload: event.payload, metadata: event.metadata } // 已精简
         }
       },
       options: { priority: 50 }

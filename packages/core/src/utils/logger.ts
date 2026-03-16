@@ -161,8 +161,17 @@ class Logger {
     const requestId = trace.getRequestId();
     const requestIdStr = requestId ? `[requestId=${requestId}]` : "";
 
-    const location = this.getCallerLocation();
-    const locationStr = location ? `${location.file}:${location.line}` : "";
+    // 检查 data 中是否包含 callerLocation（用于 traced 装饰器传递原函数位置）
+    let locationStr = "";
+    if (data && typeof data === "object" && "callerLocation" in data) {
+      locationStr = data.callerLocation as string;
+      // 从 data 中移除 callerLocation，避免它在日志中显示
+      const { callerLocation, ...rest } = data as any;
+      data = Object.keys(rest).length > 0 ? rest : undefined;
+    } else {
+      const location = this.getCallerLocation();
+      locationStr = location ? `${location.file}:${location.line}` : "";
+    }
     
     let formatted = `${timestamp} [${level.toUpperCase()}]${requestIdStr}${locationStr ? ` [${locationStr}]` : ""}${prefix} ${message}`;
     

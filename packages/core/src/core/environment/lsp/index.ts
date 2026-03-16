@@ -66,7 +66,7 @@ export class LSPManager extends EventEmitter {
    */
   needsLSP(filePath: string): boolean {
     const result = needsLSPDiagnostics(filePath);
-    lspLogger.debug("LSP Manager: Checking if LSP needed", { filePath, result });
+    // Checking if LSP needed debug // 已精简
     return result;
   }
 
@@ -75,33 +75,33 @@ export class LSPManager extends EventEmitter {
    */
   async getClients(filePath: string): Promise<LSPClient[]> {
     const ext = path.extname(filePath).toLowerCase();
-    lspLogger.debug("LSP Manager: Getting clients for file", { filePath, ext });
+    // Getting clients debug // 已精简
     
     const results: LSPClient[] = [];
 
     for (const [id, server] of this.servers) {
       if (!server.extensions.includes(ext)) {
-        lspLogger.debug("LSP Manager: Skipping server - extension not supported", { id, ext, serverExtensions: server.extensions });
+        // Skipping server debug // 已精简
         continue;
       }
       if (this.broken.has(id)) {
-        lspLogger.debug("LSP Manager: Skipping server - marked as broken", { id });
+        // Marked as broken debug // 已精简
         continue;
       }
 
       const rootFinder = getRootFinder(server);
       const root = await rootFinder(filePath);
-      lspLogger.debug("LSP Manager: Root finder result", { id, filePath, root });
+      // Root finder result debug // 已精简
       
       if (!root) {
-        lspLogger.debug("LSP Manager: Skipping server - no root found", { id, filePath });
+        // No root debug // 已精简
         continue;
       }
 
       const key = `${root}:${id}`;
       const existing = this.clients.get(key);
       if (existing) {
-        lspLogger.debug("LSP Manager: Using existing client", { key, id });
+        // Using existing client debug // 已精简
         results.push(existing.client);
         continue;
       }
@@ -197,13 +197,13 @@ export class LSPManager extends EventEmitter {
    * For pull mode: actively requests diagnostics via textDocument/diagnostic
    */
   async getDiagnostics(): Promise<Record<string, LSPDiagnostic[]>> {
-    lspLogger.debug("LSP Manager: getDiagnostics called");
+    // getDiagnostics debug // 已精简
     const results: Record<string, LSPDiagnostic[]> = {};
 
     for (const { client, root } of this.clients.values()) {
       // Get all files in the workspace that have been opened
       const workspaceDiagnostics = client.getDiagnostics();
-      lspLogger.debug("LSP Manager: Diagnostics from client", { root, keys: Array.from(workspaceDiagnostics.keys()) });
+      // Diagnostics from client debug // 已精简
       
       for (const [filePath, diagnostics] of workspaceDiagnostics) {
         if (diagnostics.length > 0) {

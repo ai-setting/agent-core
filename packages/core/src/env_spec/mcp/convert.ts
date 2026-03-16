@@ -43,16 +43,16 @@ export function convertMcpTool(
     description: mcpTool.description ?? `MCP tool: ${mcpTool.name}`,
     parameters: zodParams,
     execute: async (args: unknown, _context: ToolContext): Promise<ToolResult> => {
-      serverLogger.debug(`[MCP] Calling tool: ${toolName}`, { args, mcpTool: mcpTool.name })
+      // Calling tool debug // 已精简
       
       try {
-        serverLogger.debug(`[MCP] Using callTool method for ${mcpTool.name}`)
+        // Using callTool method debug // 已精简
         const result = await mcpClient.callTool({
           name: mcpTool.name,
           arguments: (args as Record<string, unknown>) ?? {},
         })
 
-        serverLogger.debug(`[MCP] callTool result:`, { result })
+        // callTool result debug // 已精简
 
         // 转换结果格式
         return convertMcpCallResult(result as unknown as McpCallToolResult)

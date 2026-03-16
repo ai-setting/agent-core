@@ -187,7 +187,7 @@ function parseModelString(model?: string): { providerId: string; modelId: string
  * Since we now use ModelMessage format throughout, this mainly validates and logs
  */
 function convertToSDKMessages(messages: ModelMessage[]): ModelMessage[] {
-  invokeLLMLogger.debug("[convertToSDKMessages] Processing messages", { count: messages.length });
+  // Processing messages // 已精简
   
   // Messages should already be in ModelMessage format from session history
   // Just return them as-is, but log any potential issues
@@ -218,10 +218,7 @@ function convertToolsToSDK(tools: ToolInfo[]): ToolSet {
     };
   }
   
-  invokeLLMLogger.debug("[convertToolsToSDK] Converted tools", { 
-    input: tools.map(t => t.name), 
-    output: Object.keys(result) 
-  });
+  // Converted tools debug // 已精简
 
   return result;
 }
@@ -282,17 +279,8 @@ export async function invokeLLM(
     // 4. Convert messages to AI SDK format
     let messages = convertToSDKMessages(options.messages);
     
-    invokeLLMLogger.debug("[invokeLLM] Messages converted", { 
-      count: messages.length,
-      messages: messages.map(m => ({ 
-        role: m.role, 
-        contentType: Array.isArray(m.content) ? 'array' : typeof m.content,
-        contentPreview: Array.isArray(m.content) 
-          ? JSON.stringify(m.content).substring(0, 200)
-          : String(m.content).substring(0, 100),
-        toolCallId: (m as any).toolCallId,
-      }))
-    });
+    // Messages converted debug // 已精简
+    
     
     // 5. Apply provider-specific transformations
     messages = LLMTransform.normalizeMessages(
@@ -400,7 +388,7 @@ export async function invokeLLM(
         case "text-delta":
           const textDelta = streamPart.text as string;
           fullContent += textDelta;
-          invokeLLMLogger.debug("[invokeLLM] Text delta received", { length: textDelta.length });
+          // Text delta debug // 已精简
           if (eventHandler?.onText) {
             eventHandler.onText(fullContent, textDelta);
           }
@@ -409,7 +397,7 @@ export async function invokeLLM(
         case "reasoning-delta":
           const reasoningDelta = streamPart.text as string;
           reasoningContent += reasoningDelta;
-          invokeLLMLogger.debug("[invokeLLM] Reasoning received", { length: reasoningDelta.length });
+          // Reasoning debug // 已精简
           if (eventHandler?.onReasoning) {
             eventHandler.onReasoning(reasoningContent);
           }

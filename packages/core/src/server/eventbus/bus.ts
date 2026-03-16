@@ -195,7 +195,7 @@ function raw(
   callback: Subscription,
   sessionId?: string
 ): () => void {
-  console.log("[Bus] Subscribing:", { type, sessionId });
+  // [Bus] Subscribing: { type, sessionId } // 已精简
   
   const sessionState = getSessionState(sessionId);
   const subscriptions = sessionState.subscriptions;
@@ -209,7 +209,7 @@ function raw(
 
   // Return unsubscribe function
   return () => {
-    console.log("[Bus] Unsubscribing:", { type, sessionId });
+    // [Bus] Unsubscribing: { type, sessionId } // 已精简
     const match = subscriptions.get(type);
     if (!match) return;
     
@@ -231,7 +231,7 @@ function raw(
  * @param sessionId - Session ID to clear
  */
 export function clearSession(sessionId: string): void {
-  console.log("[Bus] Clearing session:", sessionId);
+  // [Bus] Clearing session: sessionId // 已精简
   state.delete(sessionId);
 }
 
@@ -316,7 +316,7 @@ export class EnvEventBus {
    * Handles idempotency, queueing, and processing
    */
   async publish<T>(event: EnvEvent<T>): Promise<void> {
-    busLogger.debug(`[EnvEventBus] Publishing event: ${event.type}`, { id: event.id });
+    // [EnvEventBus] Publishing event: ${event.type} // 已精简，traced装饰器已覆盖
     if (this.seen.has(event.id)) {
       busLogger.warn(`[EnvEventBus] Duplicate event ignored: ${event.id}`);
       return;
@@ -346,7 +346,7 @@ export class EnvEventBus {
    * Handle a single event - match rule and execute handler
    */
   private async handleEvent<T>(event: EnvEvent<T>): Promise<void> {
-    busLogger.debug(`[EnvEventBus] Handling event: ${event.type}`);
+    // [EnvEventBus] Handling event: ${event.type} // 已精简
     const matchedRule = this.findMatchedRule(event.type);
 
     if (!matchedRule) {
@@ -354,10 +354,10 @@ export class EnvEventBus {
       return;
     }
 
-    busLogger.debug(`[EnvEventBus] Found rule for event: ${event.type}, handler type: ${matchedRule.handler.type}`);
+    // [EnvEventBus] Found rule for event // 已精简
     if (matchedRule.options?.enabled !== false) {
       if (matchedRule.handler.type === "function") {
-        busLogger.debug(`[EnvEventBus] Calling function handler for: ${event.type}`);
+        // [EnvEventBus] Calling function handler // 已精简，traced装饰器已覆盖
         await matchedRule.handler.fn(event);
       } else if (matchedRule.handler.type === "agent") {
         await this.handleWithAgent(event, matchedRule.handler);

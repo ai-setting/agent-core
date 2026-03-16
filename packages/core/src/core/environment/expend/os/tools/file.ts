@@ -396,9 +396,9 @@ async function getLSPDiagnosticsForFile(
     
     // Check if file type needs LSP
     const needsLSPResult = needsLSP(filePath);
-    fileLogger.debug("LSP: Checking if file needs LSP", { filePath, needsLSP: needsLSPResult });
+// DEBUG "LSP: Checking if file needs LSP", { filePath, needsLSP: needsLSPResult } // 已精简
     if (!needsLSPResult) {
-      fileLogger.debug("LSP: File type not supported for LSP diagnostics", { filePath });
+// DEBUG "LSP: File type not supported for LSP diagnostics", { filePath } // 已精简
       return { output, diagnostics };
     }
 
@@ -413,12 +413,7 @@ async function getLSPDiagnosticsForFile(
     
     // Get all diagnostics
     const allDiagnostics = await lspManager.getDiagnostics();
-    fileLogger.debug("LSP: Diagnostics received", { 
-      filePath, 
-      normalizedPath: normalizePath(filePath),
-      allDiagnosticsKeys: Object.keys(allDiagnostics),
-      hasDiagnostics: Object.keys(allDiagnostics).length > 0
-    });
+    // Diagnostics received debug // 已精简
 
     const normalizedPath = normalizePath(filePath);
     const fileDiagnostics = allDiagnostics[normalizedPath] || [];

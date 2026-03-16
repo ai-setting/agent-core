@@ -118,7 +118,7 @@ export function createWebFetchTool(config?: WebFetchConfig): ToolInfo {
       }
 
       try {
-        webFetchLogger.debug("[webfetch] Fetching URL", { url, timeout, userAgent });
+// DEBUG "[webfetch] Fetching URL", { url, timeout, userAgent } // 已精简
         
         // Fetch content
         const response = await fetchWithTimeout(url, timeout, {
@@ -162,7 +162,7 @@ export function createWebFetchTool(config?: WebFetchConfig): ToolInfo {
         }
 
         const text = await response.text();
-        webFetchLogger.debug("[webfetch] Content received", { url, contentLength: text.length });
+// DEBUG "[webfetch] Content received", { url, contentLength: text.length } // 已精简
 
         // Check if response is too large in memory
         if (text.length > MAX_RESPONSE_SIZE) {
@@ -182,7 +182,7 @@ export function createWebFetchTool(config?: WebFetchConfig): ToolInfo {
         let title: string | undefined;
 
         if (isHtml(text)) {
-          webFetchLogger.debug("[webfetch] Processing HTML content with Readability", { url });
+// DEBUG "[webfetch] Processing HTML content with Readability", { url } // 已精简
           // Use Readability for HTML content
           const readable = await extractReadableContent(text, url);
           extractedText = readable.text;
@@ -203,7 +203,7 @@ export function createWebFetchTool(config?: WebFetchConfig): ToolInfo {
         } else {
           // Non-HTML content (JSON, plain text, etc.)
           extractedText = text;
-          webFetchLogger.debug("[webfetch] Non-HTML content", { url, contentType: "text/plain" });
+// DEBUG "[webfetch] Non-HTML content", { url, contentType: "text/plain" } // 已精简
         }
 
         // Truncate if needed

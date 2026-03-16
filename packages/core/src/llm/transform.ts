@@ -24,11 +24,7 @@ export namespace LLMTransform {
     provider: ProviderMetadata,
     model: ModelMetadata
   ): ModelMessage[] {
-    transformLogger.debug("Normalizing messages", {
-      providerId: provider.id,
-      modelId: model.id,
-      messageCount: messages.length,
-    });
+    // Normalizing messages // 已精简
 
     let result = [...messages];
 
@@ -80,7 +76,7 @@ export namespace LLMTransform {
         // Handle string content
         if (typeof msg.content === "string") {
           if (msg.content === "") {
-            transformLogger.debug("Filtering empty string message for Anthropic");
+            // Filtering empty string message // 已精简
             return undefined;
           }
           return msg;
@@ -97,7 +93,7 @@ export namespace LLMTransform {
           });
 
           if (filtered.length === 0) {
-            transformLogger.debug("Filtering message with all empty parts for Anthropic");
+            // Filtering message with all empty parts // 已精简
             return undefined;
           }
 
@@ -164,7 +160,7 @@ export namespace LLMTransform {
       // Mistral requires: tool message must be followed by assistant message
       // If tool is followed by user, insert an empty assistant message
       if (processedMsg.role === "tool" && nextMsg?.role === "user") {
-        transformLogger.debug("Inserting empty assistant message after tool for Mistral");
+                // Inserting empty assistant message for Mistral // 已精简
         result.push({
           role: "assistant",
           content: [{ type: "text", text: "Done." }],
@@ -270,12 +266,7 @@ export namespace LLMTransform {
     const result: Record<string, any> = {};
 
     // Temperature - handle provider-specific constraints
-    transformLogger.debug("[generateProviderOptions] Processing temperature", {
-      optionsTemperature: options.temperature,
-      modelCapabilities: model.capabilities,
-      providerId: provider.id,
-      modelId: model.id,
-    });
+    // Processing temperature debug // 已精简
     
     if (options.temperature !== undefined && model.capabilities?.temperature) {
       let temperature = options.temperature;
@@ -284,12 +275,7 @@ export namespace LLMTransform {
       const isZhipuAI = provider.id === "zhipuai";
       const isGLMModel = model.id.includes("glm");
       
-      transformLogger.debug("[generateProviderOptions] Checking ZhipuAI/GLM", {
-        isZhipuAI,
-        isGLMModel,
-        providerId: provider.id,
-        modelId: model.id,
-      });
+      // Checking ZhipuAI/GLM debug // 已精简
       
       if (isZhipuAI || isGLMModel) {
         temperature = 1;
@@ -322,10 +308,7 @@ export namespace LLMTransform {
         modelId: model.id 
       });
     } else {
-      transformLogger.debug("[generateProviderOptions] Skipping temperature", {
-        hasOptionsTemp: options.temperature !== undefined,
-        modelCapTemp: model.capabilities?.temperature,
-      });
+      // Skipping temperature debug // 已精简
     }
 
     // Max tokens

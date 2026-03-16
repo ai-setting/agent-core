@@ -51,7 +51,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
       
       const parentSessionId = ctx.session_id || "default";
       
-      taskToolLogger.debug(`Called with: description=${description}, subagent_type=${subagent_type}, background=${background}, parentSessionId=${parentSessionId}`);
+// DEBUG `Called with: description=${description}, subagent_type=${subagent_type}, background=${background}, parentSessionId=${parentSessionId}` // 已精简
 
       const subAgent = getSubAgentSpec(actualSubagentType);
       if (!subAgent) {

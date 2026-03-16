@@ -63,10 +63,7 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
           return match && match[1] === requestId;
         });
         
-        getLogsForRequestLogger.debug("[get_logs_for_request] Filtered lines", { 
-          requestId, 
-          count: filteredLines.length 
-        });
+        // Filtered lines debug // 已精简
         
         const startIndex = offset || 0;
         const endIndex = startIndex + (limit || 500);

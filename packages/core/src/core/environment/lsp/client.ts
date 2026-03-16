@@ -39,10 +39,10 @@ export async function ensureCommandExists(command: string, installCommand?: stri
       });
       
       installProcess.stdout.on("data", (data) => {
-        lspLogger.debug(`[install] stdout: ${data.toString()}`);
+        // [LSP DEBUG] `[install] stdout: ${data.toString()}`) // 已精简
       });
       installProcess.stderr.on("data", (data) => {
-        lspLogger.debug(`[install] stderr: ${data.toString()}`);
+        // [LSP DEBUG] `[install] stderr: ${data.toString()}`) // 已精简
       });
       
       await new Promise<void>((resolve, reject) => {
@@ -154,7 +154,7 @@ export class LSPClient extends EventEmitter {
     if (useBunx) {
       spawnCommand = "bun";
       spawnArgs = ["x", command, ...args];
-      lspLogger.debug(`Using bunx to run LSP server: ${spawnCommand} ${spawnArgs.join(" ")}`);
+      // [LSP DEBUG] `Using bunx to run LSP server: ${spawnCommand} ${spawnArgs.join(" ")}`) // 已精简
     } else {
       spawnCommand = command;
       spawnArgs = args;
@@ -168,7 +168,7 @@ export class LSPClient extends EventEmitter {
 
     this.process.stdout.on("data", (data: Buffer) => this.handleData(data));
     this.process.stderr.on("data", (data: Buffer) => {
-      lspLogger.debug(`[${this.serverID}] stderr: ${data.toString()}`);
+      // [LSP DEBUG] `[${this.serverID}] stderr: ${data.toString()}`) // 已精简
     });
 
     this.process.on("error", (error) => {
@@ -189,7 +189,7 @@ export class LSPClient extends EventEmitter {
     // Timeout fallback - resolve after 5 seconds even if no response
     setTimeout(() => {
       if (!this.initialized) {
-        lspLogger.debug(`LSP server startup timeout, resolving anyway: ${this.serverID}`);
+        // [LSP DEBUG] `LSP server startup timeout, resolving anyway: ${this.serverID}`) // 已精简
         resolve();
       }
     }, 5000);
@@ -263,7 +263,7 @@ export class LSPClient extends EventEmitter {
       this.handleServerRequest(message.method, message.params as Record<string, unknown>, message.id);
     } else if (message.id !== undefined) {
       // Message has id but not in pendingRequests - could be a stray response
-      lspLogger.debug(`Received message with unknown id: ${message.id}`);
+      // [LSP DEBUG] `Received message with unknown id: ${message.id}`) // 已精简
     }
   }
 
@@ -339,7 +339,7 @@ export class LSPClient extends EventEmitter {
           this.handleNotification(method, params);
           return;
         }
-        lspLogger.debug(`Unhandled server request: ${method}`);
+        // [LSP DEBUG] `Unhandled server request: ${method}`) // 已精简
         return;
     }
 
@@ -370,11 +370,7 @@ export class LSPClient extends EventEmitter {
         const uri = params.uri as string;
         const filePath = this.uriToPath(uri);
         
-        lspLogger.debug(`[${this.serverID}] publishDiagnostics received`, { 
-          uri, 
-          filePath,
-          diagnosticsCount: (params.diagnostics as unknown[])?.length 
-        });
+        // publishDiagnostics debug // 已精简
         
         const diagnostics = (params.diagnostics as Array<{
           range: { start: { line: number; character: number }; end: { line: number; character: number } };
@@ -399,12 +395,12 @@ export class LSPClient extends EventEmitter {
       }
 
       case "window/logMessage": {
-        lspLogger.debug(`[${this.serverID}] Log message:`, { message: params.message });
+        // [LSP DEBUG] `[${this.serverID}] Log message:`, { message: params.message }) // 已精简
         break;
       }
 
       default:
-        lspLogger.debug(`[${this.serverID}] Unknown notification: ${method}`);
+        // [LSP DEBUG] `[${this.serverID}] Unknown notification: ${method}`) // 已精简
     }
   }
 
@@ -503,9 +499,7 @@ export class LSPClient extends EventEmitter {
     // Save server capabilities for diagnostic mode detection
     if (result?.capabilities) {
       this.serverCapabilities = result.capabilities;
-      lspLogger.debug(`Server capabilities saved for ${this.serverID}`, { 
-        capabilities: this.serverCapabilities 
-      });
+      // Server capabilities debug // 已精简
     }
 
     this.initialized = true;
@@ -607,7 +601,7 @@ export class LSPClient extends EventEmitter {
         }) as { items?: LSPDiagnostic[] };
         
         const diagnostics = result?.items || [];
-        lspLogger.debug(`Pull diagnostics for ${filePath}`, { count: diagnostics.length });
+        // [LSP DEBUG] `Pull diagnostics for ${filePath}`, { count: diagnostics.length }) // 已精简
         
         // Cache the results
         this.diagnostics.set(filePath, diagnostics);
