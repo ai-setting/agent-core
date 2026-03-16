@@ -245,13 +245,13 @@ export class SpanCollector implements ISpanCollector {
       const duration = span.endTime ? span.endTime - span.startTime : 0;
       const statusIcon = span.status === SpanStatus.OK ? "✓" : "✗";
       const durationStr = `[${duration}ms]`;
-      const spanIdShort = span.spanId.slice(-8); // Show last 8 chars
+      const spanIdDisplay = span.spanId; // Show full spanId for get_span_detail lookup
       
       // Format timestamp to readable time
       const startTimeStr = new Date(span.startTime).toISOString().slice(11, 23); // HH:MM:SS.mmm
       const endTimeStr = span.endTime ? new Date(span.endTime).toISOString().slice(11, 23) : "ongoing";
 
-      let line = `${indent}${statusIcon} ${span.name} ${durationStr} ${startTimeStr}→${endTimeStr} (spanId: ${spanIdShort})`;
+      let line = `${indent}${statusIcon} ${span.name} ${durationStr} ${startTimeStr}→${endTimeStr} (spanId: ${spanIdDisplay})`;
       if (span.error) {
         line += ` - ${span.error}`;
       }
