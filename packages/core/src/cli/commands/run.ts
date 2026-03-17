@@ -112,9 +112,10 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
 
     // 用于控制 console 输出：当指定 --log-file 时，可以关闭非 AI 响应的输出
     let logToStdout = true;
-    let runLogger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void } | undefined;
+    let logStream: fs.WriteStream | undefined;
 
     // 处理 --log-file 参数：日志写到文件，stdout 只输出 AI 响应
+    // 注意：必须在创建任何服务器/环境之前执行，以确保所有日志都写入文件
     if (args.logFile) {
       const logFile = path.resolve(args.logFile);
       const logDir = path.dirname(logFile);
@@ -124,11 +125,8 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
         fs.mkdirSync(logDir, { recursive: true });
       }
 
-      // 设置日志目录覆盖
-      setLogDirOverride(logDir);
-
-      // 创建日志写入函数（直接写入文件，不经过 console）
-      const logStream = fs.createWriteStream(logFile, { flags: "a" });
+      // 创建日志写入流
+      logStream = fs.createWriteStream(logFile, { flags: "a" });
       const writeLog = (msg: string) => {
         const timestamp = new Date().toLocaleString("zh-CN", {
           timeZone: "Asia/Shanghai",
@@ -140,7 +138,7 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
           second: "2-digit",
           hour12: false,
         }).replace(/\//g, "-");
-        logStream.write(`[${timestamp}] ${msg}\n`);
+        logStream!.write(`[${timestamp}] ${msg}\n`);
       };
 
       writeLog("=== tong_work run 开始 ===");
@@ -150,27 +148,56 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       // 关闭 stdout 输出（只在文件里写日志）
       logToStdout = false;
 
-      // 创建自定义 logger 写入日志文件
-      runLogger = {
-        info: (msg: string) => writeLog(`[INFO] ${msg}`),
-        warn: (msg: string) => writeLog(`[WARN] ${msg}`),
-        error: (msg: string) => writeLog(`[ERROR] ${msg}`),
-      } as any;
+      // 保存原始 console 方法
+      const originalConsoleLog = console.log;
+      const originalConsoleInfo = console.info;
+      const originalConsoleWarn = console.warn;
+      const originalConsoleError = console.error;
+      const originalConsoleDebug = console.debug;
+
+      // 重写 console 方法，让所有日志写入文件
+      console.log = (...args: any[]) => writeLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      console.info = (...args: any[]) => writeLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      console.warn = (...args: any[]) => writeLog("[WARN] " + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      console.error = (...args: any[]) => writeLog("[ERROR] " + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      console.debug = (...args: any[]) => writeLog("[DEBUG] " + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+
+      // 保存恢复函数供 runInteractive 使用
+      const restoreConsole = () => {
+        console.log = originalConsoleLog;
+        console.info = originalConsoleInfo;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+        console.debug = originalConsoleDebug;
+      };
+      (global as any).__restoreConsole = restoreConsole;
+
+      // 设置日志目录覆盖（确保服务器日志也写入同一文件）
+      setLogDirOverride(logDir);
     }
 
     // 日志辅助函数
     const log = {
       info: (...args: any[]) => {
         if (logToStdout) console.log(...args);
-        runLogger?.info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+        if (logStream) {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
+          logStream.write(`[INFO] ${msg}\n`);
+        }
       },
       warn: (...args: any[]) => {
         if (logToStdout) console.warn(...args);
-        runLogger?.warn(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+        if (logStream) {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
+          logStream.write(`[WARN] ${msg}\n`);
+        }
       },
       error: (...args: any[]) => {
         if (logToStdout) console.error(...args);
-        runLogger?.error(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+        if (logStream) {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
+          logStream.write(`[ERROR] ${msg}\n`);
+        }
       },
     };
 
