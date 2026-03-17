@@ -43,14 +43,14 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
   // 注册内置 Commands（如果尚未注册）
   const commandRegistry = CommandRegistry.getInstance();
   if (commandRegistry.list().length === 0) {
-    console.log("📝 注册 Commands...");
+    serverLogger.info("📝 注册 Commands...");
     commandRegistry.register(echoCommand);
     commandRegistry.register(connectCommand);
     commandRegistry.register(modelsCommand);
     commandRegistry.register(agentEnvCommand);
     commandRegistry.register(exitCommand);
     commandRegistry.register(sessionsCommand);
-    console.log(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
+    serverLogger.info(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   }
 
   // 加载配置
@@ -70,7 +70,7 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     // 应用日志级别配置
     if (config.logging?.level) {
       setLoggerGlobalLevel(config.logging.level as LogLevel);
-      console.log(`[Config] Log level set to: ${config.logging.level}`);
+      serverLogger.info(`[Config] Log level set to: ${config.logging.level}`);
     }
     
     if (!model && config.defaultModel) model = config.defaultModel;
@@ -80,16 +80,16 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     // 将 clientId 注入环境变量，供 MCP Server 使用
     if (config.clientId) {
       process.env.CLIENT_ID = config.clientId;
-      console.log(`[Config] CLIENT_ID set to: ${config.clientId}`);
+      serverLogger.info(`[Config] CLIENT_ID set to: ${config.clientId}`);
     } else {
-      console.log(`[Config] CLIENT_ID not found in config`);
+      serverLogger.info(`[Config] CLIENT_ID not found in config`);
     }
     
     if (model && apiKey) {
-      console.log(`✅ 配置加载成功: ${model}`);
+      serverLogger.info(`✅ 配置加载成功: ${model}`);
     }
   } catch (error) {
-    console.log("⚠️  配置加载失败:", error instanceof Error ? error.message : String(error));
+    serverLogger.warn("⚠️  配置加载失败:", error instanceof Error ? error.message : String(error));
   }
 
   // 创建 ServerEnvironment
@@ -101,12 +101,12 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     await env.waitForReady();
     const currentModel = env.getCurrentModel();
     if (currentModel) {
-      console.log(`✅ Environment 已创建 (Model: ${currentModel.providerID}/${currentModel.modelID})`);
+      serverLogger.info(`✅ Environment 已创建 (Model: ${currentModel.providerID}/${currentModel.modelID})`);
     } else {
-      console.log("⚠️  Environment 已创建，但未配置 LLM");
+      serverLogger.warn("⚠️  Environment 已创建，但未配置 LLM");
     }
   } catch (error) {
-    console.error("❌ 创建 Environment 失败:", error instanceof Error ? error.message : String(error));
+    serverLogger.error("❌ 创建 Environment 失败:", error instanceof Error ? error.message : String(error));
   }
 
   // 创建并启动 Server
@@ -124,28 +124,26 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
 
 async function main() {
   // 打印日志目录
-  console.log("[DEBUG] LOG_DIR:", getLogDir());
+  serverLogger.info("[DEBUG] LOG_DIR: " + getLogDir());
 
   // 立即测试所有 logger
-  console.log("[DEBUG] Logger test START");
-  console.log("[DEBUG] LOG_LEVEL:", process.env.LOG_LEVEL);
-  console.log("[DEBUG] Testing serverLogger...");
+  serverLogger.info("[DEBUG] Logger test START");
+  serverLogger.info("[DEBUG] LOG_LEVEL: " + process.env.LOG_LEVEL);
+  serverLogger.info("[DEBUG] Testing serverLogger...");
   serverLogger.info("TEST ENTRY - serverLogger working");
-  console.log("[DEBUG] Testing sessionLogger...");
+  serverLogger.info("[DEBUG] Testing sessionLogger...");
   sessionLogger.info("TEST ENTRY - sessionLogger working");
-  console.log("[DEBUG] Testing sseLogger...");
+  serverLogger.info("[DEBUG] Testing sseLogger...");
   sseLogger.info("TEST ENTRY - sseLogger working");
-  console.log("[DEBUG] Logger test END");
+  serverLogger.info("[DEBUG] Logger test END");
 
-  console.log("╔════════════════════════════════════════════════════════════╗");
-  console.log("║     Agent Core Server                                      ║");
-  console.log("╚════════════════════════════════════════════════════════════╝");
-  console.log();
+  serverLogger.info("╔════════════════════════════════════════════════════════════╗");
+  serverLogger.info("║     Agent Core Server                                      ║");
+  serverLogger.info("╚════════════════════════════════════════════════════════════╝");
 
   const { port } = await initServer();
 
-  console.log();
-  console.log("按 Ctrl+C 停止服务");
+  serverLogger.info("按 Ctrl+C 停止服务");
 }
 
 // 只有直接运行此文件时才执行 main()

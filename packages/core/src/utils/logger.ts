@@ -21,14 +21,17 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 let logDirOverride: string | null = null;
 
 // 安静模式：启用后日志只写入文件，不输出到 stdout/stderr
-let quietMode = false;
-
-export function setQuietMode(enabled: boolean): void {
-  quietMode = enabled;
+// 使用环境变量实现跨模块共享
+export function isQuietMode(): boolean {
+  return process.env.TONG_WORK_QUIET === "true";
 }
 
-export function isQuietMode(): boolean {
-  return quietMode;
+export function setQuietMode(enabled: boolean): void {
+  process.env.TONG_WORK_QUIET = enabled ? "true" : "false";
+}
+
+export function getQuietMode(): boolean {
+  return isQuietMode();
 }
 
 // XDG 标准数据目录: XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
@@ -215,7 +218,7 @@ class Logger {
   debug(message: string, data?: unknown): void {
     if (!this.shouldLog("debug")) return;
     const formatted = this.formatMessage("debug", message, data);
-    if (!quietMode) {
+    if (!isQuietMode()) {
       console.debug(formatted);
     }
     this.writeToFile(formatted);
@@ -224,7 +227,7 @@ class Logger {
   info(message: string, data?: unknown): void {
     if (!this.shouldLog("info")) return;
     const formatted = this.formatMessage("info", message, data);
-    if (!quietMode) {
+    if (!isQuietMode()) {
       console.log(formatted);
     }
     this.writeToFile(formatted);
@@ -233,7 +236,7 @@ class Logger {
   warn(message: string, data?: unknown): void {
     if (!this.shouldLog("warn")) return;
     const formatted = this.formatMessage("warn", message, data);
-    if (!quietMode) {
+    if (!isQuietMode()) {
       console.warn(formatted);
     }
     this.writeToFile(formatted);
@@ -242,7 +245,7 @@ class Logger {
   error(message: string, data?: unknown): void {
     if (!this.shouldLog("error")) return;
     const formatted = this.formatMessage("error", message, data);
-    if (!quietMode) {
+    if (!isQuietMode()) {
       console.error(formatted);
     }
     this.writeToFile(formatted);

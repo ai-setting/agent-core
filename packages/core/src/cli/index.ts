@@ -8,15 +8,23 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
-import { VersionCommand } from "./commands/version.js";
-import { ServeCommand } from "./commands/serve.js";
-import { RunCommand } from "./commands/run.js";
-import { AttachCommand } from "./commands/attach.js";
-import { TuiCommand } from "./commands/tui.js";
-import { EnvCommand } from "./commands/env.js";
-
 async function main() {
   const pkg = await import("../../package.json", { with: { type: "json" } });
+
+  // 检查是否有 --quiet 参数（在导入命令之前设置）
+  const args = process.argv.slice(2);
+  const quietIndex = args.findIndex(arg => arg === '--quiet' || arg === '-q');
+  if (quietIndex !== -1) {
+    process.env.TONG_WORK_QUIET = "true";
+  }
+
+  // 动态导入命令模块
+  const { VersionCommand } = await import("./commands/version.js");
+  const { ServeCommand } = await import("./commands/serve.js");
+  const { RunCommand } = await import("./commands/run.js");
+  const { AttachCommand } = await import("./commands/attach.js");
+  const { TuiCommand } = await import("./commands/tui.js");
+  const { EnvCommand } = await import("./commands/env.js");
 
   await yargs(hideBin(process.argv))
     .scriptName("tong_work")

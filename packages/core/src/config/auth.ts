@@ -8,6 +8,9 @@
 import fs from "fs/promises";
 import { ConfigPaths } from "./paths.js";
 import type { Config } from "./types.js";
+import { createLogger } from "../utils/logger.js";
+
+const authLogger = createLogger("auth", "app.log");
 
 // Provider 到环境变量名的映射
 // 主要用于 auth.json 加载环境变量
@@ -160,7 +163,7 @@ export async function Auth_loadToEnv(): Promise<string[]> {
       if (!process.env[inferredName]) {
         process.env[inferredName] = providerConfig.key;
         setVars.push(`${providerName} -> ${inferredName}`);
-        console.log(`[Auth] 设置环境变量: ${inferredName}`);
+        authLogger.info(`[Auth] 设置环境变量: ${inferredName}`);
       }
       continue;
     }
@@ -169,16 +172,16 @@ export async function Auth_loadToEnv(): Promise<string[]> {
     if (!process.env[envVarName]) {
       process.env[envVarName] = providerConfig.key;
       setVars.push(`${providerName} -> ${envVarName}`);
-      console.log(`[Auth] 设置环境变量: ${envVarName}`);
+      authLogger.info(`[Auth] 设置环境变量: ${envVarName}`);
     } else {
-      console.log(`[Auth] 环境变量 ${envVarName} 已存在，跳过`);
+      authLogger.info(`[Auth] 环境变量 ${envVarName} 已存在，跳过`);
     }
   }
 
   if (setVars.length > 0) {
-    console.log(`[Auth] 已从 auth.json 加载 ${setVars.length} 个 API key 到环境变量`);
+    authLogger.info(`[Auth] 已从 auth.json 加载 ${setVars.length} 个 API key 到环境变量`);
   } else {
-    console.log("[Auth] 没有新的 API key 需要加载（都已存在或 auth.json 为空）");
+    authLogger.info("[Auth] 没有新的 API key 需要加载（都已存在或 auth.json 为空）");
   }
 
   return setVars;

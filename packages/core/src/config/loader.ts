@@ -2,6 +2,9 @@ import { configRegistry } from "./registry.js";
 import type { Config } from "./types.js";
 import { mergeDeep } from "./merge.js";
 import { resolveConfig } from "./resolver.js";
+import { createLogger } from "../utils/logger.js";
+
+const configLogger = createLogger("config", "app.log");
 
 export async function loadConfig(): Promise<Config.Info> {
   const sources = configRegistry.getSources();
@@ -11,11 +14,11 @@ export async function loadConfig(): Promise<Config.Info> {
     try {
       const loaded = await source.load();
       if (loaded) {
-        console.log(`[Config] Loaded from "${source.name}"`);
+        configLogger.info(`[Config] Loaded from "${source.name}"`);
         result = mergeDeep(result, loaded);
       }
     } catch (error) {
-      console.warn(`[Config] Failed to load config from "${source.name}":`, error);
+      configLogger.warn(`[Config] Failed to load config from "${source.name}":`, error);
     }
   }
 

@@ -11,6 +11,9 @@
 
 import type { Config } from "./types.js";
 import { Auth_getProvider } from "./auth.js";
+import { createLogger } from "../utils/logger.js";
+
+const resolverLogger = createLogger("resolver", "app.log");
 
 // Variable reference pattern: ${auth:provider-name} or ${ENV_VAR}
 const VAR_PATTERN = /\$\{([^}]+)\}/g;
@@ -31,7 +34,7 @@ async function resolveVariable(ref: string): Promise<string | undefined> {
     if (auth?.type === "api") {
       return auth.key;
     }
-    console.warn(`[Config] Auth provider "${providerName}" not found or invalid`);
+    resolverLogger.warn(`[Config] Auth provider "${providerName}" not found or invalid`);
     return undefined;
   }
 
@@ -41,7 +44,7 @@ async function resolveVariable(ref: string): Promise<string | undefined> {
     return envValue;
   }
 
-  console.warn(`[Config] Environment variable "${trimmed}" not found`);
+  resolverLogger.warn(`[Config] Environment variable "${trimmed}" not found`);
   return undefined;
 }
 

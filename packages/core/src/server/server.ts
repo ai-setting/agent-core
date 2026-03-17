@@ -7,12 +7,14 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
+import { logger as honoLogger, logger } from "hono/logger";
 import eventsRoute from "./routes/events.js";
 import sessionsRoute from "./routes/sessions.js";
 import commandsRoute from "./routes/commands.js";
 import type { ServerEnvironment } from "./environment.js";
 import { getTraceContext } from "../utils/trace-context.js";
+import { serverLogger } from "./logger.js";
+import { isQuietMode } from "../utils/logger.js";
 
 type Variables = {
   env: ServerEnvironment;
@@ -54,8 +56,9 @@ export class AgentServer {
       allowHeaders: ["Content-Type", "Authorization"],
     }));
 
-    // Logger - can be disabled (e.g., when running in TUI mode to avoid console output)
-    if (this.config.enableLogger !== false) {
+    // Logger - can be disabled (e.g., when running in TUI mode or quiet mode to avoid console output)
+    // 注意：需要在运行时检查 isQuietMode()，因为环境变量可能在模块加载后被设置
+    if (this.config.enableLogger !== false && !isQuietMode()) {
       this.app.use(logger());
     }
 
@@ -153,16 +156,16 @@ export class AgentServer {
       }
       const actualPort = fallbackServer.port;
       this.bunServer = fallbackServer;
-      console.log(`✅ 服务器已启动: http://${hostname}:${actualPort}`);
-      console.log(`📡 SSE endpoint: http://${hostname}:${actualPort}/events`);
-      console.log(`❤️  Health check: http://${hostname}:${actualPort}/health`);
+      serverLogger.info(`✅ 服务器已启动: http://${hostname}:${actualPort}`);
+      serverLogger.info(`📡 SSE endpoint: http://${hostname}:${actualPort}/events`);
+      serverLogger.info(`❤️  Health check: http://${hostname}:${actualPort}/health`);
       return actualPort;
     }
 
     this.bunServer = server;
-    console.log(`🚀 Server running at http://${hostname}:${port}`);
-    console.log(`📡 SSE endpoint: http://${hostname}:${port}/events`);
-    console.log(`❤️  Health check: http://${hostname}:${port}/health`);
+    serverLogger.info(`🚀 Server running at http://${hostname}:${port}`);
+    serverLogger.info(`📡 SSE endpoint: http://${hostname}:${port}/events`);
+    serverLogger.info(`❤️  Health check: http://${hostname}:${port}/health`);
     return port;
   }
 
@@ -172,7 +175,7 @@ export class AgentServer {
       const eventMcpManager = this.env.getEventMcpManager?.();
       if (eventMcpManager) {
         await eventMcpManager.disconnectAll();
-        console.log("✓ EventSource 连接已断开");
+        serverLogger.info("✓ EventSource 连接已断开");
       }
     }
     
@@ -180,7 +183,7 @@ export class AgentServer {
     if (this.bunServer) {
       this.bunServer.stop();
       this.bunServer = undefined;
-      console.log("🛑 服务器已停止");
+      serverLogger.info("🛑 服务器已停止");
     }
   }
 }

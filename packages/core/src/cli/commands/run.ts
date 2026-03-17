@@ -12,6 +12,7 @@ import { AgentServer } from "../../server/server.js";
 import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
 import { Config_get, Config_reload, Config_clear, Config_getSync, Config_onChange, Config_notifyChange, resolveConfig } from "../../config/index.js";
+import { setLogDirOverride } from "../../utils/logger.js";
 import { findEnvironmentPath } from "../../config/sources/environment.js";
 import { ConfigPaths } from "../../config/paths.js";
 
@@ -112,10 +113,9 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     }
 
     // 处理 --quiet 参数：启用安静模式，日志只输出到文件
-    // 需要在最早的时候执行，以便捕获所有日志
+    // 需要在最早的时候执行
     if (args.quiet) {
-      const { setQuietMode } = await import("../../utils/logger.js");
-      setQuietMode(true);
+      process.env.TONG_WORK_QUIET = "true";
     }
 
     // 日志辅助函数
