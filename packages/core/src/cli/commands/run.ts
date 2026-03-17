@@ -113,36 +113,9 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
 
     // 处理 --quiet 参数：启用安静模式，日志只输出到文件
     // 需要在最早的时候执行，以便捕获所有日志
-    let restoreConsole: (() => void) | undefined;
     if (args.quiet) {
-      // 导入 logger 和 quietMode
-      const { setQuietMode, logger } = await import("../../utils/logger.js");
-      
-      // 启用 quietMode
+      const { setQuietMode } = await import("../../utils/logger.js");
       setQuietMode(true);
-      
-      // 保存原始 console
-      const originalLog = console.log;
-      const originalInfo = console.info;
-      const originalWarn = console.warn;
-      const originalError = console.error;
-      const originalDebug = console.debug;
-      
-      // 重写 console，将所有日志重定向到 logger
-      console.log = (...args: any[]) => logger.info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
-      console.info = (...args: any[]) => logger.info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
-      console.warn = (...args: any[]) => logger.warn(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
-      console.error = (...args: any[]) => logger.error(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
-      console.debug = (...args: any[]) => logger.debug(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
-      
-      // 保存恢复函数
-      restoreConsole = () => {
-        console.log = originalLog;
-        console.info = originalInfo;
-        console.warn = originalWarn;
-        console.error = originalError;
-        console.debug = originalDebug;
-      };
     }
 
     // 日志辅助函数
