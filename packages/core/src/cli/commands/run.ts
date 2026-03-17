@@ -12,7 +12,7 @@ import { AgentServer } from "../../server/server.js";
 import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
 import { Config_get, Config_reload, Config_clear, Config_getSync, Config_onChange, Config_notifyChange, resolveConfig } from "../../config/index.js";
-import { setLogDirOverride, createLogger, type Logger } from "../../utils/logger.js";
+import { setLogDirOverride } from "../../utils/logger.js";
 import { findEnvironmentPath } from "../../config/sources/environment.js";
 import { ConfigPaths } from "../../config/paths.js";
 
@@ -112,13 +112,12 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
 
     // 用于控制 console 输出：当指定 --log-file 时，可以关闭非 AI 响应的输出
     let logToStdout = true;
-    let runLogger: Logger | undefined;
+    let runLogger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void } | undefined;
 
     // 处理 --log-file 参数：日志写到文件，stdout 只输出 AI 响应
     if (args.logFile) {
       const logFile = path.resolve(args.logFile);
       const logDir = path.dirname(logFile);
-      const logFilename = path.basename(logFile);
 
       // 确保日志目录存在
       if (!fs.existsSync(logDir)) {
@@ -128,36 +127,35 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       // 设置日志目录覆盖
       setLogDirOverride(logDir);
 
-      // 创建一个专门的文件 logger
-      runLogger = createLogger("run", logFilename, "info");
-      runLogger.info("=== tong_work run 开始 ===");
-      runLogger.info(`工作目录: ${process.cwd()}`);
-      runLogger.info(`日志文件: ${logFile}`);
+      // 创建日志写入函数（直接写入文件，不经过 console）
+      const logStream = fs.createWriteStream(logFile, { flags: "a" });
+      const writeLog = (msg: string) => {
+        const timestamp = new Date().toLocaleString("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).replace(/\//g, "-");
+        logStream.write(`[${timestamp}] ${msg}\n`);
+      };
+
+      writeLog("=== tong_work run 开始 ===");
+      writeLog(`工作目录: ${process.cwd()}`);
+      writeLog(`日志文件: ${logFile}`);
 
       // 关闭 stdout 输出（只在文件里写日志）
       logToStdout = false;
 
-      // 封装 console.log/info/warn/error 到 logger
-      const originalConsoleLog = console.log;
-      const originalConsoleInfo = console.info;
-      const originalConsoleWarn = console.warn;
-      const originalConsoleError = console.error;
-
-      console.log = (...args) => runLogger!.info(args.map(a => String(a)).join(" "));
-      console.info = (...args) => runLogger!.info(args.map(a => String(a)).join(" "));
-      console.warn = (...args) => runLogger!.warn(args.map(a => String(a)).join(" "));
-      console.error = (...args) => runLogger!.error(args.map(a => String(a)).join(" "));
-
-      // 恢复函数（用于 AI 响应输出）
-      const restoreConsole = () => {
-        console.log = originalConsoleLog;
-        console.info = originalConsoleInfo;
-        console.warn = originalConsoleWarn;
-        console.error = originalConsoleError;
-      };
-
-      // 保存 restoreConsole 供后续使用
-      (global as any).__restoreConsole = restoreConsole;
+      // 创建自定义 logger 写入日志文件
+      runLogger = {
+        info: (msg: string) => writeLog(`[INFO] ${msg}`),
+        warn: (msg: string) => writeLog(`[WARN] ${msg}`),
+        error: (msg: string) => writeLog(`[ERROR] ${msg}`),
+      } as any;
     }
 
     // 日志辅助函数
