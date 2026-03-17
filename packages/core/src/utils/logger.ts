@@ -6,6 +6,8 @@
  * 无需配置，自动创建目录
  * 
  * 支持 requestId 追踪：通过 trace-context 模块自动注入
+ * 
+ * 安静模式：通过 setQuietMode(true) 启用，此时日志只写入文件，不输出到 stdout/stderr
  */
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
@@ -17,6 +19,17 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 // 日志目录优先级：环境变量 LOG_DIR > 配置 (通过 setLogDirOverride) > XDG 默认
 let logDirOverride: string | null = null;
+
+// 安静模式：启用后日志只写入文件，不输出到 stdout/stderr
+let quietMode = false;
+
+export function setQuietMode(enabled: boolean): void {
+  quietMode = enabled;
+}
+
+export function isQuietMode(): boolean {
+  return quietMode;
+}
 
 // XDG 标准数据目录: XDG_DATA_HOME/tong_work/logs/ (默认 ~/.local/share/tong_work/logs/)
 const DEFAULT_LOG_DIR = join(xdgData || "", "tong_work", "logs");
@@ -202,28 +215,36 @@ class Logger {
   debug(message: string, data?: unknown): void {
     if (!this.shouldLog("debug")) return;
     const formatted = this.formatMessage("debug", message, data);
-    console.debug(formatted);
+    if (!quietMode) {
+      console.debug(formatted);
+    }
     this.writeToFile(formatted);
   }
 
   info(message: string, data?: unknown): void {
     if (!this.shouldLog("info")) return;
     const formatted = this.formatMessage("info", message, data);
-    console.log(formatted);
+    if (!quietMode) {
+      console.log(formatted);
+    }
     this.writeToFile(formatted);
   }
 
   warn(message: string, data?: unknown): void {
     if (!this.shouldLog("warn")) return;
     const formatted = this.formatMessage("warn", message, data);
-    console.warn(formatted);
+    if (!quietMode) {
+      console.warn(formatted);
+    }
     this.writeToFile(formatted);
   }
 
   error(message: string, data?: unknown): void {
     if (!this.shouldLog("error")) return;
     const formatted = this.formatMessage("error", message, data);
-    console.error(formatted);
+    if (!quietMode) {
+      console.error(formatted);
+    }
     this.writeToFile(formatted);
   }
 
