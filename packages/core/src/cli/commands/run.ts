@@ -11,14 +11,19 @@ import path from "path";
 import { AgentServer } from "../../server/server.js";
 import { ServerEnvironment } from "../../server/environment.js";
 import { TongWorkClient } from "../client.js";
-import { Config_get, resolveConfig } from "../../config/index.js";
-import { setLogDirOverride } from "../../utils/logger.js";
+import { Config_get, Config_reload, Config_clear, Config_getSync, Config_onChange, Config_notifyChange, resolveConfig } from "../../config/index.js";
+import { setLogDirOverride, createLogger, type Logger } from "../../utils/logger.js";
+import { findEnvironmentPath } from "../../config/sources/environment.js";
+import { ConfigPaths } from "../../config/paths.js";
 
 interface RunOptions {
   message?: string;
   continue?: boolean;
   session?: string;
+  listSessions?: boolean;
   model?: string;
+  env?: string;
+  logFile?: string;
   port?: number;
 }
 
@@ -47,14 +52,13 @@ async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
 }
 
 export const RunCommand: CommandModule<{}, RunOptions> = {
-  command: "run <message>",
+  command: "run [message]",
   describe: "直接运行代理任务",
   builder: (yargs) =>
     yargs
       .positional("message", {
         describe: "要执行的消息",
         type: "string",
-        demandOption: true,
       })
       .option("continue", {
         alias: "c",
@@ -67,8 +71,23 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
         describe: "指定会话 ID",
         type: "string",
       })
+      .option("list-sessions", {
+        alias: "l",
+        describe: "列出所有会话",
+        type: "boolean",
+        default: false,
+      })
       .option("model", {
         describe: "使用的模型",
+        type: "string",
+      })
+      .option("env", {
+        alias: "e",
+        describe: "使用的环境名称",
+        type: "string",
+      })
+      .option("log-file", {
+        describe: "日志输出文件 (stdout 只输出 AI 响应)",
         type: "string",
       })
       .option("port", {
@@ -77,60 +96,151 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
         default: 4096,
       }),
 
-  async handler(args) {
+  async handler(args: any) {
+    // message 可以是 undefined，所以我们不在这里验证
     const message = args.message || "";
+    const isListSessions = args.listSessions;
+    const hasMessage = !!message;
+    const hasContinue = args.continue;
+    const hasSession = !!args.session;
 
-    if (!message && !args.continue && !args.session) {
-      console.error("请提供要执行的消息");
+    // 验证参数组合
+    if (!hasMessage && !isListSessions && !hasContinue && !hasSession) {
+      console.error("请提供要执行的消息，或使用 --list-sessions 列出会话");
       process.exit(1);
     }
 
+    // 用于控制 console 输出：当指定 --log-file 时，可以关闭非 AI 响应的输出
+    let logToStdout = true;
+    let runLogger: Logger | undefined;
+
+    // 处理 --log-file 参数：日志写到文件，stdout 只输出 AI 响应
+    if (args.logFile) {
+      const logFile = path.resolve(args.logFile);
+      const logDir = path.dirname(logFile);
+      const logFilename = path.basename(logFile);
+
+      // 确保日志目录存在
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+
+      // 设置日志目录覆盖
+      setLogDirOverride(logDir);
+
+      // 创建一个专门的文件 logger
+      runLogger = createLogger("run", logFilename, "info");
+      runLogger.info("=== tong_work run 开始 ===");
+      runLogger.info(`工作目录: ${process.cwd()}`);
+      runLogger.info(`日志文件: ${logFile}`);
+
+      // 关闭 stdout 输出（只在文件里写日志）
+      logToStdout = false;
+
+      // 封装 console.log/info/warn/error 到 logger
+      const originalConsoleLog = console.log;
+      const originalConsoleInfo = console.info;
+      const originalConsoleWarn = console.warn;
+      const originalConsoleError = console.error;
+
+      console.log = (...args) => runLogger!.info(args.map(a => String(a)).join(" "));
+      console.info = (...args) => runLogger!.info(args.map(a => String(a)).join(" "));
+      console.warn = (...args) => runLogger!.warn(args.map(a => String(a)).join(" "));
+      console.error = (...args) => runLogger!.error(args.map(a => String(a)).join(" "));
+
+      // 恢复函数（用于 AI 响应输出）
+      const restoreConsole = () => {
+        console.log = originalConsoleLog;
+        console.info = originalConsoleInfo;
+        console.warn = originalConsoleWarn;
+        console.error = originalConsoleError;
+      };
+
+      // 保存 restoreConsole 供后续使用
+      (global as any).__restoreConsole = restoreConsole;
+    }
+
+    // 日志辅助函数
+    const log = {
+      info: (...args: any[]) => {
+        if (logToStdout) console.log(...args);
+        runLogger?.info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      },
+      warn: (...args: any[]) => {
+        if (logToStdout) console.warn(...args);
+        runLogger?.warn(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      },
+      error: (...args: any[]) => {
+        if (logToStdout) console.error(...args);
+        runLogger?.error(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      },
+    };
+
     const workdir = process.cwd();
-    
+
     // Try multiple locations for .env file
     const envPaths = [
       path.join(workdir, ".env"),
       path.join(workdir, "..", "..", ".env"), // From packages/core
       path.join(workdir, "..", ".env"),
     ];
-    
+
     let baseEnv: Record<string, string> = {};
     for (const envPath of envPaths) {
       baseEnv = await loadEnvFile(envPath);
       if (Object.keys(baseEnv).length > 0) {
-        console.log(`Loaded env from: ${envPath}`);
+        log.info(`Loaded env from: ${envPath}`);
         break;
       }
     }
 
-    console.log("🚀 启动 tong_work 服务器...");
-    console.log("🔄 加载配置...");
-    
+    log.info("🚀 启动 tong_work 服务器...");
+    log.info("🔄 加载配置...");
+
+    // 处理 --env 参数：设置 activeEnvironment
+    let envName = args.env;
+    if (envName) {
+      log.info(`📦 查找环境: ${envName}`);
+      const envPathInfo = await findEnvironmentPath(envName);
+      if (!envPathInfo) {
+        log.error(`❌ 环境 "${envName}" 未找到`);
+        log.error(`   搜索路径: ${ConfigPaths.projectEnvironments}, ${ConfigPaths.environments}`);
+        process.exit(1);
+      }
+      log.info(`   环境路径: ${envPathInfo.path} (${envPathInfo.source})`);
+
+      // 设置 activeEnvironment 到 config
+      const rawConfig = await Config_get();
+      rawConfig.activeEnvironment = envName;
+      rawConfig._environmentPath = envPathInfo.path;
+      Config_notifyChange(rawConfig);
+    }
+
     // 加载配置文件
     let configModel: string | undefined;
     let configApiKey: string | undefined;
     let configBaseURL: string | undefined;
     let configLoaded = false;
-    
+
     try {
       const rawConfig = await Config_get();
       const config = await resolveConfig(rawConfig);
-      
+
       // 应用 logging 配置
       if (config.logging?.path) {
         setLogDirOverride(config.logging.path);
-        console.log(`📝 日志目录: ${config.logging.path}`);
+        log.info(`📝 日志目录: ${config.logging.path}`);
       }
-      
+
       if (config.defaultModel && config.apiKey) {
         configModel = config.defaultModel;
         configApiKey = config.apiKey;
         configBaseURL = config.baseURL;
         configLoaded = true;
-        console.log(`✅ 配置加载成功: ${config.defaultModel}`);
+        log.info(`✅ 配置加载成功: ${config.defaultModel}`);
       }
     } catch (error) {
-      console.log("⚠️  配置文件加载失败:", error instanceof Error ? error.message : String(error));
+      log.warn("⚠️  配置文件加载失败:", error instanceof Error ? error.message : String(error));
     }
 
     // 优先级：命令行参数 > .env 文件 > 配置文件
@@ -138,7 +248,7 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     const apiKey = baseEnv.LLM_API_KEY || configApiKey || "";
     const baseURL = baseEnv.LLM_BASE_URL || configBaseURL || "";
     const port = args.port;
-    
+
     // Set environment variables for createLLMConfigFromEnv
     if (apiKey) process.env.LLM_API_KEY = apiKey;
     if (baseURL) process.env.LLM_BASE_URL = baseURL;
@@ -147,22 +257,32 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     let env: ServerEnvironment | undefined;
     if (model && apiKey) {
       try {
-        env = new ServerEnvironment({
-          model,
-          apiKey,
-          baseURL,
-        });
+        // 如果指定了 --env，需要重新加载配置以应用环境设置
+        if (envName) {
+          env = new ServerEnvironment({
+            model,
+            apiKey,
+            baseURL,
+            loadConfig: true, // 强制重新加载配置
+          });
+        } else {
+          env = new ServerEnvironment({
+            model,
+            apiKey,
+            baseURL,
+          });
+        }
         // Wait for initialization to complete
         await env.waitForReady();
-        console.log(`✅ Environment 已创建 (Model: ${model})`);
+        log.info(`✅ Environment 已创建 (Model: ${model})`);
       } catch (error) {
-        console.error("❌ 创建 Environment 失败:", error);
+        log.error("❌ 创建 Environment 失败:", error);
         process.exit(1);
       }
     } else {
-      console.log("⚠️  未配置 LLM，Server 将以简化模式运行");
+      log.warn("⚠️  未配置 LLM，Server 将以简化模式运行");
       if (!configLoaded) {
-        console.log("   请配置 auth.json 或设置 LLM_MODEL/LLM_API_KEY");
+        log.warn("   请配置 auth.json 或设置 LLM_MODEL/LLM_API_KEY");
       }
     }
 
@@ -183,34 +303,80 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
     };
 
     // 创建客户端，使用本地 fetch
-    const client = new TongWorkClient("http://localhost:4096", { 
+    const client = new TongWorkClient(`http://localhost:${port}`, {
       sessionId: args.session,
       // @ts-ignore - 注入本地 fetch
       fetch: localFetch,
     });
 
-    console.log("✅ 服务器已就绪\n");
+    log.info(`✅ 服务器已就绪 (http://localhost:${port})\n`);
+
+    // 恢复 console 用于 AI 响应输出
+    if (args.logFile && (global as any).__restoreConsole) {
+      (global as any).__restoreConsole();
+    }
 
     try {
-      if (args.continue && args.session) {
-        const messages = await client.getMessages(args.session);
-        if (messages.length === 0) {
-          console.error("会话不存在或没有消息");
+      // 处理 --list-sessions
+      if (isListSessions) {
+        const sessions = await client.listSessions();
+        console.log("\n📋 会话列表:\n");
+        if (sessions.length === 0) {
+          console.log("  (无)");
+        } else {
+          for (const s of sessions) {
+            const title = s.title || "(无标题)";
+            const created = new Date(s.createdAt).toLocaleString("zh-CN");
+            console.log(`  ${s.id}  - ${title} (创建于: ${created})`);
+          }
+        }
+        console.log("");
+        await server.stop();
+        process.exit(0);
+      }
+
+      // 处理 --continue
+      let sessionId = args.session;
+      if (hasContinue && !sessionId) {
+        // 获取最近使用的 session
+        const sessions = await client.listSessions();
+        if (sessions.length > 0) {
+          // 按 updatedAt 排序，取最新的
+          sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+          sessionId = sessions[0].id;
+          console.log(`🔄 继续最近会话: ${sessionId}\n`);
+        } else {
+          console.error("没有可继续的会话");
+          await server.stop();
           process.exit(1);
         }
-        console.log(`继续会话: ${args.session}\n`);
+      }
+
+      // 创建或继续 session
+      if (sessionId) {
+        const messages = await client.getMessages(sessionId);
+        if (messages.length === 0) {
+          console.error("会话不存在或没有消息");
+          await server.stop();
+          process.exit(1);
+        }
+        console.log(`继续会话: ${sessionId}\n`);
       } else {
         const session = await client.createSession();
-        args.session = session.id;
+        sessionId = session.id;
         console.log(`创建新会话: ${session.id}\n`);
       }
 
-      await client.runInteractive(args.session!, message);
+      // 执行对话
+      await client.runInteractive(sessionId!, message);
 
       console.log("\n👋 任务完成！");
+      console.log(`Session: ${sessionId}`);
+      await server.stop();
       process.exit(0);
     } catch (error) {
       console.error("❌ 执行失败:", error);
+      await server.stop();
       process.exit(1);
     }
   },
