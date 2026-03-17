@@ -296,7 +296,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
 - The command argument is required.
-- You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+- You can specify an optional timeout in milliseconds. If not specified, commands will time out after 60000ms (1 minute).
 - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
 - Avoid using Bash with the find, grep, cat, head, tail, sed, awk, or echo commands, unless explicitly instructed. Instead, always prefer using the dedicated tools.
 - When issuing multiple commands: If the commands are independent and can run in parallel, use multiple Bash tool calls. If they depend on each other, use && to chain them.

@@ -249,6 +249,7 @@ export interface GlobOptions {
   cwd?: string;
   pattern?: string;
   maxResults?: number;
+  ignore?: string[];
 }
 
 export async function glob(
@@ -257,22 +258,22 @@ export async function glob(
 ): Promise<string[]> {
   const cwd = options?.cwd ?? process.cwd();
   const maxResults = options?.maxResults ?? 1000;
+  const ignorePatterns = options?.ignore ?? ["node_modules/**", ".git/**"];
 
   const patternArray = Array.isArray(patterns) ? patterns : [patterns];
   const results: Set<string> = new Set();
 
   for (const pattern of patternArray) {
-    const matches = globModule.sync(pattern, {
+    const matches = await globModule(pattern, {
       cwd,
       absolute: true,
       nodir: true,
-      ignore: ["node_modules/**", ".git/**"],
+      ignore: ignorePatterns,
     });
 
     for (const match of matches) {
       if (results.size < maxResults) {
-        // Normalize paths for cross-platform compatibility
-        results.add(normalizePath(match));
+        results.add(match);
       }
     }
   }
@@ -817,6 +818,7 @@ Usage:
         pattern: z.string().describe("The glob pattern to match files against"),
         path: z.string().optional().describe("The directory to search in. If not specified, the current working directory will be used."),
         maxResults: z.number().optional().describe("Maximum results to return (default: 100)"),
+        ignore: z.array(z.string()).optional().describe("Array of glob patterns to ignore (e.g. [\"node_modules/**\", \"dist/**\"]). By default, node_modules and .git are ignored."),
         reason: z.string().describe("Brief reason with search pattern (max 30 chars, e.g., 'Find *.test.ts files')"),
       }),
       execute: async (args) => {
@@ -824,6 +826,7 @@ Usage:
           const results = await glob(args.pattern, {
             cwd: args.path,
             maxResults: args.maxResults ?? 100,
+            ignore: args.ignore,
           });
           return {
             success: true,
@@ -849,6 +852,8 @@ Usage:
         pattern: z.string().describe("The regex pattern to search for in file contents"),
         path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
         include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
+        exclude: z.string().optional().describe('File pattern to exclude from the search (e.g. "*.test.ts", "node_modules/**")'),
+        caseSensitive: z.boolean().optional().describe("Whether the search should be case sensitive (default: true)"),
         maxMatches: z.number().optional().describe("Maximum matches to return (default: 100)"),
         reason: z.string().describe("Brief reason with search pattern (max 30 chars, e.g., 'Search for function def')"),
       }),
@@ -866,7 +871,9 @@ Usage:
           const results = await grep(args.pattern, {
             cwd: args.path,
             maxMatches: args.maxMatches ?? 100,
+            caseSensitive: args.caseSensitive ?? true,
             includePatterns: args.include ? [args.include] : undefined,
+            excludePatterns: args.exclude ? [args.exclude] : undefined,
           });
 
           if (results.length === 0) {
