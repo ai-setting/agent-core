@@ -25,6 +25,10 @@ interface RunOptions {
   env?: string;
   logFile?: string;
   port?: number;
+  // 流式输出显示选项
+  reasoning?: boolean;
+  toolCalls?: boolean;
+  toolResults?: boolean;
 }
 
 async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
@@ -96,6 +100,22 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
         describe: "服务器端口",
         type: "number",
         default: 4096,
+      })
+      .option("reasoning", {
+        alias: "r",
+        describe: "显示 AI 思考过程",
+        type: "boolean",
+        default: true,
+      })
+      .option("tool-calls", {
+        describe: "显示工具调用",
+        type: "boolean",
+        default: true,
+      })
+      .option("tool-results", {
+        describe: "显示工具执行结果",
+        type: "boolean",
+        default: true,
       }),
 
   async handler(args: any) {
@@ -317,7 +337,12 @@ export const RunCommand: CommandModule<{}, RunOptions> = {
       }
 
       // 执行对话
-      await client.runInteractive(sessionId!, message);
+      const displayOptions = {
+        reasoning: args.reasoning,
+        toolCalls: args.toolCalls,
+        toolResults: args.toolResults,
+      };
+      await client.runInteractive(sessionId!, message, displayOptions);
 
       console.log("\n👋 任务完成！");
       console.log(`Session: ${sessionId}`);

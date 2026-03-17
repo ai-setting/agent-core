@@ -31,6 +31,15 @@ export interface StreamEvent {
   code?: string;
 }
 
+export interface StreamDisplayOptions {
+  /** 显示 AI 思考过程 (reasoning) */
+  reasoning?: boolean;
+  /** 显示工具调用 (tool_call) */
+  toolCalls?: boolean;
+  /** 显示工具执行结果 (tool_result) */
+  toolResults?: boolean;
+}
+
 export class TongWorkClient {
   private baseUrl: string;
   private sessionId?: string;
@@ -138,30 +147,63 @@ export class TongWorkClient {
     }
   }
 
-  async runInteractive(sessionId: string, initialMessage: string): Promise<void> {
+  async runInteractive(
+    sessionId: string,
+    initialMessage: string,
+    options?: StreamDisplayOptions
+  ): Promise<void> {
+    const showReasoning = options?.reasoning ?? true;
+    const showToolCalls = options?.toolCalls ?? true;
+    const showToolResults = options?.toolResults ?? true;
+
     await this.sendPrompt(sessionId, initialMessage);
 
     console.log("\n🤖 AI 响应:\n");
 
+    let lastReasoningContent = "";
+    let reasoningLinePrinted = false;
+
     for await (const event of this.streamEvents(sessionId)) {
-      switch (event.type) {
+      const eventType = this.normalizeEventType(event.type);
+      switch (eventType) {
         case "start":
           break;
         case "text":
           process.stdout.write(event.delta || "");
           break;
         case "reasoning":
-          console.log("\n💭 思考:", event.content);
+          if (showReasoning && event.content) {
+            if (!reasoningLinePrinted) {
+              process.stdout.write("\n💭 思考: ");
+              reasoningLinePrinted = true;
+            }
+            if (event.content === lastReasoningContent) {
+              break;
+            }
+            if (event.content.startsWith(lastReasoningContent)) {
+              const newContent = event.content.slice(lastReasoningContent.length);
+              if (newContent) {
+                process.stdout.write(newContent);
+              }
+            } else {
+              process.stdout.write(event.content);
+            }
+            lastReasoningContent = event.content;
+          }
           break;
         case "tool_call":
-          console.log(`\n🔧 调用工具: ${event.toolName}`);
-          if (event.toolArgs) {
-            console.log("   参数:", JSON.stringify(event.toolArgs, null, 2));
+          if (showToolCalls) {
+            console.log(`\n🔧 调用工具: ${event.toolName}`);
+            if (event.toolArgs) {
+              console.log("   参数:", JSON.stringify(event.toolArgs, null, 2));
+            }
           }
           break;
         case "tool_result":
-          console.log(`\n📋 工具结果: ${event.toolName}`);
-          console.log("   ", event.result);
+          if (showToolResults) {
+            console.log(`\n📋 工具结果: ${event.toolName}`);
+            console.log("   ", typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2));
+          }
           break;
         case "completed":
           console.log("\n\n✅ 完成\n");
@@ -171,5 +213,18 @@ export class TongWorkClient {
           break;
       }
     }
+  }
+
+  private normalizeEventType(type: string): string {
+    const mapping: Record<string, string> = {
+      "stream.start": "start",
+      "stream.text": "text",
+      "stream.reasoning": "reasoning",
+      "stream.tool.call": "tool_call",
+      "stream.tool.result": "tool_result",
+      "stream.completed": "completed",
+      "stream.error": "error",
+    };
+    return mapping[type] || type;
   }
 }
