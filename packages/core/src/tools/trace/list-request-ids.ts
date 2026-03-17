@@ -11,6 +11,7 @@ const ListRequestIdsParamsSchema = z.object({
   limit: z.number().optional().default(50).describe("Maximum number of requestIds to return"),
   offset: z.number().optional().default(0).describe("Offset for pagination (use with limit to paginate through requestIds)"),
   includeFirstLog: z.boolean().optional().default(true).describe("Whether to include the first log line for each requestId"),
+  logDir: z.string().optional().describe("Log directory path. Must be an absolute path. If provided, the tool will look for log files in this directory instead of the default log directory."),
 });
 
 export type ListRequestIdsParams = z.infer<typeof ListRequestIdsParamsSchema>;
@@ -39,31 +40,44 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
     ): Promise<ToolResult> {
       // Parse args to apply defaults
       const parsedArgs = ListRequestIdsParamsSchema.parse(args);
-      const { filename, limit, offset, includeFirstLog } = parsedArgs;
+      const { filename, limit, offset, includeFirstLog, logDir: userLogDir } = parsedArgs;
 
-      const logFile = path.join(logDir, filename);
+      // Use user-provided logDir if valid, otherwise fall back to config/default
+      const effectiveLogDir = userLogDir || logDir;
+      
+      // Validate that logDir is absolute path if provided
+      if (userLogDir && !path.isAbsolute(userLogDir)) {
+        return {
+          success: false,
+          output: "",
+          error: `logDir must be an absolute path, got: ${userLogDir}`,
+        };
+      }
+
+      const logFile = path.join(effectiveLogDir, filename);
 
       // 在返回结果中包含日志文件路径，方便调试
       const debugInfo = {
         logFile,
-        logDir
+        logDir: effectiveLogDir
       };
 
       listRequestIdsLogger.info("[list_request_ids] Listing requestIds", {
         filename,
         logFile,
-        logDir,
+        logDir: effectiveLogDir,
+        userLogDir,
         limit,
         offset,
         includeFirstLog
       });
 
       if (!fs.existsSync(logFile)) {
-        listRequestIdsLogger.warn("[list_request_ids] Log file not found", { logFile });
+        listRequestIdsLogger.warn("[list_request_ids] Log file not found", { logFile, effectiveLogDir });
         return {
           success: false,
           output: "",
-          error: `Log file not found: ${filename}`,
+          error: `Log file not found: ${filename} (searched in: ${effectiveLogDir})`,
         };
       }
 
@@ -135,11 +149,11 @@ export function createListRequestIdsTool(config?: ListRequestIdsConfig): ToolInf
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        listRequestIdsLogger.error("[list_request_ids] Error reading log file", { filename, error: message });
+        listRequestIdsLogger.error("[list_request_ids] Error reading log file", { filename, effectiveLogDir, error: message });
         return {
           success: false,
           output: "",
-          error: `Error reading log file: ${message}`,
+          error: `Error reading log file: ${message} (directory: ${effectiveLogDir})`,
         };
       }
     },

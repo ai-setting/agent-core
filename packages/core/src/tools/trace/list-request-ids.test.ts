@@ -137,4 +137,46 @@ describe("list_request_ids tool", () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain("not found");
   });
+
+  it("should use logDir from args parameter", async () => {
+    // Create a tool without logDir in config
+    const tool = createListRequestIdsTool();
+    // Pass logDir via args
+    const result = await tool.execute({ 
+      filename: "test.log", 
+      logDir: testLogDir 
+    }, {} as ToolContext);
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output as string);
+    // Should have found the file in the provided logDir
+    const requestIds = parsed.requestIds;
+    expect(requestIds).toHaveLength(3);
+  });
+
+  it("should return error for non-absolute logDir", async () => {
+    const tool = createListRequestIdsTool({ logDir: testLogDir });
+    const result = await tool.execute({ 
+      filename: "test.log", 
+      logDir: "relative/path" 
+    }, {} as ToolContext);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("must be an absolute path");
+  });
+
+  it("should prioritize args logDir over config logDir", async () => {
+    // Create tool with config logDir pointing to non-existent dir
+    const tool = createListRequestIdsTool({ logDir: "/nonexistent" });
+    // Pass valid logDir via args - should use args value
+    const result = await tool.execute({ 
+      filename: "test.log", 
+      logDir: testLogDir 
+    }, {} as ToolContext);
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output as string);
+    const requestIds = parsed.requestIds;
+    expect(requestIds).toHaveLength(3);
+  });
 });

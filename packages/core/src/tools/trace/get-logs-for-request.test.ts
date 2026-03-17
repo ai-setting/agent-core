@@ -330,4 +330,53 @@ describe("get_logs_for_request tool", () => {
     // The log has 2026-03-16, today's date should be used for time-only format
     expect(result.output).toContain("11:44:00");
   });
+
+  it("should use logDir from args parameter", async () => {
+    // Create a tool without logDir in config
+    const tool = createGetLogsForRequestTool();
+    // Pass logDir via args
+    const result = await tool.execute(
+      { 
+        filename: "test.log", 
+        requestId: "req_1773632639152_b8ya088ok",
+        logDir: testLogDir 
+      },
+      {} as ToolContext
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("req_1773632639152_b8ya088ok");
+  });
+
+  it("should return error for non-absolute logDir", async () => {
+    const tool = createGetLogsForRequestTool({ logDir: testLogDir });
+    const result = await tool.execute(
+      { 
+        filename: "test.log", 
+        requestId: "req_1773632639152_b8ya088ok",
+        logDir: "relative/path" 
+      },
+      {} as ToolContext
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("must be an absolute path");
+  });
+
+  it("should prioritize args logDir over config logDir", async () => {
+    // Create tool with config logDir pointing to non-existent dir
+    const tool = createGetLogsForRequestTool({ logDir: "/nonexistent" });
+    // Pass valid logDir via args - should use args value
+    const result = await tool.execute(
+      { 
+        filename: "test.log", 
+        requestId: "req_1773632639152_b8ya088ok",
+        logDir: testLogDir 
+      },
+      {} as ToolContext
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("req_1773632639152_b8ya088ok");
+  });
 });

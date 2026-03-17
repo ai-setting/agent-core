@@ -13,6 +13,7 @@ const GetLogsForRequestParamsSchema = z.object({
   limit: z.number().optional().default(500).describe("Maximum lines to return"),
   startTime: z.string().optional().describe("Filter logs from this time (ISO format like '2026-03-16 11:43:59' or '11:43:59'). Only logs after this time will be returned."),
   endTime: z.string().optional().describe("Filter logs until this time (ISO format like '2026-03-16 11:44:00' or '11:44:00'). Only logs before this time will be returned."),
+  logDir: z.string().optional().describe("Log directory path. Must be an absolute path. If provided, the tool will look for log files in this directory instead of the default log directory."),
 });
 
 export type GetLogsForRequestParams = z.infer<typeof GetLogsForRequestParamsSchema>;
@@ -32,13 +33,27 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
       args: GetLogsForRequestParams,
       _ctx: ToolContext,
     ): Promise<ToolResult> {
-      const { filename, requestId, offset, limit, startTime, endTime } = args;
+      const { filename, requestId, offset, limit, startTime, endTime, logDir: userLogDir } = args;
       
-      const logFile = path.join(logDir, filename);
+      // Use user-provided logDir if valid, otherwise fall back to config/default
+      const effectiveLogDir = userLogDir || logDir;
+      
+      // Validate that logDir is absolute path if provided
+      if (userLogDir && !path.isAbsolute(userLogDir)) {
+        return {
+          success: false,
+          output: "",
+          error: `logDir must be an absolute path, got: ${userLogDir}`,
+        };
+      }
+
+      const logFile = path.join(effectiveLogDir, filename);
       
       getLogsForRequestLogger.info("[get_logs_for_request] Getting logs for requestId", { 
         filename, 
         logFile, 
+        effectiveLogDir,
+        userLogDir,
         requestId,
         offset,
         limit,
@@ -47,11 +62,11 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
       });
 
       if (!fs.existsSync(logFile)) {
-        getLogsForRequestLogger.warn("[get_logs_for_request] Log file not found", { logFile });
+        getLogsForRequestLogger.warn("[get_logs_for_request] Log file not found", { logFile, effectiveLogDir });
         return {
           success: false,
           output: "",
-          error: `Log file not found: ${filename}`,
+          error: `Log file not found: ${filename} (searched in: ${effectiveLogDir})`,
         };
       }
 
@@ -141,11 +156,11 @@ export function createGetLogsForRequestTool(config?: GetLogsForRequestConfig): T
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        getLogsForRequestLogger.error("[get_logs_for_request] Error reading log file", { filename, error: message });
+        getLogsForRequestLogger.error("[get_logs_for_request] Error reading log file", { filename, effectiveLogDir, error: message });
         return {
           success: false,
           output: "",
-          error: `Error reading log file: ${message}`,
+          error: `Error reading log file: ${message} (directory: ${effectiveLogDir})`,
         };
       }
     },
