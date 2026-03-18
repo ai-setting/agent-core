@@ -1210,12 +1210,28 @@ export abstract class BaseEnvironment implements Environment {
             const { Session } = await import("../../session/session.js");
             const session = Session.get(effectiveContext.session_id);
             if (session) {
-              session.updateContextUsage(metadata.usage);
+              // Get model info for threshold calculation
+              const modelString = options?.model || metadata.model || "";
+              const { providerManager } = await import("../../../llm/provider-manager.js");
+              const { parseModelString } = await import("./invoke-llm.js");
+              const { providerId, modelId } = parseModelString(modelString);
+              const provider = providerManager.getProvider(providerId);
+              const model = provider?.metadata.models.find(m => m.id === modelId);
+              const contextWindowLimit = model?.limits?.contextWindow;
+
+              // Pass env and modelId to enable auto-compaction trigger
+              session.updateContextUsage(
+                metadata.usage,
+                contextWindowLimit,
+                this, // Pass the environment instance for compaction
+                modelId
+              );
               BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Updated session effectiveContext usage", { 
                 sessionId: effectiveContext.session_id,
                 inputTokens: metadata.usage.inputTokens,
                 outputTokens: metadata.usage.outputTokens,
                 totalTokens: metadata.usage.totalTokens,
+                contextWindow: contextWindowLimit,
               });
             }
           } catch (err) {
