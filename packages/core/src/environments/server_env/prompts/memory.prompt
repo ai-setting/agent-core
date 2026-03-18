@@ -1,0 +1,8 @@
+---
+id: memory
+description: 记忆系统提醒
+---
+
+## 记忆系统
+
+你有一个全局记忆系统。开始对话时，需要加载 "memory-index" skill 获取使用手册。

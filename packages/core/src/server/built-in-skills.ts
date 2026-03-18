@@ -311,6 +311,65 @@ get_logs_for_request({
 
 *Current agent-core version info: Version 0.1.0 (dev)*`,
   },
+  {
+    id: "memory-index",
+    name: "memory-index",
+    description: "帮助你查找和访问全局记忆",
+    content: `---
+name: memory-index
+description: 帮助你查找和访问全局记忆
+---
+
+# memory-index
+
+帮助你查找和访问全局记忆。
+
+## 核心认知
+
+**全局记忆 = memory folder 下面的 folders 树状结构**
+- 所有配置的 memory 路径下的 folder 聚合成一个统一的记忆文件系统
+- Folder 之间是树状层级关系，folder 下可以有子 folder
+
+**Folder 起到聚类说明的作用**
+- 每个 folder 代表一类记忆
+- Folder 名称本身就是分类标识
+- 查找时可以根据 folder 路径快速定位相关记忆
+
+**文件名起到摘要说明或类别定义的作用**
+- 文件名应该清晰描述记忆内容
+- 同一类记忆可以放在同一个 folder 下
+
+**格式约束**
+- 所有记忆文件必须是 .md 格式
+
+## 记忆检索时机
+
+当出现以下情况时，应该主动读取记忆：
+
+1. **用户 query 含糊不清** - 需要通过记忆理解用户真实意图
+2. **涉及过去的说辞** - 用户提到"之前"、"上次"等，查找相关记忆
+3. **需要获取偏好** - 用户的编码风格、工具偏好、沟通习惯等
+4. **遇到类似问题** - 当前问题与记忆中的问题相似
+5. **规划新任务** - 查看类似任务的执行经验作为参考
+
+## 读取记忆（三步）
+
+1. 使用 list_memory_file 查看记忆框架类别
+2. 使用 grep_memory_file 过滤出相关 memory file
+3. 使用 read_memory_file 获取记忆详情
+
+## 写入记忆
+
+写入新记忆前：
+1. 使用 list_memory_file 查看现有聚类结构
+2. 判断是否有合适的现有 folder 路径
+3. 如果有，使用 write_memory_file 写入
+4. 如果需要新建聚类，创建新 folder（支持子 folder）
+
+文件名命名建议：
+- 使用描述性名称，如 "bug_bun_compile_xxxx.md"
+- 避免无意义的文件名`
+  },
 ];
 
 export function getBuiltInSkillById(id: string): SkillInfo | undefined {
