@@ -242,6 +242,19 @@ export class ServerEnvironment extends BaseEnvironment {
           }));
           
           this.loadPromptsFromConfig(resolvedPrompts);
+          
+          // 如果有 memory prompt，将其内容添加到 system prompt 中
+          const memoryPrompt = resolvedPrompts.find(p => p.id === "memory");
+          if (memoryPrompt) {
+            const systemPrompt = this.prompts.get("system");
+            if (systemPrompt) {
+              this.prompts.set("system", {
+                id: "system",
+                content: systemPrompt.content + "\n\n" + memoryPrompt.content
+              });
+            }
+          }
+          
           serverLogger.info(`[ServerEnvironment] Loaded ${resolvedPrompts.length} prompts from ${envName}`);
           
           // Verify prompts are loaded
@@ -748,7 +761,14 @@ export class ServerEnvironment extends BaseEnvironment {
       this.registerTool(taskTool);
       this.registerTool(stopTaskTool);
 
-      console.log(`[ServerEnvironment] Registered ${allTools.length + 3} tools (including skill tool, task tool, stop_task tool):`, allTools.map((t: any) => t.name));
+      // Register Memory tools - using proper ToolInfo format
+      const memoryToolsModule = await import("./built-in-memory-tools.js");
+      const memoryTools = memoryToolsModule.createMemoryTools();
+      for (const tool of memoryTools) {
+        this.registerTool(tool);
+      }
+
+      console.log(`[ServerEnvironment] Registered ${allTools.length + 3 + memoryTools.length} tools (including skill tool, task tool, stop_task tool, memory tools):`, allTools.map((t: any) => t.name));
     } catch (err) {
       console.error("[ServerEnvironment] Failed to register tools:", err);
       console.log("[ServerEnvironment] Continuing without OS tools");

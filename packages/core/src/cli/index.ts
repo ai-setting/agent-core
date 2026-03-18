@@ -79,6 +79,8 @@ async function main() {
   const { AttachCommand } = await import("./commands/attach.js");
   const { TuiCommand } = await import("./commands/tui.js");
   const { EnvCommand } = await import("./commands/env.js");
+  const memoryModule = await import("./commands/memory.js");
+  const MemoryCommand = memoryModule.default || memoryModule.memoryCommand;
 
   await yargs(hideBin(process.argv))
     .scriptName("tong_work")
@@ -91,6 +93,7 @@ async function main() {
     .command(RunCommand)
     .command(AttachCommand)
     .command(EnvCommand)
+    .command(MemoryCommand)
     .demandCommand()
     .strict()
     .help()
