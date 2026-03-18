@@ -28,6 +28,10 @@ export interface ContextUsage {
   requestCount: number;
   /** Last updated timestamp */
   lastUpdated: number;
+  /** Whether compaction has been triggered */
+  compacted?: boolean;
+  /** The new session ID after compaction */
+  compactedSessionId?: string;
 }
 
 /**
