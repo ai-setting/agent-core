@@ -140,7 +140,7 @@ export class Session {
    * Fork a session from a specific message.
    */
   @Traced({ name: "session.fork", log: true, recordParams: true, recordResult: false })
-  static fork(sessionID: string, messageID?: string): Session {
+  static async fork(sessionID: string, messageID?: string): Promise<Session> {
     const original = Storage.getSession(sessionID);
     if (!original) {
       throw new Error(`Session not found: ${sessionID}`);
@@ -152,7 +152,7 @@ export class Session {
       parentID: sessionID,
     });
 
-    const messages = original.getMessages();
+    const messages = await original.getMessages();
     const idMap = new Map<string, string>();
 
     for (const msg of messages) {
@@ -562,7 +562,7 @@ export class Session {
     
     // [DEBUG] Log before toHistory
     sessionLogger.info(`[Session] toHistory: sessionId=${this.id}, _messageOrder.length=${this._messageOrder.length}, _messages.size=${this._messages.size}`);
-    const history = sessionToHistory(this);
+    const history = await sessionToHistory(this);
     // [DEBUG] Log after toHistory
     sessionLogger.info(`[Session] toHistory result: sessionId=${this.id}, history.length=${history.length}`);
     return history;
@@ -721,7 +721,7 @@ export class Session {
     const keepMessages = options?.keepMessages ?? 50;
     const customPrompt = options?.customPrompt;
 
-    const recentMessages = this.getMessages(keepMessages);
+    const recentMessages = await this.getMessages(keepMessages);
 
     // Use JSON format prompt for structured summary
     const compactionPrompt = customPrompt ?? `你是一个对话摘要专家。请仔细阅读以下对话历史，然后生成一个简洁的JSON格式摘要。

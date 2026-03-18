@@ -8,7 +8,7 @@ import { sessionToHistory } from "./history.js";
 import type { MessageWithParts, ToolPart, TextPart } from "./types.js";
 
 describe("sessionToHistory with tool_calls", () => {
-  it("should convert assistant message with pending tool calls to history with tool-call parts", () => {
+  it("should convert assistant message with pending tool calls to history with tool-call parts", async () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -37,7 +37,7 @@ describe("sessionToHistory with tool_calls", () => {
       } as ToolPart,
     ]);
 
-    const history = sessionToHistory(session);
+    const history = await sessionToHistory(session);
     
     const assistantMsg = history.find(h => h.role === "assistant");
     expect(assistantMsg).toBeDefined();
@@ -53,7 +53,7 @@ describe("sessionToHistory with tool_calls", () => {
     expect(toolCallPart?.toolName).toBe("glob");
   });
 
-  it("should convert tool result message to history with toolCallId", () => {
+  it("should convert tool result message to history with toolCallId", async () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -76,7 +76,7 @@ describe("sessionToHistory with tool_calls", () => {
       } as ToolPart,
     ]);
 
-    const history = sessionToHistory(session);
+    const history = await sessionToHistory(session);
     
     const toolMsg = history.find(h => h.role === "tool");
     expect(toolMsg).toBeDefined();
@@ -85,7 +85,7 @@ describe("sessionToHistory with tool_calls", () => {
     expect((toolMsg as any).toolCallId).toBe("call_function_abc123");
   });
 
-  it("should preserve toolCallId in history after multiple turns", () => {
+  it("should preserve toolCallId in history after multiple turns", async () => {
     const session = Session.create({
       title: "Test",
       directory: "/test",
@@ -128,7 +128,7 @@ describe("sessionToHistory with tool_calls", () => {
 
     session.addAssistantMessage("Found 2 TypeScript files.");
 
-    const history = sessionToHistory(session);
+    const history = await sessionToHistory(session);
     
     // Find tool message by checking toolCallId field
     const toolMsg = history.find(h => {

@@ -26,8 +26,8 @@ function normalizeToolCallId(id: string): string {
  * @param session - The session to convert
  * @returns Array of messages in AI SDK ModelMessage format
  */
-export function sessionToHistory(session: Session): ModelMessage[] {
-  const messages = session.getMessages();
+export async function sessionToHistory(session: Session): Promise<ModelMessage[]> {
+  const messages = await session.getMessages();
   const history: ModelMessage[] = [];
 
   for (const msg of messages) {

@@ -57,7 +57,7 @@ describe("Session.compact with invokeLLM", () => {
     expect(compactedSession.parentID).toBe(session.id);
     
     // Verify summary message was added
-    const messages = compactedSession.getMessages();
+    const messages = await compactedSession.getMessages();
     expect(messages.length).toBe(1);
     expect(messages[0].info.role).toBe("system");
   });
@@ -115,7 +115,7 @@ describe("Session.compact with invokeLLM", () => {
     const compactedSession = await session.compact(env);
 
     expect(compactedSession).toBeDefined();
-    const messages = compactedSession.getMessages();
+    const messages = await compactedSession.getMessages();
     expect(messages[0].info.role).toBe("system");
   });
 
