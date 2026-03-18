@@ -47,3 +47,4 @@ import type { Role } from "./types";
 
 export type { Role };
 export type { CompactionOptions } from "./session";
+export { modelLimitsManager, ModelLimitsManager } from "./model-limits";

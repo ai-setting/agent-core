@@ -15,6 +15,8 @@ export interface ModelLimits {
   maxOutputTokens?: number;
   /** Maximum input tokens (if different from contextWindow) */
   maxInputTokens?: number;
+  /** Compaction threshold percentage (default: 0.8 = 80%) */
+  compactionThreshold?: number;
 }
 
 export interface ProviderConfig {

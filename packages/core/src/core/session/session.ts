@@ -43,6 +43,8 @@ export interface CompactionOptions {
   keepMessages?: number;
   /** Custom prompt for compression (optional) */
   customPrompt?: string;
+  /** Optional model to use for summary generation (faster/cheaper model recommended) */
+  summaryModel?: string;
 }
 
 /**
@@ -689,15 +691,21 @@ export class Session {
 
   /**
    * Compress the session by creating a child session with a summary.
+   * Uses invokeLLM for direct LLM call (not handle_query).
    *
-   * @param env - Environment with handle_query method
+   * @param env - Environment with invokeLLM method
    * @param options - Compaction configuration options
    * @returns The new compacted child session
    */
   @Traced({ name: "session.compact", log: true, recordParams: true, recordResult: false })
   async compact(
     env: {
-      handle_query: (input: string, ctx: any, history: Array<{ role: string; content: any }>) => Promise<string>;
+      invokeLLM: (
+        messages: import("ai").ModelMessage[],
+        tools?: import("../types/tool.js").ToolInfo[],
+        context?: import("../environment/types.js").Context,
+        options?: import("../environment/types.js").LLMOptions
+      ) => Promise<import("../types/tool.js").ToolResult>;
     },
     options?: CompactionOptions
   ): Promise<Session> {
@@ -706,12 +714,30 @@ export class Session {
 
     const recentMessages = this.getMessages(keepMessages);
 
-    const defaultPrompt = `请用简洁的语言总结上面的对话，包含：
-1. 用户的主要需求
-2. 关键讨论点和决定
-3. 当前状态和后续方向`;
+    // Use JSON format prompt for structured summary
+    const compactionPrompt = customPrompt ?? `你是一个对话摘要专家。请仔细阅读以下对话历史，然后生成一个简洁的JSON格式摘要。
 
-    const compactionPrompt = customPrompt ?? defaultPrompt;
+请按照以下JSON格式输出：
+{
+  "user_intent": "用户的主要需求或问题",
+  "key_decisions": ["关键决定1", "关键决定2"],
+  "current_status": "当前任务的进度或状态",
+  "next_steps": ["待完成的步骤1", "待完成的步骤2"],
+  "important_context": ["重要的上下文信息1", "重要的上下文信息2"]
+}
+
+## 对话历史
+
+{{HISTORY}}
+
+## 输出要求
+
+1. 只输出JSON，不要有其他文字
+2. 如果某个字段没有信息，使用空数组 [] 或 "无"
+3. 保持简洁，每项不超过50个字
+4. 重要上下文应该包含：使用的工具、修改的文件、重要的错误或解决方案
+
+请生成摘要：`;
 
     const historyForLLM = recentMessages.map(msg => {
       const parts = msg.parts.map(part => {
@@ -725,26 +751,43 @@ export class Session {
       return `[${msg.info.role}] ${parts}`;
     }).join("\n\n");
 
-    const fullPrompt = `${compactionPrompt}
-
-=== 对话历史 ===
-${historyForLLM}
-
-=== 结束 ===
-
-请总结：`;
+    const fullPrompt = compactionPrompt.replace("{{HISTORY}}", historyForLLM);
 
     let summary = "Session summary unavailable";
     try {
-      const llmHistory = [
-        { role: "user", content: { type: "text", text: fullPrompt } }
-      ];
-      const result = await env.handle_query(fullPrompt, {}, llmHistory);
-      if (result && typeof result === "string" && result.length > 0) {
-        summary = result;
+      // Use invokeLLM - direct LLM call, no agent run
+      const result = await env.invokeLLM(
+        [
+          {
+            role: "user",
+            content: {
+              type: "text" as const,
+              text: fullPrompt,
+            },
+          },
+        ],
+        [], // No tools needed for summarization
+        { session_id: this.id }, // Pass session context
+        {
+          maxTokens: 2000,
+          summaryModel: options?.summaryModel, // Optional: use different model for summary
+        } as any
+      );
+
+      if (result.success && result.output) {
+        // Try to parse JSON summary
+        try {
+          const outputText = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
+          const parsed = JSON.parse(outputText);
+          // Format as readable text
+          summary = this.formatSummaryAsText(parsed);
+        } catch {
+          // JSON parse failed, use raw output
+          summary = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
+        }
       }
     } catch (err) {
-      console.warn(`Compaction failed: ${err}`);
+      console.warn(`[Session] Compaction invokeLLM failed:`, err);
     }
 
     const compactedSession = Session.createChild(this.id, `Compacted: ${this.title}`, this._info.directory);
@@ -752,6 +795,35 @@ ${historyForLLM}
     compactedSession.addSystemMessage(summary);
 
     return compactedSession;
+  }
+
+  /**
+   * Format JSON summary as readable text
+   */
+  private formatSummaryAsText(parsed: Record<string, any>): string {
+    const parts: string[] = [];
+    
+    if (parsed.user_intent && parsed.user_intent !== "无") {
+      parts.push(`用户需求: ${parsed.user_intent}`);
+    }
+    
+    if (parsed.key_decisions && Array.isArray(parsed.key_decisions) && parsed.key_decisions.length > 0) {
+      parts.push(`关键决定: ${parsed.key_decisions.join(", ")}`);
+    }
+    
+    if (parsed.current_status && parsed.current_status !== "无") {
+      parts.push(`当前状态: ${parsed.current_status}`);
+    }
+    
+    if (parsed.next_steps && Array.isArray(parsed.next_steps) && parsed.next_steps.length > 0) {
+      parts.push(`后续步骤: ${parsed.next_steps.join(", ")}`);
+    }
+    
+    if (parsed.important_context && Array.isArray(parsed.important_context) && parsed.important_context.length > 0) {
+      parts.push(`重要上下文: ${parsed.important_context.join(", ")}`);
+    }
+    
+    return parts.join("\n") || "Session summary unavailable";
   }
 
   /**
