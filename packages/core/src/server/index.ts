@@ -16,6 +16,7 @@ import { agentEnvCommand } from "./command/built-in/agent-env.js";
 import { exitCommand } from "./command/built-in/exit.js";
 import { sessionsCommand } from "./command/built-in/sessions.js";
 import { memoryCommand } from "./command/built-in/memory.js";
+import { compactionCommand } from "./command/built-in/compaction.js";
 import { Config_get, resolveConfig } from "../config/index.js";
 
 export interface ServerInitOptions {
@@ -52,6 +53,7 @@ export async function initServer(options: ServerInitOptions = {}): Promise<Serve
     commandRegistry.register(exitCommand);
     commandRegistry.register(sessionsCommand);
     commandRegistry.register(memoryCommand);
+    commandRegistry.register(compactionCommand);
     serverLogger.info(`✅ 已注册 ${commandRegistry.list().length} 个命令`);
   }
 
