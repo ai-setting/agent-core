@@ -29,6 +29,7 @@ import {
   StreamToolResultEvent,
   StreamCompletedEvent,
   StreamErrorEvent,
+  QueryCompletedEvent,
 } from "./eventbus/events/stream.js";
 import {
   SessionCreatedEvent,
@@ -1078,6 +1079,19 @@ export class ServerEnvironment extends BaseEnvironment {
             } else {
               session?.addAssistantMessage(response);
             }
+
+            // Publish query.completed event - this is different from stream.completed
+            // stream.completed is triggered per LLM call, query.completed is triggered when
+            // the entire user query processing is complete (may involve multiple LLM calls)
+            await Bus.publish(
+              QueryCompletedEvent,
+              {
+                sessionId,
+                messageId: `msg_${Date.now()}`,
+                response,
+              },
+              sessionId
+            );
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             const messageId = `msg_${Date.now()}`;

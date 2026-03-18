@@ -101,3 +101,16 @@ export const StreamErrorEvent = define(
     code: z.string().optional(),
   })
 );
+
+/**
+ * Query completed event - triggered when entire user query processing is complete
+ * (different from stream.completed which is triggered per LLM call)
+ */
+export const QueryCompletedEvent = define(
+  "query.completed",
+  z.object({
+    sessionId: z.string(),
+    messageId: z.string(),
+    response: z.string().optional(),
+  })
+);

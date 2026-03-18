@@ -38,6 +38,8 @@ export interface StreamDisplayOptions {
   toolCalls?: boolean;
   /** 显示工具执行结果 (tool_result) */
   toolResults?: boolean;
+  /** stream.completed 事件是否退出进程 (默认: true) */
+  exitOnComplete?: boolean;
 }
 
 export class TongWorkClient {
@@ -155,6 +157,7 @@ export class TongWorkClient {
     const showReasoning = options?.reasoning ?? true;
     const showToolCalls = options?.toolCalls ?? true;
     const showToolResults = options?.toolResults ?? true;
+    const exitOnComplete = options?.exitOnComplete ?? true;
 
     await this.sendPrompt(sessionId, initialMessage);
 
@@ -205,8 +208,16 @@ export class TongWorkClient {
             console.log("   ", typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2));
           }
           break;
+        case "query_completed":
+          // query.completed is triggered when entire user query processing is complete
+          // (different from stream.completed which is triggered per LLM call)
+          console.log("\n\n✅ 查询完成\n");
+          if (exitOnComplete) {
+            process.exit(0);
+          }
+          break;
         case "completed":
-          console.log("\n\n✅ 完成\n");
+          // stream.completed - per LLM call, don't exit here
           break;
         case "error":
           console.error("\n❌ 错误:", event.error);
@@ -224,6 +235,7 @@ export class TongWorkClient {
       "stream.tool.result": "tool_result",
       "stream.completed": "completed",
       "stream.error": "error",
+      "query.completed": "query_completed",
     };
     return mapping[type] || type;
   }
