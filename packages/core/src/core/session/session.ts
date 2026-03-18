@@ -504,9 +504,17 @@ export class Session {
 
   /**
    * Get messages in chronological order.
+   * Note: This triggers lazy loading if messages are not yet loaded.
    */
   @Traced({ name: "session.getMessages", log: true, recordParams: true, recordResult: false })
-  getMessages(limit?: number): MessageWithParts[] {
+  async getMessages(limit?: number): Promise<MessageWithParts[]> {
+    // Lazy load messages if needed
+    if (!this._historyLoaded && this._messageOrder.length > this._messages.size) {
+      sessionLogger.info(`[Session] getMessages: lazy loading messages for session ${this.id}, placeholders=${this._messageOrder.length}, loaded=${this._messages.size}`);
+      await Storage.loadSessionMessages(this.id);
+      this._historyLoaded = true;
+    }
+
     const messages = this._messageOrder
       .map((id) => this._messages.get(id))
       .filter((m): m is MessageWithParts => m !== undefined);

@@ -150,7 +150,7 @@ app.get("/:id/messages", async (c) => {
   const id = c.req.param("id");
   const session = await resolve(env.getSession!(id));
   if (!session) return c.json({ error: "Session not found" }, 404);
-  const messages = session.getMessages().map(messageToSimple);
+  const messages = (await session.getMessages()).map(messageToSimple);
   return c.json(messages);
 });
 
