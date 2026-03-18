@@ -81,6 +81,8 @@ async function main() {
   const { EnvCommand } = await import("./commands/env.js");
   const memoryModule = await import("./commands/memory.js");
   const MemoryCommand = memoryModule.default || memoryModule.memoryCommand;
+  const CompactionCommandModule = await import("./commands/compaction.js");
+  const CompactionCommand = CompactionCommandModule.default || CompactionCommandModule.CompactionCommand;
 
   await yargs(hideBin(process.argv))
     .scriptName("tong_work")
@@ -94,6 +96,7 @@ async function main() {
     .command(AttachCommand)
     .command(EnvCommand)
     .command(MemoryCommand)
+    .command(CompactionCommand)
     .demandCommand()
     .strict()
     .help()

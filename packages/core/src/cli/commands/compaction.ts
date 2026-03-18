@@ -64,7 +64,7 @@ Examples:
 
     console.log(`Session ID: ${sessionId}`);
     console.log(`Action: ${action}`);
-    console.log("\nNote: Compaction commands require a running server.`);
+    console.log("\nNote: Compaction commands require a running server.");
     console.log("Use tong_work run to interact with sessions and trigger automatic compaction.");
   },
 };
