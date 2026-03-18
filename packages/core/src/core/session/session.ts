@@ -28,6 +28,7 @@ import type { ModelMessage } from "ai";
 import { ID } from "./id";
 import { Storage } from "./storage";
 import { sessionToHistory } from "./history";
+import { modelLimitsManager } from "./model-limits";
 import { createLogger } from "../../utils/logger.js";
 import { Traced } from "../../utils/wrap-function.js";
 
@@ -840,16 +841,27 @@ export class Session {
    * This method accumulates usage across multiple requests within the session.
    * @param usage - Usage information from the LLM response
    * @param limit - Optional context window limit for calculating usage percentage
+   * @param env - Optional environment for triggering compaction
+   * @param modelId - Optional model ID for getting compaction threshold
    */
   @Traced({ name: "session.updateContextUsage", log: true, recordParams: true, recordResult: false })
-  updateContextUsage(
+  async updateContextUsage(
     usage: {
       inputTokens: number;
       outputTokens: number;
       totalTokens: number;
     },
-    limit?: number
-  ): void {
+    limit?: number,
+    env?: {
+      invokeLLM: (
+        messages: import("ai").ModelMessage[],
+        tools?: import("../types/tool.js").ToolInfo[],
+        context?: import("../environment/types.js").Context,
+        options?: import("../environment/types.js").LLMOptions
+      ) => Promise<import("../types/tool.js").ToolResult>;
+    },
+    modelId?: string
+  ): Promise<void> {
     const currentUsage = this._info.contextUsage;
     const now = Date.now();
     
@@ -859,6 +871,11 @@ export class Session {
     
     // Calculate total tokens for percentage calculation (use latest value, not accumulated)
     const newTotalTokens = usage.totalTokens;
+
+    // Get compaction threshold from ModelLimitsManager
+    const modelLimits = modelId ? await modelLimitsManager.getLimits(modelId) : null;
+    const threshold = modelLimits?.compactionThreshold ?? 0.8; // Default 80%
+    const thresholdPercent = threshold * 100;
 
     if (currentUsage) {
       // Update with latest usage (not accumulated - the usage.totalTokens is already the full context size for this request)
@@ -870,6 +887,8 @@ export class Session {
         usagePercent: Math.round((newTotalTokens / ctxLimit) * 100),
         requestCount: currentUsage.requestCount + 1,
         lastUpdated: now,
+        compacted: currentUsage.compacted,
+        compactedSessionId: currentUsage.compactedSessionId,
       };
     } else {
       // Initialize usage
@@ -888,5 +907,66 @@ export class Session {
     Storage.saveSession(this);
     
     sessionLogger.info(`[Session] Updated context usage: sessionId=${this.id}, totalTokens=${this._info.contextUsage.totalTokens}, contextWindow=${ctxLimit}, usagePercent=${this._info.contextUsage.usagePercent}%, requestCount=${this._info.contextUsage.requestCount}`);
+
+    // Check if should trigger auto-compaction
+    const usagePercent = this._info.contextUsage.usagePercent;
+    if (usagePercent >= thresholdPercent && !this._info.contextUsage?.compacted && env) {
+      // Trigger compaction asynchronously
+      this.triggerCompaction(env, modelId).catch(err => {
+        console.error(`[Session] Auto-compaction failed:`, err);
+      });
+    }
+  }
+
+  /**
+   * Trigger session compaction asynchronously
+   */
+  private async triggerCompaction(
+    env: {
+      invokeLLM: (
+        messages: import("ai").ModelMessage[],
+        tools?: import("../types/tool.js").ToolInfo[],
+        context?: import("../environment/types.js").Context,
+        options?: import("../environment/types.js").LLMOptions
+      ) => Promise<import("../types/tool.js").ToolResult>;
+    },
+    modelId?: string
+  ): Promise<void> {
+    // Check if already compacted
+    if (this._info.contextUsage?.compacted) {
+      return;
+    }
+
+    // Mark as compacted to prevent duplicate triggers
+    this._info.contextUsage = {
+      ...this._info.contextUsage!,
+      compacted: true,
+    };
+
+    sessionLogger.info(`[Session] Triggering auto-compaction for session: ${this.id}`);
+
+    try {
+      const compactedSession = await this.compact(env, {
+        keepMessages: 20,
+        summaryModel: modelId, // Use same model or configure different one
+      });
+
+      // Update with compacted session info
+      this._info.contextUsage = {
+        ...this._info.contextUsage!,
+        compactedSessionId: compactedSession.id,
+      };
+
+      Storage.saveSession(this);
+      
+      sessionLogger.info(`[Session] Auto-compaction completed: ${this.id} -> ${compactedSession.id}`);
+    } catch (err) {
+      // Reset compacted flag if failed
+      this._info.contextUsage = {
+        ...this._info.contextUsage!,
+        compacted: false,
+      };
+      throw err;
+    }
   }
 }
