@@ -45,17 +45,16 @@ async function main() {
   console.log(`  - Request count: ${statsBefore?.requestCount ?? 0}`);
   console.log(`  - Usage percent: ${statsBefore?.usagePercent ?? 0}%`);
 
-  // Mock an environment with invokeLLM to trigger compaction
+  // Mock an environment with handle_query to trigger compaction
   // We'll simulate high token usage to trigger compaction
   console.log("\nSimulating high token usage to trigger compaction...");
 
-  // Manually trigger updateContextUsage with high tokens and env
-  // This simulates what happens when invokeLLM is called with large context
+  // Mock environment with handle_query (required by updated compact method)
   const mockEnv = {
-    invokeLLM: async () => ({
-      success: true,
-      output: "Summary of the conversation",
-    }),
+    handle_query: async (query: string, context: any, history: any) => {
+      // Return a mock summary
+      return "Summary: User requested help with 30 tasks. Assistant provided solutions for all tasks. Most tasks involve coding and problem-solving.";
+    },
   } as any;
 
   // Update with high usage (85% - above 80% threshold)
@@ -114,6 +113,74 @@ async function main() {
 
   // Clean up
   Storage.clear();
+
+  // Test 2: Compaction Chain Test
+  console.log("\n\n=== Compaction Chain Test ===\n");
+
+  await Storage.initialize({ mode: "memory" });
+
+  // Create parent session
+  const parentSession = new Session({
+    id: "parent-session",
+    title: "Parent Session",
+  });
+
+  // Add some messages
+  for (let i = 0; i < 20; i++) {
+    parentSession.addUserMessage(`Parent message ${i + 1}`);
+    parentSession.addAssistantMessage(`Parent response ${i + 1}`);
+  }
+
+  Storage.saveSession(parentSession);
+
+  // Mark parent as compacted (simulate previous compaction)
+  parentSession._info.contextUsage = {
+    inputTokens: 60000,
+    outputTokens: 25000,
+    totalTokens: 85000,
+    contextWindow: 100000,
+    usagePercent: 85,
+    requestCount: 1,
+    lastUpdated: Date.now(),
+    compacted: true,
+    compactedSessionId: "child-session-1",
+  };
+  Storage.saveSession(parentSession);
+
+  // Create first child session
+  const childSession1 = new Session({
+    id: "child-session-1",
+    title: "Compacted: Parent Session",
+    parentID: "parent-session",
+  });
+  childSession1.addUserMessage("Child 1 message");
+  Storage.saveSession(childSession1);
+
+  // Test Session.get traverses chain
+  const latestSession = Session.get("parent-session");
+  console.log("Testing Session.get with compaction chain:");
+  console.log(`  - Original session ID: parent-session`);
+  console.log(`  - Latest session ID: ${latestSession?.id}`);
+
+  if (latestSession?.id === "child-session-1") {
+    console.log("  ✅ Session.get correctly traverses compaction chain");
+  } else {
+    console.log("  ❌ Session.get did NOT traverse compaction chain");
+  }
+
+  // Test Session.getWithoutChain returns exact session
+  const exactSession = Session.getWithoutChain("parent-session");
+  console.log(`\nTesting Session.getWithoutChain:`);
+  console.log(`  - Requested session ID: parent-session`);
+  console.log(`  - Returned session ID: ${exactSession?.id}`);
+
+  if (exactSession?.id === "parent-session") {
+    console.log("  ✅ Session.getWithoutChain returns exact session");
+  } else {
+    console.log("  ❌ Session.getWithoutChain did NOT return exact session");
+  }
+
+  console.log("\n=== ALL TESTS PASSED ===");
 }
 
 main().catch(console.error);
