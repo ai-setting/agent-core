@@ -46,7 +46,6 @@ import { createEnvironmentSource, findEnvironmentPath } from "../config/sources/
 import { ConfigPaths } from "../config/paths.js";
 import { loadPromptsFromEnvironment, resolveVariables, buildToolListDescription, buildEnvInfo } from "../config/prompts/index.js";
 import { SpanCollector, setSpanCollector } from "../utils/span-collector.js";
-import { InMemorySpanStorage } from "../utils/span-storage.js";
 import { serverLogger } from "./logger.js";
 import type { BackgroundTaskManager } from "../core/environment/expend/task/background-task-manager.js";
 import { EventMcpManager } from "./env_spec/mcp/event-source/manager.js";
@@ -161,8 +160,12 @@ export class ServerEnvironment extends BaseEnvironment {
       // 1.4. Initialize trace collector if enabled
       const traceConfig = config.trace;
       if (traceConfig?.enabled) {
-        const storage = new InMemorySpanStorage();
-        const collector = new SpanCollector(storage);
+        // Use SpanCollector without passing storage - it will use createSpanStorage() by default
+        // which respects AGENT_CORE_SPAN_STORAGE environment variable
+        // - AGENT_CORE_SPAN_STORAGE=memory -> use InMemorySpanStorage
+        // - Otherwise (default) -> use SQLiteSpanStorage
+        const collector = new SpanCollector();
+        await collector.initialize();
         setSpanCollector(collector);
         serverLogger.info(`[ServerEnvironment] Trace collector initialized (recordParams=${traceConfig.recordParams ?? true}, recordResult=${traceConfig.recordResult ?? false}, log=${traceConfig.log ?? false})`);
       } else {
