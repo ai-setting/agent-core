@@ -214,44 +214,78 @@ export class Session {
 #### 3.2.2 压缩触发器
 
 ```typescript
-// core/session/session.ts - 新增方法
+// core/session/session.ts - 压缩触发方法（带重试）
 
-private async triggerCompaction(): Promise<void> {
-  // 1. 检查是否正在压缩，避免重复触发
+/**
+ * 触发会话压缩，包含重试逻辑
+ */
+private async triggerCompactionWithRetry(
+  env: {
+    handle_query: (
+      query: string,
+      context: {
+        session_id: string;
+        onMessageAdded?: (message: ModelMessage) => void;
+      },
+      history?: ModelMessage[]
+    ) => Promise<string>;
+  },
+  modelId?: string,
+  maxRetries: number = 3
+): Promise<void> {
+  // 1. 检查是否已压缩，避免重复触发
   if (this._info.contextUsage?.compacted) {
+    sessionLogger.info(`[Session] Already compacted, skipping`);
     return;
   }
-  
-  // 2. 标记为正在压缩
+
+  // 2. 标记为已压缩，防止重复触发
   this._info.contextUsage = {
     ...this._info.contextUsage!,
     compacted: true,
   };
-  
-  // 3. 获取环境引用（通过事件或存储）
-  const env = await this.getEnvironment();
-  if (!env) {
-    console.warn(`[Session] No environment available for compaction`);
-    return;
-  }
-  
-  // 4. 执行压缩
-  const compactedSession = await this.compact(env, {
-    keepMessages: 20,
-  });
-  
-  // 5. 建立压缩链接
-  await this.linkCompactionChain(compactedSession);
-  
-  // 6. 更新当前 session 的压缩标记
-  this._info.contextUsage.compactedSessionId = compactedSession.id;
-  Storage.saveSession(this);
-}
 
-private async getEnvironment(): Promise<BaseEnvironment | null> {
-  // TODO: 需要根据实际架构实现
-  // 可以通过事件总线或依赖注入获取
-  return null;
+  let lastError: Error | null = null;
+
+  // 3. 重试循环
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      sessionLogger.info(`[Session] Auto-compaction attempt ${attempt}/${maxRetries}`);
+
+      // 执行压缩
+      const compactedSession = await this.compact(env, {
+        keepMessages: 20,
+      });
+
+      // 更新当前 session 的压缩信息
+      this._info.contextUsage = {
+        ...this._info.contextUsage!,
+        compactedSessionId: compactedSession.id,
+      };
+
+      Storage.saveSession(this);
+
+      sessionLogger.info(`[Session] Auto-compaction completed: ${this.id} -> ${compactedSession.id}`);
+      return; // 成功
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      sessionLogger.warn(`[Session] Auto-compaction attempt ${attempt} failed:`, lastError.message);
+
+      // 重置压缩标记，允许重试
+      this._info.contextUsage = {
+        ...this._info.contextUsage!,
+        compacted: false,
+      };
+
+      if (attempt < maxRetries) {
+        // 指数退避等待
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }
+
+  // 所有重试都失败
+  throw lastError || new Error("Auto-compaction failed after retries");
 }
 ```
 
@@ -261,73 +295,98 @@ private async getEnvironment(): Promise<BaseEnvironment | null> {
 
 #### 3.3.1 压缩调用 LLM 的方式
 
-压缩直接使用 `env.invokeLLM` 接口来调用 LLM 生成摘要（不需要启动完整的 Agent run）：
+压缩使用 `env.handle_query` 接口来调用 LLM 生成摘要。这样可以：
+1. 将压缩过程作为新 session 的对话完整记录下来
+2. 利用 handle_query 完整的 agent run 能力（包括 tools 等）
+3. 保持与正常对话一致的处理流程
 
 ```typescript
 // core/session/session.ts - compact 方法中
 import type { ModelMessage } from "ai";
-import type { ToolInfo, Context, LLMOptions } from "../environment/types.js";
+import type { Context } from "../types/context.js";
 
 async compact(
   env: {
-    // 直接调用 invokeLLM，一次 LLM 调用即可生成摘要
-    invokeLLM: (
-      messages: ModelMessage[], 
-      tools?: ToolInfo[], 
-      context?: Context, 
-      options?: LLMOptions
-    ) => Promise<ToolResult>;
+    // 使用 handle_query 接口，可以将压缩作为会话对话记录
+    handle_query: (
+      query: string,
+      context: {
+        session_id: string;
+        onMessageAdded?: (message: ModelMessage) => void;
+      },
+      history?: ModelMessage[]
+    ) => Promise<string>;
   },
   options?: CompactionOptions
 ): Promise<Session> {
-  // ... 构建摘要消息数组
-  
+  // 1. 创建新的压缩 session
+  const compactedSession = Session.createChild(this.id, `Compacted: ${this.title}`, this._info.directory);
+
+  // 2. 先保存到 storage
+  Storage.saveSession(compactedSession);
+
+  // 3. 添加元数据
+  compactedSession.setMetadata("parentSessionId", this.id);
+  compactedSession.setMetadata("compactionTime", Date.now());
+  compactedSession.setMetadata("originalMessageCount", this._messageOrder.length);
+
+  // 4. 添加用户消息作为摘要请求
+  compactedSession.addUserMessage(`请总结以下对话历史：\n\n${historyForLLM}`);
+
+  // 5. 转换历史消息为 ModelMessage 格式
+  const historyForHandleQuery: ModelMessage[] = recentMessages.map(msg => {
+    const msgType = msg.info.role === "assistant" ? "assistant" : msg.info.role === "system" ? "system" : "user";
+    return {
+      type: msgType as "user" | "assistant" | "system",
+      content: msg.parts.map(part => {
+        if (part.type === "text") {
+          return { type: "text" as const, text: (part as TextPart).text };
+        }
+        if (part.type === "tool") {
+          const tool = part as ToolPart;
+          return { type: "tool-result" as const, toolCallId: tool.toolCallId || "", result: tool.output || "(pending)" };
+        }
+        return { type: "text" as const, text: "" };
+      }).filter(part => part.text !== ""),
+    };
+  });
+
+  // 6. 使用 handle_query 生成摘要
   let summary = "Session summary unavailable";
   try {
-    // 直接调用 invokeLLM，一次 LLM 调用完成摘要生成
-    const result = await env.invokeLLM(
-      [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text: fullPrompt
-          }
-        }
-      ],
-      [],  // 不需要 tools
-      { session_id: this.id },  // 传入 session_id
+    const response = await env.handle_query(
+      fullPrompt,  // 摘要请求
       {
-        // 限制输出长度
-        maxTokens: 2000,
-        // 可选：使用更小的模型进行摘要（更快速、更便宜）
-        model: options?.summaryModel,
-      }
+        session_id: compactedSession.id,  // 使用新 session 的 id
+        onMessageAdded: (message) => {
+          compactedSession.addMessageFromModelMessage(message);
+        }
+      },
+      historyForHandleQuery  // 传入历史消息
     );
-    
-    if (result.success && result.output) {
-      // 尝试解析 JSON 摘要
-      try {
-        const parsed = JSON.parse(result.output);
-        summary = this.formatSummaryAsText(parsed);
-      } catch {
-        // JSON 解析失败，使用原始输出
-        summary = result.output;
-      }
-    }
+
+    summary = response || "No summary generated";
   } catch (err) {
-    console.warn(`[Session] Compaction LLM call failed:`, err);
+    console.warn(`[Session] Compaction handle_query failed:`, err);
   }
-  
-  // ...
+
+  // 7. 将摘要添加为系统消息
+  compactedSession.addSystemMessage(`[Previous Session Summary]\n${summary}`, {
+    compactedAt: Date.now(),
+    originalSessionId: this.id,
+  });
+
+  // 8. 保存
+  Storage.saveSession(compactedSession);
+
+  return compactedSession;
 }
 ```
 
 **优点**：
-- 一次 LLM 调用即可完成
-- 不触发 agent run，没有中间步骤
-- 不产生额外的 session 消息
-- 更快、更节省资源
+- 压缩过程被完整记录到新 session，作为正常对话处理
+- 可以使用 handle_query 的完整能力（tools、skills 等）
+- 后续 token 统计和压缩触发都基于正确的 session
 
 #### 3.3.2 压缩使用的 System Prompt
 
@@ -690,56 +749,88 @@ private async linkCompactionChain(newSession: Session): Promise<void> {
 ```typescript
 // core/session/session.ts - 新增静态方法
 
-static getLatestSession(sessionId: string): Session {
+/**
+ * 获取压缩链中最末端的 session（叶子节点）。
+ * 当一个 session 被压缩后，新消息应该添加到最新的压缩 session 中。
+ *
+ * @param sessionId - 要解析的 session ID
+ * @returns 压缩链中最末端的 session，如果不是压缩链则返回原 session
+ */
+static getLatestCompactedSession(sessionId: string): Session | undefined {
   let current = Storage.getSession(sessionId);
-  
-  while (current) {
-    const nextSessionId = current._info.contextUsage?.compactedSessionId;
-    if (!nextSessionId) {
-      break; // 没有更多压缩，找到末端
-    }
-    
+  if (!current) {
+    return undefined;
+  }
+
+  // 遍历压缩链找到叶子节点
+  let iterations = 0;
+  const maxIterations = 100; // 防止无限循环
+  while (current._info.contextUsage?.compactedSessionId && iterations < maxIterations) {
+    const nextSessionId = current._info.contextUsage.compactedSessionId;
     const next = Storage.getSession(nextSessionId);
     if (!next) {
-      break; // session 不存在，停止追踪
+      break;
     }
-    
     current = next;
+    iterations++;
   }
-  
+
   return current;
 }
 ```
+
+**使用场景**：
+- 用户继续对话时，通过此方法获取正确的 session
+- 消息应该被添加到压缩链最末端，而不是已经被压缩的父 session
 
 ---
 
 ### 3.5 所有获取 Session 的地方需要透明切换
 
-#### 3.5.1 修改 Session.get
+#### 3.5.1 Session.get 默认遍历压缩链
+
+为了简化使用，现在 `Session.get` 方法默认遍历压缩链：
 
 ```typescript
-// core/session/session.ts - 修改静态方法 get
+// core/session/session.ts
 
-static get(id: string, followChain: boolean = true): Session | undefined {
-  const session = Storage.getSession(id);
-  
-  if (!session || !followChain) {
-    return session;
-  }
-  
-  // 透明跟随压缩链，找到最新的 session
-  return Session.getLatestSession(id);
+/**
+ * Get a session by ID.
+ * By default, this method traverses the compaction chain to find the latest session.
+ * Use getWithoutChain() if you need to get the exact session without chain traversal.
+ */
+static get(id: string): Session | undefined {
+  return Session.getLatestCompactedSession(id);
+}
+
+/**
+ * Get a session by ID without traversing the compaction chain.
+ * This returns the exact session matching the given ID.
+ */
+static getWithoutChain(id: string): Session | undefined {
+  return Storage.getSession(id);
 }
 ```
 
-#### 3.5.2 需要修改的调用点
+#### 3.5.2 需要使用 getWithoutChain 的场景
+
+以下场景需要显式使用 `getWithoutChain`，因为用户明确指定了要操作特定的 session：
 
 | 文件 | 方法 | 修改方式 |
 |------|------|---------|
-| `routes/sessions.ts` | `prompt` | 使用 `Session.get(id, true)` |
-| `eventbus/events/session.ts` | 事件处理 | 使用 `Session.get(id, true)` |
-| `base-environment.ts` | `invokeLLM` | 使用 `Session.get(id, true)` |
-| `wrap-function.ts` | traced session | 使用 `Session.get(id, true)` |
+| `server/command/built-in/sessions.ts` | select / delete | 使用 `Session.getWithoutChain` |
+| `core/session/session.ts` | fork | 使用 `Storage.getSession`（内部方法） |
+
+#### 3.5.3 默认使用 Session.get 的场景
+
+以下场景默认使用 `Session.get`（自动遍历压缩链）：
+
+| 文件 | 方法 | 说明 |
+|------|------|------|
+| `server/environment.ts` | USER_QUERY 处理 | 自动获取最新 session |
+| `core/agent/event-handler-agent.ts` | 事件处理 | 自动获取最新 session |
+| `core/environment/base-environment.ts` | invokeLLM | 更新 usage 到最新 session |
+| `server/command/built-in/compaction.ts` | 压缩状态/手动压缩 | 操作最新 session |
 
 ---
 
@@ -747,15 +838,22 @@ static get(id: string, followChain: boolean = true): Session | undefined {
 
 #### 3.6.1 写入时切换
 
+在 `BaseEnvironment.invokeLLM` 中更新 session usage 时，自动跟随压缩链：
+
 ```typescript
-// core/environment/base/invoke-llm.ts
+// core/environment/base/base-environment.ts
 
 // 修改 usage 更新逻辑
 if (session) {
   // 自动跟随压缩链，获取最新的 session 进行写入
-  const latestSession = Session.getLatestSession(session.id);
-  
-  latestSession.updateContextUsage(usage, contextWindowLimit);
+  const latestSession = Session.getLatestCompactedSession(session.id);
+
+  latestSession.updateContextUsage(
+    metadata.usage,
+    contextWindowLimit,
+    this, // 传入 environment 用于触发压缩
+    modelId
+  );
 }
 ```
 
@@ -765,10 +863,12 @@ if (session) {
 // 任何读取 contextUsage 的地方都应该自动获取最新 session 的数据
 
 function getSessionUsage(sessionId: string): ContextUsage | undefined {
-  const latestSession = Session.getLatestSession(sessionId);
+  const latestSession = Session.getLatestCompactedSession(sessionId);
   return latestSession?.getContextStats();
 }
 ```
+
+> **注意**：由于压缩现在使用 `handle_query`，压缩过程中的 token 使用也会被正确记录到新 session 中。
 
 ---
 

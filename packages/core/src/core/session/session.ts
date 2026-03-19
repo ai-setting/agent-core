@@ -110,10 +110,57 @@ export class Session {
 
   /**
    * Get a session by ID.
+   * By default, this method traverses the compaction chain to find the latest session.
+   * Use getSessionWithoutLinkSearch() if you need to get the exact session without chain traversal.
+   *
+   * @param id - The session ID
+   * @returns The latest session in the compaction chain (if compacted), or the original session
    */
   @Traced({ name: "session.get", log: true, recordParams: true, recordResult: false })
   static get(id: string): Session | undefined {
+    return Session.getLatestCompactedSession(id);
+  }
+
+  /**
+   * Get a session by ID without traversing the compaction chain.
+   * This returns the exact session matching the given ID, regardless of whether it has been compacted.
+   *
+   * @param id - The session ID
+   * @returns The exact session with the given ID, or undefined if not found
+   */
+  @Traced({ name: "session.getWithoutChain", log: true, recordParams: true, recordResult: false })
+  static getWithoutChain(id: string): Session | undefined {
     return Storage.getSession(id);
+  }
+
+  /**
+   * Get the latest session in the compaction chain (leaf node).
+   * When a session has been compacted, new messages should be added to the latest compacted session.
+   *
+   * @param sessionId - The session ID to resolve
+   * @returns The latest session in the compaction chain, or the original if not compacted
+   */
+  @Traced({ name: "session.getLatestCompactedSession", log: true, recordParams: true, recordResult: false })
+  static getLatestCompactedSession(sessionId: string): Session | undefined {
+    let current = Storage.getSession(sessionId);
+    if (!current) {
+      return undefined;
+    }
+
+    // Traverse the compaction chain to find the leaf node
+    let iterations = 0;
+    const maxIterations = 100; // Prevent infinite loop
+    while (current._info.contextUsage?.compactedSessionId && iterations < maxIterations) {
+      const nextSessionId = current._info.contextUsage.compactedSessionId;
+      const next = Storage.getSession(nextSessionId);
+      if (!next) {
+        break;
+      }
+      current = next;
+      iterations++;
+    }
+
+    return current;
   }
 
   /**
@@ -700,21 +747,23 @@ export class Session {
 
   /**
    * Compress the session by creating a child session with a summary.
-   * Uses invokeLLM for direct LLM call (not handle_query).
+   * Uses env.handle_query to create a proper session conversation record.
    *
-   * @param env - Environment with invokeLLM method
+   * @param env - Environment with handle_query method
    * @param options - Compaction configuration options
    * @returns The new compacted child session
    */
   @Traced({ name: "session.compact", log: true, recordParams: true, recordResult: false })
   async compact(
     env: {
-      invokeLLM: (
-        messages: import("ai").ModelMessage[],
-        tools?: import("../types/tool.js").ToolInfo[],
-        context?: import("../environment/types.js").Context,
-        options?: import("../environment/types.js").LLMOptions
-      ) => Promise<import("../types/tool.js").ToolResult>;
+      handle_query: (
+        query: string,
+        context: {
+          session_id: string;
+          onMessageAdded?: (message: import("ai").ModelMessage) => void;
+        },
+        history?: import("ai").ModelMessage[]
+      ) => Promise<string>;
     },
     options?: CompactionOptions
   ): Promise<Session> {
@@ -723,30 +772,20 @@ export class Session {
 
     const recentMessages = await this.getMessages(keepMessages);
 
-    // Use JSON format prompt for structured summary
-    const compactionPrompt = customPrompt ?? `你是一个对话摘要专家。请仔细阅读以下对话历史，然后生成一个简洁的JSON格式摘要。
-
-请按照以下JSON格式输出：
-{
-  "user_intent": "用户的主要需求或问题",
-  "key_decisions": ["关键决定1", "关键决定2"],
-  "current_status": "当前任务的进度或状态",
-  "next_steps": ["待完成的步骤1", "待完成的步骤2"],
-  "important_context": ["重要的上下文信息1", "重要的上下文信息2"]
-}
+    // Use concise summary prompt (not JSON)
+    const compactionPrompt = customPrompt ?? `请仔细阅读以下对话历史，然后生成简洁的要点总结。
 
 ## 对话历史
 
 {{HISTORY}}
 
-## 输出要求
+## 要求
 
-1. 只输出JSON，不要有其他文字
-2. 如果某个字段没有信息，使用空数组 [] 或 "无"
-3. 保持简洁，每项不超过50个字
-4. 重要上下文应该包含：使用的工具、修改的文件、重要的错误或解决方案
+1. 提取关键要点，每条一行，保持简洁
+2. 包含：用户需求、已完成的操作、当前状态、重要上下文
+3. 如果没有重要信息，返回"无"
 
-请生成摘要：`;
+请生成总结：`;
 
     const historyForLLM = recentMessages.map(msg => {
       const parts = msg.parts.map(part => {
@@ -762,52 +801,66 @@ export class Session {
 
     const fullPrompt = compactionPrompt.replace("{{HISTORY}}", historyForLLM);
 
-    let summary = "Session summary unavailable";
-    try {
-      // Use invokeLLM - direct LLM call, no agent run
-      const result = await env.invokeLLM(
-        [
-          {
-            role: "user",
-            content: {
-              type: "text" as const,
-              text: fullPrompt,
-            },
-          },
-        ],
-        [], // No tools needed for summarization
-        { session_id: this.id }, // Pass session context
-        {
-          maxTokens: 2000,
-          summaryModel: options?.summaryModel, // Optional: use different model for summary
-        } as any
-      );
-
-      if (result.success && result.output) {
-        // Try to parse JSON summary
-        try {
-          const outputText = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
-          const parsed = JSON.parse(outputText);
-          // Format as readable text
-          summary = this.formatSummaryAsText(parsed);
-        } catch {
-          // JSON parse failed, use raw output
-          summary = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
-        }
-      }
-    } catch (err) {
-      console.warn(`[Session] Compaction invokeLLM failed:`, err);
-    }
-
+    // Create new child session first
     const compactedSession = Session.createChild(this.id, `Compacted: ${this.title}`, this._info.directory);
+
+    // Save the new session to storage before using it
+    Storage.saveSession(compactedSession);
 
     // Add parent session info to metadata for compression chain tracking
     compactedSession.setMetadata("parentSessionId", this.id);
     compactedSession.setMetadata("compactionTime", Date.now());
     compactedSession.setMetadata("originalMessageCount", this._messageOrder.length);
 
-    // Add summary as user message (not system message) to preserve context
-    compactedSession.addUserMessage(`[Previous Session Summary]\n${summary}`);
+    // Add user message to the new session (this will be the prompt for summary)
+    compactedSession.addUserMessage(`请总结以下对话历史：\n\n${historyForLLM}`);
+
+    // Convert recent messages to ModelMessage format for history
+    const historyForHandleQuery: import("ai").ModelMessage[] = recentMessages.map(msg => {
+      const msgType = msg.info.role === "assistant" ? "assistant" : msg.info.role === "system" ? "system" : "user";
+      return {
+        type: msgType as "user" | "assistant" | "system",
+        content: msg.parts.map(part => {
+          if (part.type === "text") {
+            return { type: "text" as const, text: (part as TextPart).text };
+          }
+          if (part.type === "tool") {
+            const tool = part as ToolPart;
+            return { type: "tool-result" as const, toolCallId: tool.toolCallId || "", result: tool.output || "(pending)" };
+          }
+          return { type: "text" as const, text: "" };
+        }).filter(part => part.text !== ""),
+      };
+    });
+
+    let summary = "Session summary unavailable";
+    try {
+      // Use handle_query - this creates a proper session conversation record
+      const response = await env.handle_query(
+        fullPrompt,
+        {
+          session_id: compactedSession.id,
+          onMessageAdded: (message) => {
+            compactedSession.addMessageFromModelMessage(message);
+          }
+        },
+        historyForHandleQuery
+      );
+
+      // Use the response as summary
+      summary = response || "No summary generated";
+    } catch (err) {
+      console.warn(`[Session] Compaction handle_query failed:`, err);
+    }
+
+    // Add the summary as a system message in the compacted session
+    compactedSession.addSystemMessage(`[Previous Session Summary]\n${summary}`, {
+      compactedAt: Date.now(),
+      originalSessionId: this.id,
+    });
+
+    // Save the compacted session
+    Storage.saveSession(compactedSession);
 
     return compactedSession;
   }
@@ -867,12 +920,14 @@ export class Session {
     },
     limit?: number,
     env?: {
-      invokeLLM: (
-        messages: import("ai").ModelMessage[],
-        tools?: import("../types/tool.js").ToolInfo[],
-        context?: import("../environment/types.js").Context,
-        options?: import("../environment/types.js").LLMOptions
-      ) => Promise<import("../types/tool.js").ToolResult>;
+      handle_query: (
+        query: string,
+        context: {
+          session_id: string;
+          onMessageAdded?: (message: import("ai").ModelMessage) => void;
+        },
+        history?: import("ai").ModelMessage[]
+      ) => Promise<string>;
     },
     modelId?: string
   ): Promise<void> {
@@ -954,12 +1009,14 @@ export class Session {
    */
   private async triggerCompactionWithRetry(
     env: {
-      invokeLLM: (
-        messages: import("ai").ModelMessage[],
-        tools?: import("../types/tool.js").ToolInfo[],
-        context?: import("../environment/types.js").Context,
-        options?: import("../environment/types.js").LLMOptions
-      ) => Promise<import("../types/tool.js").ToolResult>;
+      handle_query: (
+        query: string,
+        context: {
+          session_id: string;
+          onMessageAdded?: (message: import("ai").ModelMessage) => void;
+        },
+        history?: import("ai").ModelMessage[]
+      ) => Promise<string>;
     },
     modelId?: string,
     maxRetries: number = 3
@@ -977,15 +1034,14 @@ export class Session {
     };
 
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         sessionLogger.info(`[Session] Auto-compaction attempt ${attempt}/${maxRetries}`);
-        
+
         // Perform compaction
         const compactedSession = await this.compact(env, {
           keepMessages: 20,
-          summaryModel: modelId,
         });
 
         // Update with compacted session info
@@ -995,7 +1051,7 @@ export class Session {
         };
 
         Storage.saveSession(this);
-        
+
         sessionLogger.info(`[Session] Auto-compaction completed: ${this.id} -> ${compactedSession.id}`);
         return; // Success
       } catch (err) {

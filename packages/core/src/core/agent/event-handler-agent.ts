@@ -61,6 +61,8 @@ export class EventHandlerAgent {
     // 获取或创建 session
     let session;
     if (sessionId) {
+      // Session.get now traverses the compaction chain by default
+      const { Session } = await import("../session/index.js");
       session = await this.env.getSession?.(sessionId);
       if (!session) {
         eventHandlerLogger.warn(`Session not found: ${sessionId}, creating new session`);
@@ -75,27 +77,27 @@ export class EventHandlerAgent {
   }
 
   private async processEventWithSession<T>(session: any, event: EnvEvent<T>): Promise<void> {
-    const sessionId = session.id;
+    const sessionId = session.id; // 使用最新的 session id
     const messages = this.constructMessages(event);
     eventHandlerLogger.info(`Constructed ${messages.length} messages for event ${event.id}`);
 
     for (const msg of messages) {
       // Adding message debug // 已精简
-      
+
       const modelMessage: ModelMessage = msg as any;
       session.addMessageFromModelMessage(modelMessage);
     }
 
     const history = await session.toHistory();
     // toHistory debug // 已精简
-    
+
     const query = `Process event: ${event.type}`;
-    
+
     try {
       await this.env.handle_query(
         query,
         {
-          session_id: sessionId,
+          session_id: sessionId, // 使用最新的 session id
           onMessageAdded: (message: ModelMessage) => {
             // onMessageAdded debug // 已精简
             session.addMessageFromModelMessage(message);

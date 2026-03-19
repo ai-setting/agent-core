@@ -126,8 +126,9 @@ async function handleSelectAction(
     };
   }
 
-  // Get session
-  const session = Storage.getSession(action.sessionId);
+  // Get session - use getWithoutChain because user explicitly wants this specific session
+  const { Session } = await import("../../../core/session/index.js");
+  const session = Session.getWithoutChain(action.sessionId);
   if (!session) {
     return {
       success: false,
@@ -207,8 +208,8 @@ async function handleDeleteAction(action: SessionsAction): Promise<CommandResult
     };
   }
 
-  // Get session
-  const session = Session.get(action.sessionId);
+  // Get session - use getWithoutChain because user explicitly wants to delete this specific session
+  const session = Session.getWithoutChain(action.sessionId);
   if (!session) {
     return {
       success: false,

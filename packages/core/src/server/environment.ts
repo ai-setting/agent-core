@@ -1077,22 +1077,26 @@ export class ServerEnvironment extends BaseEnvironment {
         type: "function",
         fn: async (event: EnvEvent) => {
           const { sessionId, content } = event.payload as { sessionId: string; content: string };
-          const session = await this.getSession!(sessionId);
+
+          // Session.get now traverses compaction chain by default
+          const { Session } = await import("../core/session/index.js");
+          const session = Session.get(sessionId);
+
           const history = await session?.toHistory() || [];
-          
+
           session?.addUserMessage(content);
-          
+
           // Wait for config to be loaded (including prompts)
           await this.configLoaded;
-          
+
           try {
-            const response = await this.handle_query(content, { 
-              session_id: sessionId,
+            const response = await this.handle_query(content, {
+              session_id: session?.id || sessionId,
               onMessageAdded: (message) => {
                 session?.addMessageFromModelMessage(message);
               }
             }, history);
-            
+
             // Save assistant message with reasoning if available
             if (this.currentStreamingContent.reasoning) {
               session?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${response}`);
