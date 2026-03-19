@@ -500,7 +500,7 @@ export async function invokeLLM(
 
     // Emit completed event with usage info (for both tool calls and non-tool calls cases)
     if (eventHandler?.onCompleted) {
-      eventHandler.onCompleted(fullContent, { 
+      await eventHandler.onCompleted(fullContent, { 
         model: `${providerId}/${modelId}`,
         usage: usageInfo
       });

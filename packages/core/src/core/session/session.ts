@@ -762,7 +762,8 @@ export class Session {
           session_id: string;
           onMessageAdded?: (message: import("ai").ModelMessage) => void;
         },
-        history?: import("ai").ModelMessage[]
+        history?: import("ai").ModelMessage[],
+        additionInfo?: string
       ) => Promise<string>;
     },
     options?: CompactionOptions
@@ -771,21 +772,6 @@ export class Session {
     const customPrompt = options?.customPrompt;
 
     const recentMessages = await this.getMessages(keepMessages);
-
-    // Use concise summary prompt (not JSON)
-    const compactionPrompt = customPrompt ?? `请仔细阅读以下对话历史，然后生成简洁的要点总结。
-
-## 对话历史
-
-{{HISTORY}}
-
-## 要求
-
-1. 提取关键要点，每条一行，保持简洁
-2. 包含：用户需求、已完成的操作、当前状态、重要上下文
-3. 如果没有重要信息，返回"无"
-
-请生成总结：`;
 
     const historyForLLM = recentMessages.map(msg => {
       const parts = msg.parts.map(part => {
@@ -799,7 +785,6 @@ export class Session {
       return `[${msg.info.role}] ${parts}`;
     }).join("\n\n");
 
-    const fullPrompt = compactionPrompt.replace("{{HISTORY}}", historyForLLM);
 
     // Create new child session - strip "Compacted:" prefix if already compacted to avoid duplication
     const baseTitle = this.title.replace(/^Compacted: /, "");
