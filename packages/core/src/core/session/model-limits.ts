@@ -7,6 +7,29 @@ import { loadProvidersConfig, type ModelLimits } from "../../config/sources/prov
 const DEFAULT_CONTEXT_WINDOW = 200000; // 200K tokens
 const DEFAULT_COMPACTION_THRESHOLD = 0.8; // 80%
 
+// Pre-load all model limits at module initialization
+let preloadedLimits: Map<string, ModelLimits> = new Map();
+
+async function preloadModelLimits() {
+  try {
+    const config = await loadProvidersConfig();
+    if (config?.providers) {
+      for (const provider of Object.values(config.providers)) {
+        if (provider.limits) {
+          for (const [modelId, limits] of Object.entries(provider.limits)) {
+            preloadedLimits.set(modelId, limits);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[ModelLimitsManager] Failed to preload limits:", err);
+  }
+}
+
+// Preload on module load
+preloadModelLimits();
+
 export class ModelLimitsManager {
   private limitsCache: Map<string, ModelLimits> = new Map();
 
@@ -15,25 +38,14 @@ export class ModelLimitsManager {
    * Uses cache for performance.
    */
   async getLimits(modelId: string): Promise<ModelLimits> {
-    // 1. Check cache
-    if (this.limitsCache.has(modelId)) {
-      return this.limitsCache.get(modelId)!;
+    // 1. Check in-memory preloaded limits first
+    if (preloadedLimits.has(modelId)) {
+      return preloadedLimits.get(modelId)!;
     }
 
-    // 2. Load from providers.jsonc
-    try {
-      const config = await loadProvidersConfig();
-      if (config?.providers) {
-        for (const provider of Object.values(config.providers)) {
-          if (provider.limits?.[modelId]) {
-            const limits = provider.limits[modelId];
-            this.limitsCache.set(modelId, limits);
-            return limits;
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`[ModelLimitsManager] Failed to load config:`, err);
+    // 2. Check cache
+    if (this.limitsCache.has(modelId)) {
+      return this.limitsCache.get(modelId)!;
     }
 
     // 3. Return defaults

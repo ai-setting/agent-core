@@ -801,7 +801,13 @@ export class Session {
 
     const compactedSession = Session.createChild(this.id, `Compacted: ${this.title}`, this._info.directory);
 
-    compactedSession.addSystemMessage(summary);
+    // Add parent session info to metadata for compression chain tracking
+    compactedSession.setMetadata("parentSessionId", this.id);
+    compactedSession.setMetadata("compactionTime", Date.now());
+    compactedSession.setMetadata("originalMessageCount", this._messageOrder.length);
+
+    // Add summary as user message (not system message) to preserve context
+    compactedSession.addUserMessage(`[Previous Session Summary]\n${summary}`);
 
     return compactedSession;
   }
@@ -870,6 +876,7 @@ export class Session {
     },
     modelId?: string
   ): Promise<void> {
+    try {
     const currentUsage = this._info.contextUsage;
     const now = Date.now();
     
@@ -917,19 +924,35 @@ export class Session {
     sessionLogger.info(`[Session] Updated context usage: sessionId=${this.id}, totalTokens=${this._info.contextUsage.totalTokens}, contextWindow=${ctxLimit}, usagePercent=${this._info.contextUsage.usagePercent}%, requestCount=${this._info.contextUsage.requestCount}`);
 
     // Check if should trigger auto-compaction
+    // Fix: compacted could be undefined on first call, treat undefined as false
+    const isCompacted = this._info.contextUsage?.compacted === true;
     const usagePercent = this._info.contextUsage.usagePercent;
-    if (usagePercent >= thresholdPercent && !this._info.contextUsage?.compacted && env) {
-      // Trigger compaction asynchronously
-      this.triggerCompaction(env, modelId).catch(err => {
-        console.error(`[Session] Auto-compaction failed:`, err);
+    if (usagePercent >= thresholdPercent && !isCompacted && env) {
+      // Trigger compaction synchronously to prevent context overflow
+      try {
+        await this.triggerCompactionWithRetry(env, modelId);
+      } catch (err) {
+        sessionLogger.error(`[Session] Auto-compaction failed: ${err instanceof Error ? err.message : String(err)}`, {
+          error: err instanceof Error ? err.stack : String(err),
+          sessionId: this.id,
+          modelId,
+        });
+      }
+    }
+    } catch (err) {
+      sessionLogger.error(`[Session] updateContextUsage failed: ${err instanceof Error ? err.message : String(err)}`, {
+        error: err instanceof Error ? err.stack : String(err),
+        sessionId: this.id,
+        modelId,
       });
+      throw err;
     }
   }
 
   /**
-   * Trigger session compaction asynchronously
+   * Trigger session compaction with retry logic
    */
-  private async triggerCompaction(
+  private async triggerCompactionWithRetry(
     env: {
       invokeLLM: (
         messages: import("ai").ModelMessage[],
@@ -938,10 +961,12 @@ export class Session {
         options?: import("../environment/types.js").LLMOptions
       ) => Promise<import("../types/tool.js").ToolResult>;
     },
-    modelId?: string
+    modelId?: string,
+    maxRetries: number = 3
   ): Promise<void> {
     // Check if already compacted
     if (this._info.contextUsage?.compacted) {
+      sessionLogger.info(`[Session] Already compacted, skipping`);
       return;
     }
 
@@ -951,30 +976,46 @@ export class Session {
       compacted: true,
     };
 
-    sessionLogger.info(`[Session] Triggering auto-compaction for session: ${this.id}`);
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        sessionLogger.info(`[Session] Auto-compaction attempt ${attempt}/${maxRetries}`);
+        
+        // Perform compaction
+        const compactedSession = await this.compact(env, {
+          keepMessages: 20,
+          summaryModel: modelId,
+        });
 
-    try {
-      const compactedSession = await this.compact(env, {
-        keepMessages: 20,
-        summaryModel: modelId, // Use same model or configure different one
-      });
+        // Update with compacted session info
+        this._info.contextUsage = {
+          ...this._info.contextUsage!,
+          compactedSessionId: compactedSession.id,
+        };
 
-      // Update with compacted session info
-      this._info.contextUsage = {
-        ...this._info.contextUsage!,
-        compactedSessionId: compactedSession.id,
-      };
-
-      Storage.saveSession(this);
-      
-      sessionLogger.info(`[Session] Auto-compaction completed: ${this.id} -> ${compactedSession.id}`);
-    } catch (err) {
-      // Reset compacted flag if failed
-      this._info.contextUsage = {
-        ...this._info.contextUsage!,
-        compacted: false,
-      };
-      throw err;
+        Storage.saveSession(this);
+        
+        sessionLogger.info(`[Session] Auto-compaction completed: ${this.id} -> ${compactedSession.id}`);
+        return; // Success
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        sessionLogger.warn(`[Session] Auto-compaction attempt ${attempt} failed:`, lastError.message);
+        
+        // Reset compacted flag if failed so it can be retried
+        this._info.contextUsage = {
+          ...this._info.contextUsage!,
+          compacted: false,
+        };
+        
+        if (attempt < maxRetries) {
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        }
+      }
     }
+    
+    // All retries failed
+    throw lastError || new Error("Auto-compaction failed after retries");
   }
 }

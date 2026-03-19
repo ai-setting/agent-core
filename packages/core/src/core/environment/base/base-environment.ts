@@ -1213,14 +1213,35 @@ export abstract class BaseEnvironment implements Environment {
               // Get model info for threshold calculation
               const modelString = options?.model || metadata.model || "";
               const { providerManager } = await import("../../../llm/provider-manager.js");
-              const { parseModelString } = await import("./invoke-llm.js");
-              const { providerId, modelId } = parseModelString(modelString);
+              // 直接在这里定义函数，避免导入问题
+              function localParseModelString(model?: string): { providerId: string; modelId: string } {
+                if (!model) {
+                  return { providerId: "minimax", modelId: "MiniMax-M2.5" };
+                }
+                const parts = model.split("/");
+                if (parts.length === 2) {
+                  return { providerId: parts[0], modelId: parts[1] };
+                }
+                return { providerId: "minimax", modelId: model };
+              }
+              const { providerId, modelId } = localParseModelString(modelString);
               const provider = providerManager.getProvider(providerId);
               const model = provider?.metadata.models.find(m => m.id === modelId);
               const contextWindowLimit = model?.limits?.contextWindow;
+              
+              BaseEnvironment.baseLogger.info("[BaseEnvironment.invokeLLM] Before updateContextUsage", {
+                sessionId: effectiveContext.session_id,
+                modelString,
+                providerId,
+                modelId,
+                providerFound: !!provider,
+                modelFound: !!model,
+                contextWindowLimit,
+                usage: metadata.usage,
+              });
 
               // Pass env and modelId to enable auto-compaction trigger
-              session.updateContextUsage(
+              await session.updateContextUsage(
                 metadata.usage,
                 contextWindowLimit,
                 this, // Pass the environment instance for compaction
@@ -1235,7 +1256,12 @@ export abstract class BaseEnvironment implements Environment {
               });
             }
           } catch (err) {
-            BaseEnvironment.baseLogger.warn(`[BaseEnvironment.invokeLLM] Failed to update session effectiveContext usage:`, err);
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const errStack = err instanceof Error ? err.stack : '';
+            BaseEnvironment.baseLogger.error(`[BaseEnvironment.invokeLLM] Failed to update session effectiveContext usage: ${errMsg}`, {
+              stack: errStack,
+              sessionId: effectiveContext.session_id,
+            });
           }
         }
       },

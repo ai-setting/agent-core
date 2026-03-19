@@ -82,7 +82,8 @@ export interface ProvidersConfig {
 
 export async function loadProvidersConfig(): Promise<ProvidersConfig | null> {
   try {
-    const content = await fs.readFile(getProvidersConfigPath(), "utf-8");
+    const configPath = getProvidersConfigPath();
+    const content = await fs.readFile(configPath, "utf-8");
     
     if (!content.trim()) {
       return null;
