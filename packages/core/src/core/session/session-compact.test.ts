@@ -86,7 +86,8 @@ describe("Session.compact with handle_query", () => {
     expect(capturedParams).not.toBeNull();
     expect(typeof capturedParams.query).toBe("string");
     expect(capturedParams.context).toBeDefined();
-    expect(capturedParams.context.session_id).toBeDefined();
+    // Verify session_id is parent's session_id (not child session), so events go to parent session
+    expect(capturedParams.context.session_id).toBe(session.id);
     expect(Array.isArray(capturedParams.history)).toBe(true);
     // additionInfo should be defined (contains the full prompt)
     expect(capturedParams.additionInfo).toBeDefined();
