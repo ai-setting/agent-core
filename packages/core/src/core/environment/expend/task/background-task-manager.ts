@@ -15,6 +15,7 @@ export interface CreateBackgroundTaskOptions {
   subagentType: string;
   timeout?: number;
   cleanup?: "delete" | "keep";
+  taskId?: number;  // 关联的任务ID，用于操作记录追溯
 }
 
 const DEFAULT_TIMEOUT = 900000; // 15 minutes
@@ -31,7 +32,7 @@ export class BackgroundTaskManager {
   }
 
   async createTask(options: CreateBackgroundTaskOptions): Promise<{ taskId: string; subSessionId: string }> {
-    const { parentSessionId, description, prompt, subagentType, timeout, cleanup } = options;
+    const { parentSessionId, description, prompt, subagentType, timeout, cleanup, taskId: relatedTaskId } = options;
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     
@@ -40,7 +41,8 @@ export class BackgroundTaskManager {
       parentSessionId,
       description,
       subagentType,
-      timeout: timeout || DEFAULT_TIMEOUT
+      timeout: timeout || DEFAULT_TIMEOUT,
+      relatedTaskId
     });
     
     const subSession = await this.subAgentManager.createSubSession({
@@ -48,6 +50,7 @@ export class BackgroundTaskManager {
       title: description,
       subagentType,
       description: description,
+      taskId: relatedTaskId,
     });
 
     const abortController = new AbortController();

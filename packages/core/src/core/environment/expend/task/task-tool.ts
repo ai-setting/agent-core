@@ -44,14 +44,14 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
     parameters: TaskToolParameters,
     execute: async (args: TaskToolParams, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();
-      const { description, prompt, subagent_type = "general", background = false, command, timeout, cleanup } = args;
+      const { description, prompt, subagent_type = "general", background = false, command, timeout, cleanup, task_id } = args;
 
       // TODO: 扩展更多 subagent_type，当前仅支持 general
       const actualSubagentType = "general";
       
       const parentSessionId = ctx.session_id || "default";
       
-// DEBUG `Called with: description=${description}, subagent_type=${subagent_type}, background=${background}, parentSessionId=${parentSessionId}` // 已精简
+// DEBUG `Called with: description=${description}, subagent_type=${subagent_type}, background=${background}, parentSessionId=${parentSessionId}, task_id=${task_id}` // 已精简
 
       const subAgent = getSubAgentSpec(actualSubagentType);
       if (!subAgent) {
@@ -66,7 +66,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
       }
 
       if (background) {
-        taskToolLogger.info(`Starting background task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}`);
+        taskToolLogger.info(`Starting background task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}, task_id=${task_id}`);
         return await handleBackgroundTask(
           env,
           backgroundTaskManager,
@@ -75,10 +75,11 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
           prompt,
           actualSubagentType,
           timeout,
-          cleanup
+          cleanup,
+          task_id
         );
       } else {
-        taskToolLogger.info(`Starting sync task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}`);
+        taskToolLogger.info(`Starting sync task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}, task_id=${task_id}`);
         return await handleSyncTask(
           env,
           subAgentManager,
@@ -86,7 +87,8 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
           description,
           prompt,
           actualSubagentType,
-          timeout
+          timeout,
+          task_id
         );
       }
     },
@@ -102,7 +104,8 @@ async function handleSyncTask(
   description: string,
   prompt: string,
   subagentType: string,
-  timeout?: number
+  timeout?: number,
+  taskId?: number
 ): Promise<ToolResult> {
   const startTime = Date.now();
   
@@ -112,6 +115,7 @@ async function handleSyncTask(
       title: description,
       subagentType,
       description: description,
+      taskId,
     });
 
     const result = await subAgentManager.executeSubSession(subSession, prompt, timeout);
@@ -149,18 +153,20 @@ async function handleBackgroundTask(
   prompt: string,
   subagentType: string,
   timeout?: number,
-  cleanup?: "delete" | "keep"
+  cleanup?: "delete" | "keep",
+  taskId?: number
 ): Promise<ToolResult> {
   const startTime = Date.now();
   
   try {
-    const { taskId, subSessionId } = await backgroundTaskManager.createTask({
+    const { taskId: bgTaskId, subSessionId } = await backgroundTaskManager.createTask({
       parentSessionId,
       description,
       prompt,
       subagentType,
       timeout,
       cleanup: cleanup || "keep",
+      taskId,
     });
 
     const output = [
@@ -168,13 +174,13 @@ async function handleBackgroundTask(
       "",
       `A sub-agent session has been created and is running in the background. You will be notified when the task completes.`,
       "",
-      `Task ID: ${taskId}`,
+      `Task ID: ${bgTaskId}`,
       `Session ID: ${subSessionId}`,
       `SubAgent Type: ${subagentType}`,
       "",
       "<task_metadata>",
       `session_id: ${subSessionId}`,
-      `task_id: ${taskId}`,
+      `task_id: ${bgTaskId}`,
       "status: accepted",
       "</task_metadata>"
     ].join("\n");
@@ -185,7 +191,7 @@ async function handleBackgroundTask(
       metadata: {
         execution_time_ms: Date.now() - startTime,
         sessionId: subSessionId,
-        taskId,
+        taskId: bgTaskId,
         status: "accepted",
       },
     };

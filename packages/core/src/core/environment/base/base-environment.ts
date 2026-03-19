@@ -836,12 +836,35 @@ export abstract class BaseEnvironment implements Environment {
       sessionAbortManager.create(sessionId);
     }
 
+    // Get session info for additional context injection
+    let sessionTitle = "New Session";
+    if (sessionId) {
+      try {
+        const session = await this.getSession(sessionId);
+        if (session) {
+          sessionTitle = session.info.title || "New Session";
+        }
+      } catch (e) {
+        // Ignore errors getting session title
+      }
+    }
+
+    // Build additional info with session context (will be added to system prompt)
+    const sessionContextInfo = `## 当前会话信息
+- session_id: ${sessionId || "N/A"}
+- session_title: ${sessionTitle}`;
+
+    // Merge with existing additionInfo and pass via context
+    const combinedAdditionInfo = additionInfo 
+      ? `${sessionContextInfo}\n\n${additionInfo}`
+      : sessionContextInfo;
+
     const agentContext = {
       ...effectiveContext,
       message_id: `msg_${Date.now()}`,
       abort: sessionId ? sessionAbortManager.get(sessionId) : undefined,
       // Pass additionInfo to Agent for temporary context (won't be persisted to session)
-      additionInfo: additionInfo,
+      additionInfo: combinedAdditionInfo,
     };
 
     // 使用 getBehaviorSpec 获取行为规范

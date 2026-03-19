@@ -19,6 +19,9 @@ export const TaskToolParameters = z.object({
     .describe("Whether to delete sub session after completion. 'delete' removes the session, 'keep' retains it (default: keep)")
     .default("keep")
     .optional(),
+  task_id: z.number()
+    .describe("Optional task ID to associate with this delegate task, for tracking in operation records")
+    .optional(),
   reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Delegate refactor task')"),
 });
 

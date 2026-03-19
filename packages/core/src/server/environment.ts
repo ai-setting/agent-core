@@ -756,13 +756,22 @@ export class ServerEnvironment extends BaseEnvironment {
       this.registerTool(baseSkillTool);
 
       // Register TaskTool and StopTaskTool for subagent delegation
-      const { createTaskTool } = await import("../core/environment/expend/task/task-tool.js");
+      const { createTaskTool, createUpdateSessionTitleTool, createSessionTools } = await import("../core/environment/expend/task/index.js");
       const { createStopTaskTool } = await import("../core/environment/expend/task/stop-task-tool.js");
       const { tool: taskTool, backgroundTaskManager } = createTaskTool(this);
       this.backgroundTaskManager = backgroundTaskManager;
       const stopTaskTool = createStopTaskTool(backgroundTaskManager);
+      const { tool: updateSessionTitleTool } = createUpdateSessionTitleTool(this);
+      
+      // Register session tools (list_sessions, grep_session, read_session)
+      const { listSessionsTool, grepSessionTool, readSessionTool } = createSessionTools(this);
+      
       this.registerTool(taskTool);
       this.registerTool(stopTaskTool);
+      this.registerTool(updateSessionTitleTool);
+      this.registerTool(listSessionsTool);
+      this.registerTool(grepSessionTool);
+      this.registerTool(readSessionTool);
 
       // Register Memory tools - using proper ToolInfo format
       const memoryToolsModule = await import("./built-in-memory-tools.js");

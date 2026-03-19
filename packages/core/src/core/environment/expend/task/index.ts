@@ -4,3 +4,5 @@ export * from "./permissions.js";
 export { SubAgentManager } from "./subagent-manager.js";
 export { BackgroundTaskManager } from "./background-task-manager.js";
 export { createTaskTool } from "./task-tool.js";
+export { createUpdateSessionTitleTool } from "./update-session-title-tool.js";
+export { createSessionTools } from "./session-tools.js";
