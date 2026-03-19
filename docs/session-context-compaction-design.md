@@ -1122,3 +1122,124 @@ sseEmitter.send({
 5. **前端兼容** - API 层保持原始 session ID 不变
 
 这样可以实现：用户无感知的情况下自动压缩长对话，保证系统稳定运行。
+
+---
+
+## 十一、问题修复记录 (2026-03-19)
+
+### 11.1 问题1: onCompleted 回调未等待导致执行时机错乱
+
+**问题描述：**
+查看 trace 时发现 `updateContextUsage` 显示在 `handle_action` 内部执行，但逻辑上应该在 `invokeLLM` 内部。
+
+**根因：**
+在 `invoke-llm.ts` 中调用 `onCompleted` 回调时**没有 await**：
+```typescript
+// invoke-llm.ts
+if (eventHandler?.onCompleted) {
+  eventHandler.onCompleted(fullContent, {  // ← 没有 await
+    model: `${providerId}/${modelId}`,
+    usage: usageInfo
+  });
+}
+```
+
+**修复方案：**
+```typescript
+await eventHandler.onCompleted(fullContent, {
+  model: `${providerId}/${modelId}`,
+  usage: usageInfo
+});
+```
+
+**提交记录：** `6cc370d`
+
+---
+
+### 11.2 问题2: 压缩事件未发送到前端
+
+**问题描述：**
+压缩过程中的 stream 事件没有在前端显示。
+
+**根因：**
+压缩过程中使用**子 session ID** 调用 `handle_query`：
+```typescript
+// 修复前
+await env.handle_query(
+  "请根据上述额外信息生成简洁的要点总结",
+  {
+    session_id: compactedSession.id,  // ← 使用的是子 session
+    onMessageAdded: (message) => {
+      compactedSession.addMessageFromModelMessage(message);
+    }
+  },
+  ...
+);
+```
+
+**修复方案：**
+使用**父 session ID** 调用 `handle_query`，让事件发到父 session：
+```typescript
+// 修复后
+await env.handle_query(
+  "请根据上述额外信息生成简洁的要点总结",
+  {
+    session_id: this.id,  // ← 使用父 session ID
+    onMessageAdded: (message) => {
+      compactedSession.addMessageFromModelMessage(message);
+    }
+  },
+  ...
+);
+```
+
+**影响分析：**
+| 方面 | 影响 | 严重程度 |
+|------|------|----------|
+| 压缩结果保存 | 子 session 仍保存摘要 | ✅ 无影响 |
+| 压缩链逻辑 | Session.get 会自动找到最新 session | ✅ 无影响 |
+| 父 session | 多一条用户消息 | ⚠️ 轻微影响 |
+
+**提交记录：** `73d98f2`
+
+---
+
+### 11.3 问题3: compact 方法类型缺少 additionInfo
+
+**问题描述：**
+TypeScript 类型不匹配。
+
+**修复：**
+在 compact 方法的类型定义中添加 additionInfo 参数：
+```typescript
+handle_query: (
+  query: string,
+  context: {
+    session_id: string;
+    onMessageAdded?: (message: import("ai").ModelMessage) => void;
+  },
+  history?: import("ai").ModelMessage[],
+  additionInfo?: string  // ← 新增
+) => Promise<string>;
+```
+
+---
+
+### 11.4 压缩摘要示例
+
+第一次压缩生成的 summary：
+```
+要点总结：
+
+- 用户需求：查看最近query的日志trace
+- 当前状态：已加载trace_analysis技能，准备调用list_request_ids获取最近请求列表
+- 下一步操作：执行list_request_ids获取requestId，然后用get_trace查看调用链
+```
+
+---
+
+### 11.5 经验总结
+
+1. **异步回调要注意 await**：没有 await 会导致执行时机错乱，trace 显示不正确
+2. **压缩事件需要发送到父 session**：因为前端 SSE 连接建立在父 session 上
+3. **Session.get 会自动遍历压缩链**：使用父 session ID 时，消息会被自动添加到压缩链的最新 session
