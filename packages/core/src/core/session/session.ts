@@ -990,6 +990,7 @@ export class Session {
   /**
    * Trigger session compaction with retry logic
    */
+  @Traced({ name: "session.triggerCompactionWithRetry", log: true, recordParams: true, recordResult: false })
   private async triggerCompactionWithRetry(
     env: {
       handle_query: (
