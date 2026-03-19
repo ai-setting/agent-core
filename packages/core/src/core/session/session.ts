@@ -807,12 +807,12 @@ export class Session {
 
     // Note: historyForHandleQuery is not needed since additionInfo already contains the history
     try {
-      // Use handle_query with additionInfo - the assistant response (summary) will be added via onMessageAdded callback
-      // additionInfo is passed as temporary context to LLM but won't be persisted to session
+      // Use handle_query with parent's session_id so events are sent to parent session (visible to frontend)
+      // The summary will also be added to compacted session via onMessageAdded callback
       await env.handle_query(
         "请根据上述额外信息生成简洁的要点总结", // Simple query
         {
-          session_id: compactedSession.id,
+          session_id: this.id, // Use parent's session_id for events to be visible to frontend
           onMessageAdded: (message) => {
             compactedSession.addMessageFromModelMessage(message);
           }
