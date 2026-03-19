@@ -163,7 +163,7 @@ export interface EnvironmentQueryLogsParams {
 }
 
 export interface Environment {
-  handle_query(query: string, context?: Context, history?: import("ai").ModelMessage[]): Promise<string>;
+  handle_query(query: string, context?: Context, history?: import("ai").ModelMessage[], additionInfo?: string): Promise<string>;
   handle_action(action: Action, context: Context): Promise<ToolResult>;
   getTools(): Tool[];
   getPrompt(prompt_id: string): Prompt | undefined;

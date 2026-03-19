@@ -27,14 +27,14 @@ describe("Session auto-compaction trigger with threshold", () => {
     session.addUserMessage("Message 1");
     session.addAssistantMessage("Response 1");
 
-    // Mock invokeLLM
-    const mockInvokeLLM = mock(() => 
-      Promise.resolve({ success: true, output: '{"user_intent":"测试","key_decisions":[],"current_status":"进行中","next_steps":[],"important_context":[]}' })
+    // Mock handle_query (new signature with additionInfo parameter)
+    const mockHandleQuery = mock(() => 
+      Promise.resolve("Summary of the conversation")
     );
     
     let compactionCalled = false;
     const env = { 
-      invokeLLM: mockInvokeLLM,
+      handle_query: mockHandleQuery,
       session: session,
     } as any;
 
@@ -95,10 +95,8 @@ describe("Session auto-compaction trigger with threshold", () => {
     session.addUserMessage("Message");
 
     let compactionCallCount = 0;
-    const mockInvokeLLM = mock(() => 
-      Promise.resolve({ success: true, output: "Summary" })
-    );
-    const env = { invokeLLM: mockInvokeLLM } as any;
+    const mockHandleQuery = mock(() => Promise.resolve("Summary"));
+    const env = { handle_query: mockHandleQuery } as any;
 
     const originalCompact = session.compact.bind(session);
     (session as any).compact = async (e: any, opts: any) => {
@@ -135,8 +133,8 @@ describe("Session auto-compaction trigger with threshold", () => {
     });
 
     let compactionCalled = false;
-    const mockInvokeLLM = mock(() => Promise.resolve({ success: true, output: "Summary" }));
-    const env = { invokeLLM: mockInvokeLLM } as any;
+    const mockHandleQuery = mock(() => Promise.resolve("Summary"));
+    const env = { handle_query: mockHandleQuery } as any;
 
     const originalCompact = session.compact.bind(session);
     (session as any).compact = async (e: any, opts: any) => {

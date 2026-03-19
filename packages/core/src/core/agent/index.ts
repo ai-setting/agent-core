@@ -139,11 +139,23 @@ export class Agent {
       historyLength: this._history.length 
     });
     
+    // Build messages with optional additionInfo (temporary context that won't be persisted)
     const messages: ModelMessage[] = [
       { role: "system", content: prompt },
-      ...this._history,
-      { role: "user", content: query },
     ];
+
+    // If additionInfo exists, add it as a temporary user message (won't be persisted)
+    if (this.context.additionInfo) {
+      messages.push({
+        role: "user",
+        content: `额外信息：\n${this.context.additionInfo}`,
+      });
+    }
+
+    messages.push(
+      ...this._history,
+      { role: "user", content: query }
+    );
 
     let iteration = 0;
     let consecutiveErrors = 0;

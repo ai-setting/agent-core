@@ -801,8 +801,9 @@ export class Session {
 
     const fullPrompt = compactionPrompt.replace("{{HISTORY}}", historyForLLM);
 
-    // Create new child session first
-    const compactedSession = Session.createChild(this.id, `Compacted: ${this.title}`, this._info.directory);
+    // Create new child session - strip "Compacted:" prefix if already compacted to avoid duplication
+    const baseTitle = this.title.replace(/^Compacted: /, "");
+    const compactedSession = Session.createChild(this.id, `Compacted: ${baseTitle}`, this._info.directory);
 
     // Save the new session to storage before using it
     Storage.saveSession(compactedSession);
@@ -812,52 +813,34 @@ export class Session {
     compactedSession.setMetadata("compactionTime", Date.now());
     compactedSession.setMetadata("originalMessageCount", this._messageOrder.length);
 
-    // Add user message to the new session (this will be the prompt for summary)
-    compactedSession.addUserMessage(`请总结以下对话历史：\n\n${historyForLLM}`);
+    // Add simple user message for persistence - just a simple instruction
+    compactedSession.addUserMessage("请帮我压缩之前的对话历史并生成要点总结");
 
-    // Convert recent messages to ModelMessage format for history
-    const historyForHandleQuery: import("ai").ModelMessage[] = recentMessages.map(msg => {
-      const msgType = msg.info.role === "assistant" ? "assistant" : msg.info.role === "system" ? "system" : "user";
-      return {
-        type: msgType as "user" | "assistant" | "system",
-        content: msg.parts.map(part => {
-          if (part.type === "text") {
-            return { type: "text" as const, text: (part as TextPart).text };
-          }
-          if (part.type === "tool") {
-            const tool = part as ToolPart;
-            return { type: "tool-result" as const, toolCallId: tool.toolCallId || "", result: tool.output || "(pending)" };
-          }
-          return { type: "text" as const, text: "" };
-        }).filter(part => part.text !== ""),
-      };
-    });
+    // Build additionInfo: contains the full conversation history and compression instructions
+    // This will be temporarily inserted into LLM messages but not persisted to session
+    const additionInfo = `## 对话历史\n\n${historyForLLM}\n\n## 压缩要求\n\n1. 提取关键要点，每条一行，保持简洁\n2. 包含：用户需求、已完成的操作、当前状态、重要上下文\n3. 如果没有重要信息，返回"无"\n\n请生成总结：`;
 
-    let summary = "Session summary unavailable";
+    // Note: historyForHandleQuery is not needed since additionInfo already contains the history
     try {
-      // Use handle_query - this creates a proper session conversation record
-      const response = await env.handle_query(
-        fullPrompt,
+      // Use handle_query with additionInfo - the assistant response (summary) will be added via onMessageAdded callback
+      // additionInfo is passed as temporary context to LLM but won't be persisted to session
+      await env.handle_query(
+        "请根据上述额外信息生成简洁的要点总结", // Simple query
         {
           session_id: compactedSession.id,
           onMessageAdded: (message) => {
             compactedSession.addMessageFromModelMessage(message);
           }
         },
-        historyForHandleQuery
+        [], // Empty history since additionInfo contains all the context
+        additionInfo // Temporary context for LLM, not persisted
       );
-
-      // Use the response as summary
-      summary = response || "No summary generated";
     } catch (err) {
       console.warn(`[Session] Compaction handle_query failed:`, err);
     }
 
-    // Add the summary as a system message in the compacted session
-    compactedSession.addSystemMessage(`[Previous Session Summary]\n${summary}`, {
-      compactedAt: Date.now(),
-      originalSessionId: this.id,
-    });
+    // Note: summary is already added to session via onMessageAdded callback
+    // No need to store in metadata
 
     // Save the compacted session
     Storage.saveSession(compactedSession);

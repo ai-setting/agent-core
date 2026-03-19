@@ -26,4 +26,10 @@ export interface Context {
    * @param message - The message in AI SDK ModelMessage format
    */
   onMessageAdded?: (message: ModelMessage) => void;
+  /**
+   * Additional context information to be temporarily inserted into LLM messages.
+   * This is not persisted to session history but is visible to the LLM.
+   * Used for compression prompts or other temporary context.
+   */
+  additionInfo?: string;
 }

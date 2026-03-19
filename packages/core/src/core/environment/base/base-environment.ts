@@ -786,7 +786,7 @@ export abstract class BaseEnvironment implements Environment {
     recordResult: false,
     paramFilter: (args) => ({ query: args[0] })
   })
-  async handle_query(query: string, effectiveContext?: Context, history?: ModelMessage[]): Promise<string> {
+  async handle_query(query: string, effectiveContext?: Context, history?: ModelMessage[], additionInfo?: string): Promise<string> {
     await this.ensureLLMInitialized();
 
     // Reload skills before each query to support dynamic skill addition
@@ -840,6 +840,8 @@ export abstract class BaseEnvironment implements Environment {
       ...effectiveContext,
       message_id: `msg_${Date.now()}`,
       abort: sessionId ? sessionAbortManager.get(sessionId) : undefined,
+      // Pass additionInfo to Agent for temporary context (won't be persisted to session)
+      additionInfo: additionInfo,
     };
 
     // 使用 getBehaviorSpec 获取行为规范

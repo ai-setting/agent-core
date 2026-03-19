@@ -1090,18 +1090,24 @@ export class ServerEnvironment extends BaseEnvironment {
           await this.configLoaded;
 
           try {
+            // Use sessionId directly from event, Session.get will automatically traverse compaction chain
             const response = await this.handle_query(content, {
-              session_id: session?.id || sessionId,
+              session_id: sessionId,  // Use original sessionId, Session.get will find latest
               onMessageAdded: (message) => {
-                session?.addMessageFromModelMessage(message);
+                // Get the latest session from compaction chain to ensure messages are added to correct session
+                const latestSession = Session.get(sessionId);
+                latestSession?.addMessageFromModelMessage(message);
               }
             }, history);
 
+            // Get the latest session again for response handling
+            const latestSessionForResponse = Session.get(sessionId);
+
             // Save assistant message with reasoning if available
             if (this.currentStreamingContent.reasoning) {
-              session?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${response}`);
+              latestSessionForResponse?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${response}`);
             } else {
-              session?.addAssistantMessage(response);
+              latestSessionForResponse?.addAssistantMessage(response);
             }
 
             // Publish query.completed event - this is different from stream.completed
@@ -1138,9 +1144,9 @@ export class ServerEnvironment extends BaseEnvironment {
               
               // Save reasoning content if exists
               if (this.currentStreamingContent.reasoning) {
-                session?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${this.currentStreamingContent.text || "(interrupted)"}`);
+                latestSessionForResponse?.addAssistantMessage(`[Reasoning]\n${this.currentStreamingContent.reasoning}\n\n[Output]\n${this.currentStreamingContent.text || "(interrupted)"}`);
               } else if (this.currentStreamingContent.text) {
-                session?.addAssistantMessage(this.currentStreamingContent.text);
+                latestSessionForResponse?.addAssistantMessage(this.currentStreamingContent.text);
               }
               
               // Add user interrupt notice message

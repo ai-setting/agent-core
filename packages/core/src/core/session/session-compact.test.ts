@@ -33,7 +33,7 @@ describe("Session.compact with handle_query", () => {
     session.addUserMessage("Can you help me write a function?");
     session.addAssistantMessage("Of course! Here's a function for you...");
 
-    // Mock handle_query
+    // Mock handle_query (with 4 parameters: query, context, history, additionInfo)
     const mockHandleQuery = mock(() =>
       Promise.resolve("用户需要编码帮助，已提供函数示例。当前状态：完成。")
     );
@@ -53,12 +53,12 @@ describe("Session.compact with handle_query", () => {
     expect(compactedSession.id).not.toBe(session.id);
     expect(compactedSession.parentID).toBe(session.id);
 
-    // Verify summary message was added as system message
+    // Verify user message was added (simple instruction)
     const messages = await compactedSession.getMessages();
     expect(messages.length).toBeGreaterThanOrEqual(1);
-    // Should have system message with summary
-    const systemMsg = messages.find(m => m.info.role === "system");
-    expect(systemMsg).toBeDefined();
+    // Should have user message (the simple instruction)
+    const userMsg = messages.find(m => m.info.role === "user");
+    expect(userMsg).toBeDefined();
   });
 
   it("should pass correct parameters to handle_query", async () => {
@@ -70,8 +70,9 @@ describe("Session.compact with handle_query", () => {
     session.addUserMessage("Test message");
 
     let capturedParams: any = null;
-    const mockHandleQuery = mock((query: string, context: any, history: any) => {
-      capturedParams = { query, context, history };
+    // Mock handle_query with 4 parameters (including additionInfo)
+    const mockHandleQuery = mock((query: string, context: any, history: any, additionInfo: any) => {
+      capturedParams = { query, context, history, additionInfo };
       return Promise.resolve("Summary");
     });
 
@@ -87,6 +88,8 @@ describe("Session.compact with handle_query", () => {
     expect(capturedParams.context).toBeDefined();
     expect(capturedParams.context.session_id).toBeDefined();
     expect(Array.isArray(capturedParams.history)).toBe(true);
+    // additionInfo should be defined (contains the full prompt)
+    expect(capturedParams.additionInfo).toBeDefined();
   });
 
   it("should handle handle_query failure gracefully", async () => {

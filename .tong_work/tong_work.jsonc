@@ -1,0 +1,15 @@
+{
+  "clientId": "dongzhaokun@2016.com",
+  // ==================== 日志配置 ====================
+  "logging": {
+    "path": "logs2",
+    "level": "debug",
+    "enableFile": true
+  },
+  // ==================== Trace 配置 ====================
+  "trace": {
+    "enabled": true,
+    "recordParams": true,
+    "recordResult": false
+  }
+}
