@@ -1213,18 +1213,8 @@ export abstract class BaseEnvironment implements Environment {
               // Get model info for threshold calculation
               const modelString = options?.model || metadata.model || "";
               const { providerManager } = await import("../../../llm/provider-manager.js");
-              // 直接在这里定义函数，避免导入问题
-              function localParseModelString(model?: string): { providerId: string; modelId: string } {
-                if (!model) {
-                  return { providerId: "minimax", modelId: "MiniMax-M2.5" };
-                }
-                const parts = model.split("/");
-                if (parts.length === 2) {
-                  return { providerId: parts[0], modelId: parts[1] };
-                }
-                return { providerId: "minimax", modelId: model };
-              }
-              const { providerId, modelId } = localParseModelString(modelString);
+              const { parseModelString } = await import("./invoke-llm.js");
+              const { providerId, modelId } = parseModelString(modelString);
               const provider = providerManager.getProvider(providerId);
               const model = provider?.metadata.models.find(m => m.id === modelId);
               const contextWindowLimit = model?.limits?.contextWindow;

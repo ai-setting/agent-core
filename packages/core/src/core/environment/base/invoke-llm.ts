@@ -122,7 +122,7 @@ export interface StreamEventHandler {
 /**
  * Parse model string in format "providerId/modelId"
  */
-function parseModelString(model?: string): { providerId: string; modelId: string } {
+export function parseModelString(model?: string): { providerId: string; modelId: string } {
   invokeLLMLogger.info("[parseModelString] Starting to parse model", { model });
   
   if (!model) {
