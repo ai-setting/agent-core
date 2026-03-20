@@ -93,7 +93,7 @@ export function createSessionTools(env: ServerEnvironment) {
           return { success: false, output: "", error: `Session not found: ${session_id}`, metadata: {} };
         }
 
-        const messages = session.getMessages();
+        const messages = await session.getMessages();
         const lowerQuery = query.toLowerCase();
         const matches: any[] = [];
 
@@ -142,7 +142,7 @@ export function createSessionTools(env: ServerEnvironment) {
           return { success: false, output: "", error: `Session not found: ${session_id}`, metadata: {} };
         }
 
-        const messages = session.getMessages().slice(0, limit);
+        const messages = (await session.getMessages()).slice(0, limit);
         const outputMessages = messages.map(msg => ({
           id: msg.info.id,
           role: msg.info.role,
