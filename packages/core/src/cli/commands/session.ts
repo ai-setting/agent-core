@@ -148,7 +148,6 @@ async function handleOfflineMode(args: SessionOptions): Promise<void> {
         }
 
         let messages = await session.getMessages();
-        console.error("DEBUG: messages type:", typeof messages, Array.isArray(messages), "length:", messages?.length);
 
         // 时间过滤
         if (timeOptions.startTime || timeOptions.endTime) {
