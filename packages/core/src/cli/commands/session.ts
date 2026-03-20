@@ -3,10 +3,17 @@
  *
  * tong_work session 命令 - Session 管理命令 (list, grep, read)
  * 支持离线模式，直接从 Storage 读取数据
+ * 使用统一的过滤组件 (session-filter.ts)
  */
 
 import { CommandModule } from "yargs";
 import { TongWorkClient } from "../client.js";
+import { 
+  filterSessions, 
+  filterMessages, 
+  searchMessages,
+  parseTimeRange 
+} from "../session-filter.js";
 
 interface SessionOptions {
   type: "list" | "grep" | "read" | "help";
@@ -17,79 +24,6 @@ interface SessionOptions {
   endTime?: string;
   port?: number;
   offline?: boolean;
-}
-
-/**
- * 解析时间范围字符串
- * 格式: "2026-01-01" -> 当天 00:00:00 UTC
- * 格式: "2026-01-01 00:00:00" -> 精确时间 (本地时间转换为 UTC)
- * 
- * 注意: 存储的时间是 UTC 时间戳，所以需要将输入转换为 UTC 时间戳
- */
-export function parseTimeRange(startTimeStr?: string, endTimeStr?: string): {
-  startTime?: number;
-  endTime?: number;
-} {
-  const result: { startTime?: number; endTime?: number } = {};
-
-  if (startTimeStr) {
-    // 解析为 UTC 时间
-    const date = parseToUTC(startTimeStr);
-    if (date) {
-      result.startTime = date.getTime();
-    } else {
-      console.warn(`Invalid startTime format: ${startTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
-    }
-  }
-
-  if (endTimeStr) {
-    // 解析为 UTC 时间
-    const date = parseToUTC(endTimeStr, true);
-    if (date) {
-      result.endTime = date.getTime();
-    } else {
-      console.warn(`Invalid endTime format: ${endTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
-    }
-  }
-
-  return result;
-}
-
-/**
- * 将日期时间字符串解析为 UTC Date 对象
- * @param str 日期时间字符串
- * @param isEndTime 如果是结束时间，且只有日期没有时间，则设为当天结束
- */
-function parseToUTC(str: string, isEndTime?: boolean): Date | null {
-  // 如果是 ISO 格式 (包含 T 或 Z)，直接解析
-  if (str.includes("T") || str.includes("Z")) {
-    const date = new Date(str);
-    return isNaN(date.getTime()) ? null : date;
-  }
-
-  // 如果有时间部分 (包含 :)
-  if (str.includes(":")) {
-    // 解析 "YYYY-MM-DD HH:mm:ss" 格式
-    const [datePart, timePart] = str.split(" ");
-    const [year, month, day] = datePart.split("-").map(Number);
-    const [hour, minute, second] = timePart.split(":").map(Number);
-    
-    // 创建 UTC 时间
-    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-    return isNaN(date.getTime()) ? null : date;
-  }
-
-  // 只有日期部分 "YYYY-MM-DD"
-  const [year, month, day] = str.split("-").map(Number);
-  if (isEndTime) {
-    // 结束时间：当天 23:59:59.999 UTC
-    const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-    return isNaN(date.getTime()) ? null : date;
-  } else {
-    // 开始时间：当天 00:00:00 UTC
-    const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-    return isNaN(date.getTime()) ? null : date;
-  }
 }
 
 function showHelp() {

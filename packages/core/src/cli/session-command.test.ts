@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from "vitest";
-import { parseTimeRange } from "./commands/session.js";
+import { parseTimeRange, filterMessages } from "./session-filter.js";
 
 describe("Session Command - parseTimeRange", () => {
   // 注意: parseTimeRange 使用 JavaScript Date，默认使用本地时区
