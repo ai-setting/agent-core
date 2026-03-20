@@ -21,42 +21,75 @@ interface SessionOptions {
 
 /**
  * 解析时间范围字符串
- * 格式: "2026-01-01" -> 当天 00:00:00
- * 格式: "2026-01-01 00:00:00" -> 精确时间
+ * 格式: "2026-01-01" -> 当天 00:00:00 UTC
+ * 格式: "2026-01-01 00:00:00" -> 精确时间 (本地时间转换为 UTC)
+ * 
+ * 注意: 存储的时间是 UTC 时间戳，所以需要将输入转换为 UTC 时间戳
  */
-function parseTimeRange(startTimeStr?: string, endTimeStr?: string): {
+export function parseTimeRange(startTimeStr?: string, endTimeStr?: string): {
   startTime?: number;
   endTime?: number;
 } {
   const result: { startTime?: number; endTime?: number } = {};
 
   if (startTimeStr) {
-    const date = new Date(startTimeStr);
-    if (isNaN(date.getTime())) {
-      console.warn(`Invalid startTime format: ${startTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
-    } else {
-      // 如果只提供了日期，补全为当天开始
-      if (!startTimeStr.includes(":")) {
-        date.setHours(0, 0, 0, 0);
-      }
+    // 解析为 UTC 时间
+    const date = parseToUTC(startTimeStr);
+    if (date) {
       result.startTime = date.getTime();
+    } else {
+      console.warn(`Invalid startTime format: ${startTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
     }
   }
 
   if (endTimeStr) {
-    const date = new Date(endTimeStr);
-    if (isNaN(date.getTime())) {
-      console.warn(`Invalid endTime format: ${endTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
-    } else {
-      // 如果只提供了日期，补全为当天结束
-      if (!endTimeStr.includes(":")) {
-        date.setHours(23, 59, 59, 999);
-      }
+    // 解析为 UTC 时间
+    const date = parseToUTC(endTimeStr, true);
+    if (date) {
       result.endTime = date.getTime();
+    } else {
+      console.warn(`Invalid endTime format: ${endTimeStr}, expected "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"`);
     }
   }
 
   return result;
+}
+
+/**
+ * 将日期时间字符串解析为 UTC Date 对象
+ * @param str 日期时间字符串
+ * @param isEndTime 如果是结束时间，且只有日期没有时间，则设为当天结束
+ */
+function parseToUTC(str: string, isEndTime?: boolean): Date | null {
+  // 如果是 ISO 格式 (包含 T 或 Z)，直接解析
+  if (str.includes("T") || str.includes("Z")) {
+    const date = new Date(str);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // 如果有时间部分 (包含 :)
+  if (str.includes(":")) {
+    // 解析 "YYYY-MM-DD HH:mm:ss" 格式
+    const [datePart, timePart] = str.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = timePart.split(":").map(Number);
+    
+    // 创建 UTC 时间
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // 只有日期部分 "YYYY-MM-DD"
+  const [year, month, day] = str.split("-").map(Number);
+  if (isEndTime) {
+    // 结束时间：当天 23:59:59.999 UTC
+    const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+    return isNaN(date.getTime()) ? null : date;
+  } else {
+    // 开始时间：当天 00:00:00 UTC
+    const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    return isNaN(date.getTime()) ? null : date;
+  }
 }
 
 function showHelp() {
@@ -149,9 +182,14 @@ async function handleOfflineMode(args: SessionOptions): Promise<void> {
 
         let messages = await session.getMessages();
 
+        // 确保是数组
+        let msgArray = Array.isArray(messages) ? messages : Array.from(messages);
+
         // 时间过滤
         if (timeOptions.startTime || timeOptions.endTime) {
-          messages = messages.filter((m: any) => {
+          // 先按时间排序（确保时间顺序正确）
+          msgArray.sort((a: any, b: any) => a.info.timestamp - b.info.timestamp);
+          msgArray = msgArray.filter((m: any) => {
             const ts = m.info.timestamp;
             if (timeOptions.startTime && ts < timeOptions.startTime) return false;
             if (timeOptions.endTime && ts > timeOptions.endTime) return false;
@@ -160,12 +198,12 @@ async function handleOfflineMode(args: SessionOptions): Promise<void> {
         }
 
         // 限制数量
-        if (args.limit && messages.length > args.limit) {
-          messages = messages.slice(-args.limit);
+        if (args.limit && msgArray.length > args.limit) {
+          msgArray = msgArray.slice(-args.limit);
         }
 
         console.log(`\n=== Session: ${args.session} ===\n`);
-        for (const msg of messages as any[]) {
+        for (const msg of msgArray as any[]) {
           const parts = msg.parts || [];
           const content = Array.isArray(parts)
             ? parts
@@ -176,7 +214,7 @@ async function handleOfflineMode(args: SessionOptions): Promise<void> {
             : "";
           console.log(`[${msg.info.role}] ${new Date(msg.info.timestamp).toISOString()}: ${content}`);
         }
-        console.log(`\nTotal: ${messages.length}`);
+        console.log(`\nTotal: ${msgArray.length}`);
         break;
       }
 
@@ -192,11 +230,25 @@ async function handleOfflineMode(args: SessionOptions): Promise<void> {
           process.exit(1);
         }
 
-        const messages = await session.getMessages();
-        const lowerQuery = args.query.toLowerCase();
-        const matches: typeof messages = [];
+        let messages = await session.getMessages();
+        let msgArray = Array.isArray(messages) ? messages : Array.from(messages);
 
-        for (const msg of messages as any[]) {
+        // 时间过滤 (grep 也支持时间过滤)
+        if (timeOptions.startTime || timeOptions.endTime) {
+          // 先按时间排序
+          msgArray.sort((a: any, b: any) => a.info.timestamp - b.info.timestamp);
+          msgArray = msgArray.filter((m: any) => {
+            const ts = m.info.timestamp;
+            if (timeOptions.startTime && ts < timeOptions.startTime) return false;
+            if (timeOptions.endTime && ts > timeOptions.endTime) return false;
+            return true;
+          });
+        }
+
+        const lowerQuery = args.query.toLowerCase();
+        const matches: any[] = [];
+
+        for (const msg of msgArray as any[]) {
           const parts = msg.parts || [];
           const content = Array.isArray(parts)
             ? parts
