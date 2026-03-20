@@ -65,6 +65,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
         };
       }
 
+      const promptWithTaskInfo = `${prompt}\n\n## 任务信息\n\n- task_id: ${task_id}`;
       if (background) {
         taskToolLogger.info(`Starting background task: parentSessionId=${parentSessionId}, subagentType=${actualSubagentType}, task_id=${task_id}`);
         return await handleBackgroundTask(
@@ -72,7 +73,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
           backgroundTaskManager,
           parentSessionId,
           description,
-          prompt,
+          promptWithTaskInfo,
           actualSubagentType,
           timeout,
           cleanup,
@@ -85,7 +86,7 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
           subAgentManager,
           parentSessionId,
           description,
-          prompt,
+          promptWithTaskInfo,
           actualSubagentType,
           timeout,
           task_id
