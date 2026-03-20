@@ -142,6 +142,11 @@ app.delete("/:id", async (c) => {
 
 /**
  * GET /sessions/:id/messages - Get session messages
+ * 
+ * Query params:
+ *   - limit: number (default: 50)
+ *   - startTime: number (filter messages after this timestamp)
+ *   - endTime: number (filter messages before this timestamp)
  */
 app.get("/:id/messages", async (c) => {
   const env = await ensureSessionEnv(c);
@@ -150,7 +155,28 @@ app.get("/:id/messages", async (c) => {
   const id = c.req.param("id");
   const session = await resolve(env.getSession!(id));
   if (!session) return c.json({ error: "Session not found" }, 404);
-  const messages = (await session.getMessages()).map(messageToSimple);
+
+  // Parse query params
+  const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!) : undefined;
+  const startTime = c.req.query("startTime") ? parseInt(c.req.query("startTime")!) : undefined;
+  const endTime = c.req.query("endTime") ? parseInt(c.req.query("endTime")!) : undefined;
+
+  let messages = (await session.getMessages()).map(messageToSimple);
+
+  // Apply time filtering
+  if (startTime !== undefined || endTime !== undefined) {
+    messages = messages.filter((msg) => {
+      if (startTime !== undefined && msg.timestamp < startTime) return false;
+      if (endTime !== undefined && msg.timestamp > endTime) return false;
+      return true;
+    });
+  }
+
+  // Apply limit (get most recent messages)
+  if (limit !== undefined && messages.length > limit) {
+    messages = messages.slice(-limit);
+  }
+
   return c.json(messages);
 });
 
