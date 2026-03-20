@@ -129,22 +129,14 @@ export class SpanCollector implements ISpanCollector {
    * Get a specific span by its spanId
    */
   getSpanById(spanId: string): Span | undefined {
-    // First check active spans
+    // First check active spans (in-memory)
     const activeSpan = this.activeSpans.get(spanId);
     if (activeSpan) {
       return activeSpan;
     }
-    // Fallback to storage - need to search through all traces
-    const traces = this.storage.listTraces(1000);
-    for (const trace of traces) {
-      const spans = this.storage.findByTraceId(trace.traceId);
-      for (const span of spans) {
-        if (span.spanId === spanId) {
-          return span;
-        }
-      }
-    }
-    return undefined;
+
+    // Use storage's findBySpanId for direct lookup
+    return this.storage.findBySpanId(spanId);
   }
   
   private getActiveTrace(traceId: string): Span[] {

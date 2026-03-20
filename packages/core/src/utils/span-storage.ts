@@ -22,6 +22,7 @@ export interface SpanStorage {
   save(span: Span): void;
   saveBatch(spans: Span[]): void;
   findByTraceId(traceId: string): Span[];
+  findBySpanId(spanId: string): Span | undefined;
   listTraces(limit?: number): TraceInfo[];
   deleteByTraceId(traceId: string): void;
   close(): void;
@@ -55,6 +56,18 @@ export class InMemorySpanStorage implements SpanStorage {
       return this.buildTree(cached);
     }
     return [];
+  }
+
+  findBySpanId(spanId: string): Span | undefined {
+    // First check the spanMap cache
+    const span = this.spanMap.get(spanId);
+    if (span) return span;
+    // Fallback: search through all traces
+    for (const spans of this.cache.values()) {
+      const found = spans.find(s => s.spanId === spanId);
+      if (found) return found;
+    }
+    return undefined;
   }
 
   listTraces(limit: number = 10): TraceInfo[] {
@@ -234,6 +247,33 @@ export class SQLiteSpanStorage implements SpanStorage {
 
     const spans = rows.map(row => this.rowToSpan(row));
     return this.buildTree(spans);
+  }
+
+  findBySpanId(spanId: string): Span | undefined {
+    // First check the spanMap cache
+    const span = this.spanMap.get(spanId);
+    if (span) return span;
+
+    // Check cache by traceId
+    for (const spans of this.cache.values()) {
+      const found = spans.find(s => s.spanId === spanId);
+      if (found) return found;
+    }
+
+    // Fallback to direct DB query
+    if (!this.db) return undefined;
+
+    try {
+      const stmt = this.db.prepare("SELECT * FROM span WHERE span_id = ?");
+      const row = stmt.get(spanId) as any;
+      if (row) {
+        return this.rowToSpan(row);
+      }
+    } catch (error) {
+      traceLogger.warn("[findBySpanId] Error querying span:", error);
+    }
+
+    return undefined;
   }
 
   listTraces(limit: number = 10): TraceInfo[] {

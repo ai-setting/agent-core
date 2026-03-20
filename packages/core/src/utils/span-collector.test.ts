@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { SpanCollector, setSpanCollector, getSpanCollector } from "./span-collector";
-import { InMemorySpanStorage } from "./span-storage";
+import { InMemorySpanStorage, SQLiteSpanStorage } from "./span-storage";
 import { SpanKind, SpanStatus } from "./span";
 import { wrapFunction } from "./wrap-function";
 
@@ -174,6 +174,56 @@ describe("SpanCollector", () => {
       expect(parsed[0].name).toBe("parent");
       expect(parsed[0].children).toHaveLength(1);
       expect(parsed[0].children[0].name).toBe("child");
+    });
+  });
+
+  describe("getSpanById", () => {
+    it("should get span from active spans", () => {
+      const ctx = collector.startSpan("test_span");
+      collector.endSpan(ctx);
+
+      // Should still be findable in active spans
+      const span = collector.getSpanById(ctx.spanId);
+      expect(span).toBeDefined();
+      expect(span?.name).toBe("test_span");
+    });
+
+    it("should get span from storage after ended", async () => {
+      // Create a new collector with fresh storage
+      const freshStorage = new InMemorySpanStorage();
+      const freshCollector = new SpanCollector(freshStorage);
+      await freshCollector.initialize();
+
+      // Start and end a span
+      const ctx = freshCollector.startSpan("test_span");
+      freshCollector.endSpan(ctx);
+
+      // Should find in storage
+      const span = freshCollector.getSpanById(ctx.spanId);
+      expect(span).toBeDefined();
+      expect(span?.name).toBe("test_span");
+    });
+
+    it("should return undefined for non-existent span", () => {
+      const span = collector.getSpanById("non_existent_span_id");
+      expect(span).toBeUndefined();
+    });
+
+    it("should get nested child span", () => {
+      const parent = collector.startSpan("parent");
+      const child = collector.startSpan("child");
+      collector.endSpan(child);
+      collector.endSpan(parent);
+
+      // Should find child span
+      const foundChild = collector.getSpanById(child.spanId);
+      expect(foundChild).toBeDefined();
+      expect(foundChild?.name).toBe("child");
+
+      // Should find parent span
+      const foundParent = collector.getSpanById(parent.spanId);
+      expect(foundParent).toBeDefined();
+      expect(foundParent?.name).toBe("parent");
     });
   });
 });

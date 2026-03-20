@@ -31,9 +31,14 @@ describe("BackgroundTaskManager", () => {
         addAssistantMessage: vi.fn(),
         toHistory: vi.fn().mockReturnValue([]),
       }),
-      handle_query: vi.fn().mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        return "Task completed";
+      handle_query: vi.fn().mockImplementation(async (prompt, options) => {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => resolve("Task completed"), 10000);
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error("Task stopped by user"));
+          });
+        });
       }),
       publishEvent: vi.fn().mockImplementation(async (event: any) => {
         publishedEvents.push(event);
@@ -152,9 +157,14 @@ describe("BackgroundTaskManager", () => {
     });
 
     test("should successfully stop running task", async () => {
-      mockEnv.handle_query = vi.fn().mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        return "Done";
+      mockEnv.handle_query = vi.fn().mockImplementation(async (prompt, options) => {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => resolve("Done"), 10000);
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error("Task stopped by user"));
+          });
+        });
       });
 
       const result = await manager.createTask({
@@ -211,9 +221,14 @@ describe("BackgroundTaskManager", () => {
     });
 
     test("should publish stopped event when task is stopped", async () => {
-      mockEnv.handle_query = vi.fn().mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        return "Done";
+      mockEnv.handle_query = vi.fn().mockImplementation(async (prompt, options) => {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => resolve("Done"), 10000);
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error("Task stopped by user"));
+          });
+        });
       });
 
       const result = await manager.createTask({

@@ -201,39 +201,46 @@ export class BackgroundTaskManager {
     timeoutMs: number,
     signal?: AbortSignal
   ): Promise<string> {
-    const timer = setTimeout(() => {
-      throw new Error(`Task execution timeout after ${timeoutMs}ms`);
-    }, timeoutMs);
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Task execution timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
 
-    if (signal) {
-      signal.addEventListener("abort", () => {
-        clearTimeout(timer);
-        throw new Error("Task stopped by user");
-      });
-    }
-
-    try {
-      const history = await subSession.toHistory();
-      logger.info(`executeWithAbort: history length=${history.length}`);
-      for (let i = 0; i < history.length; i++) {
-        const msg = history[i];
-        logger.info(`  history[${i}]: role=${msg.role}, content type=${typeof msg.content}, isArray=${Array.isArray(msg.content)}`);
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new Error("Task stopped by user"));
+        });
       }
 
-      const result = await this.env.handle_query(prompt, { 
-        session_id: subSession.id,
-        onMessageAdded: (message: any) => {
-          subSession.addMessageFromModelMessage(message);
+      const runQuery = async () => {
+        const history = await subSession.toHistory();
+        logger.info(`executeWithAbort: history length=${history.length}`);
+        for (let i = 0; i < history.length; i++) {
+          const msg = history[i];
+          logger.info(`  history[${i}]: role=${msg.role}, content type=${typeof msg.content}, isArray=${Array.isArray(msg.content)}`);
         }
-      }, history);
-      
-      clearTimeout(timer);
-      logger.info(`handle_query success, result length: ${result.length}`);
-      return result;
-    } catch (error) {
-      clearTimeout(timer);
-      throw error;
-    }
+
+        return this.env.handle_query(prompt, { 
+          session_id: subSession.id,
+          signal,
+          onMessageAdded: (message: any) => {
+            subSession.addMessageFromModelMessage(message);
+          }
+        }, history);
+      };
+
+      runQuery()
+        .then((result) => {
+          clearTimeout(timer);
+          logger.info(`handle_query success, result length: ${result.length}`);
+          resolve(result);
+        })
+        .catch((error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+    });
   }
 
   private startProgressReporter(taskId: string): void {
