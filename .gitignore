@@ -45,3 +45,6 @@ dist/
 # Worktrees
 .worktrees/
 worktrees/
+
+# Tong work
+.tong_work/
