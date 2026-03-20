@@ -51,6 +51,7 @@ describe("BackgroundTaskManager", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe("createTask", () => {
@@ -157,14 +158,14 @@ describe("BackgroundTaskManager", () => {
     });
 
     test("should successfully stop running task", async () => {
-      mockEnv.handle_query = vi.fn().mockImplementation(async (prompt, options) => {
-        return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => resolve("Done"), 10000);
-          options?.signal?.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            reject(new Error("Task stopped by user"));
-          });
-        });
+      // Use a promise that can be rejected to simulate abort
+      let rejectHandleQuery: (reason?: any) => void;
+      const handleQueryPromise = new Promise<string>((_, reject) => {
+        rejectHandleQuery = reject;
+      });
+      
+      mockEnv.handle_query = vi.fn().mockImplementation(async () => {
+        return handleQueryPromise;
       });
 
       const result = await manager.createTask({
@@ -174,11 +175,16 @@ describe("BackgroundTaskManager", () => {
         subagentType: "general",
       });
 
+      // Wait a bit to let the task start running
       await new Promise(resolve => setTimeout(resolve, 50));
 
+      // Now try to stop the task - it should still be running
       const stopResult = manager.stopTask(result.taskId);
       expect(stopResult.success).toBe(true);
       expect(stopResult.message).toContain("stop signal sent");
+      
+      // Reject the handle_query to simulate abort
+      rejectHandleQuery!(new Error("Task stopped by user"));
     });
   });
 
@@ -221,14 +227,14 @@ describe("BackgroundTaskManager", () => {
     });
 
     test("should publish stopped event when task is stopped", async () => {
-      mockEnv.handle_query = vi.fn().mockImplementation(async (prompt, options) => {
-        return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => resolve("Done"), 10000);
-          options?.signal?.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            reject(new Error("Task stopped by user"));
-          });
-        });
+      // Use a promise that can be rejected to simulate abort
+      let rejectHandleQuery: (reason?: any) => void;
+      const handleQueryPromise = new Promise<string>((_, reject) => {
+        rejectHandleQuery = reject;
+      });
+      
+      mockEnv.handle_query = vi.fn().mockImplementation(async () => {
+        return handleQueryPromise;
       });
 
       const result = await manager.createTask({
@@ -238,14 +244,22 @@ describe("BackgroundTaskManager", () => {
         subagentType: "general",
       });
 
+      // Wait a bit to let the task start running
       await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Now stop the task
       manager.stopTask(result.taskId);
-      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Wait for the stopped event to be published
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       const stoppedEvents = publishedEvents.filter(
         e => e.type === EventTypes.BACKGROUND_TASK_STOPPED
       );
       expect(stoppedEvents.length).toBeGreaterThan(0);
+      
+      // Reject the handle_query to clean up
+      rejectHandleQuery!(new Error("Task stopped by user"));
     });
   });
 

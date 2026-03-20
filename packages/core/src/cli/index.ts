@@ -82,6 +82,7 @@ async function main() {
   const memoryModule = await import("./commands/memory.js");
   const MemoryCommand = memoryModule.default || memoryModule.memoryCommand;
   const CompactionCommandModule = await import("./commands/compaction.js");
+  const SessionCommandModule = await import("./commands/session.js");
   const CompactionCommand = CompactionCommandModule.default || CompactionCommandModule.CompactionCommand;
 
   await yargs(hideBin(process.argv))
@@ -97,6 +98,7 @@ async function main() {
     .command(EnvCommand)
     .command(MemoryCommand)
     .command(CompactionCommand)
+    .command(SessionCommandModule.default || SessionCommandModule.SessionCommand)
     .demandCommand()
     .strict()
     .help()

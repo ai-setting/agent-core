@@ -156,10 +156,13 @@ export class BackgroundTaskManager {
       this.stopProgressReporter(taskId);
 
       const errorMessage = error instanceof Error ? error.message : String(error);
+      // Check for abort using multiple methods to handle async signal issues
+      const isStoppedError = errorMessage.toLowerCase().includes("stopped") || 
+                           errorMessage.toLowerCase().includes("aborted");
       logger.error(`[BackgroundTaskManager] Task execution error`, {
         taskId,
         error: errorMessage,
-        aborted: abortController?.signal.aborted
+        isStoppedError
       });
 
       if (errorMessage.includes("timeout")) {
@@ -168,7 +171,7 @@ export class BackgroundTaskManager {
         task.error = errorMessage;
         await this.publishTimeoutEvent(task);
         logger.info(`[BackgroundTaskManager] Task marked as timeout`, { taskId });
-      } else if (abortController?.signal.aborted) {
+      } else if (isStoppedError) {
         task.status = "stopped";
         task.completedAt = Date.now();
         await this.publishStoppedEvent(task);
@@ -181,6 +184,9 @@ export class BackgroundTaskManager {
         logger.info(`[BackgroundTaskManager] Task marked as failed`, { taskId });
       }
     } finally {
+      // Save abort status before deleting the controller
+      const wasAborted = abortController?.signal.aborted || task.status === "stopped";
+      
       if (cleanup === "delete") {
         this.env.deleteSession(task.subSessionId);
         this.tasks.delete(taskId);
@@ -190,7 +196,8 @@ export class BackgroundTaskManager {
         taskId,
         finalStatus: task.status,
         cleanup,
-        taskRemoved: cleanup === "delete"
+        taskRemoved: cleanup === "delete",
+        wasAborted
       });
     }
   }

@@ -104,12 +104,35 @@ export class TongWorkClient {
     }
   }
 
-  async getMessages(sessionId: string): Promise<Message[]> {
-    const res = await this.fetchFn(`${this.baseUrl}/sessions/${sessionId}/messages`, {
+  async getMessages(
+    sessionId: string,
+    options?: {
+      limit?: number;
+      startTime?: number;
+      endTime?: number;
+    }
+  ): Promise<Message[]> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.startTime) params.set("startTime", String(options.startTime));
+    if (options?.endTime) params.set("endTime", String(options.endTime));
+
+    const query = params.toString();
+    const url = `${this.baseUrl}/sessions/${sessionId}/messages${query ? `?${query}` : ""}`;
+
+    const res = await this.fetchFn(url, {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to get messages: ${res.status}`);
     return res.json() as Promise<Message[]>;
+  }
+
+  async getSession(sessionId: string): Promise<{ id: string; title?: string; createdAt: string; updatedAt: string }> {
+    const res = await this.fetchFn(`${this.baseUrl}/sessions/${sessionId}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to get session: ${res.status}`);
+    return res.json() as Promise<any>;
   }
 
   async *streamEvents(sessionId: string): AsyncGenerator<StreamEvent> {

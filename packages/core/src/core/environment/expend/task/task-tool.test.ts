@@ -28,7 +28,7 @@ describe("TaskTool - Parameters Validation", () => {
 
   test("should have reason parameter in schema", () => {
     expect(TaskToolParameters.shape.reason).toBeDefined();
-    expect(TaskToolParameters.shape.reason.isOptional()).toBe(false);
+    expect(TaskToolParameters.shape.reason.isOptional()).toBe(true);
   });
 
   test("should accept reason parameter", () => {
@@ -54,7 +54,7 @@ describe("TaskTool - Tool Definition", () => {
     const mockEnv = createMockEnv();
     const { tool } = createTaskTool(mockEnv as any);
     
-    expect(tool.description).toContain("Launch a new agent");
+    expect(tool.description).toContain("Launch a new sub-agent");
     expect(tool.description).toContain("subagent");
     expect(tool.description).toContain("general");
     expect(tool.description).toContain("explore");

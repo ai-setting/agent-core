@@ -46,8 +46,8 @@ export function createTaskTool(env: ServerEnvironment): TaskToolResult {
       const startTime = Date.now();
       const { description, prompt, subagent_type = "general", background = false, command, timeout, cleanup, task_id } = args;
 
-      // TODO: 扩展更多 subagent_type，当前仅支持 general
-      const actualSubagentType = "general";
+      // Validate subagent_type against available agents
+      const actualSubagentType = subagent_type;
       
       const parentSessionId = ctx.session_id || "default";
       

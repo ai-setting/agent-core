@@ -22,7 +22,9 @@ export const TaskToolParameters = z.object({
   task_id: z.number()
     .describe("Optional task ID to associate with this delegate task, for tracking in operation records")
     .optional(),
-  reason: z.string().describe("Brief reason for calling this tool (max 30 chars, e.g., 'Delegate refactor task')"),
+  reason: z.string()
+    .describe("Brief reason for calling this tool (max 30 chars, e.g., 'Delegate refactor task')")
+    .optional(),
 });
 
 export type TaskToolParams = z.infer<typeof TaskToolParameters>;
