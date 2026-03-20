@@ -2,6 +2,7 @@
  * @fileoverview Session Command
  *
  * tong_work session 命令 - Session 管理命令 (list, grep, read)
+ * 支持离线模式，直接从 Storage 读取数据
  */
 
 import { CommandModule } from "yargs";
@@ -15,6 +16,7 @@ interface SessionOptions {
   startTime?: string;
   endTime?: string;
   port?: number;
+  offline?: boolean;
 }
 
 /**
@@ -72,8 +74,14 @@ Options:
   --start-time    开始时间 (格式: YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss)
   --end-time      结束时间 (格式: YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss)
   --port          服务器端口 (默认: 4096)
+  --offline       离线模式，直接从本地存储读取（不需要服务器）
 
 Examples:
+  # 离线列出所有 session（不需要服务器）
+  tong_work session --type list --offline
+
+  # 离线读取 session 消息
+  tong_work session --type read --session <SESSION_ID> --offline
   # 列出所有 session
   tong_work session --type list
 
@@ -92,6 +100,143 @@ Examples:
   # 搜索指定时间范围内的内容
   tong_work session --type grep --session <SESSION_ID> --query "关键词" --start-time "2026-03-19" --end-time "2026-03-20"
 `);
+}
+
+/**
+ * 离线模式处理：直接从 Storage 读取
+ */
+async function handleOfflineMode(args: SessionOptions): Promise<void> {
+  try {
+    // 导入 Storage
+    const { Storage } = await import("../../core/session/storage.js");
+
+    // 初始化 Storage（如果需要）
+    if (!Storage.initialized) {
+      await Storage.initialize({ mode: "sqlite", autoSave: false });
+    }
+
+    const timeOptions = parseTimeRange(args.startTime, args.endTime);
+
+    switch (args.type) {
+      case "list": {
+        const sessions = Storage.listSessionInfos(
+          timeOptions.startTime || timeOptions.endTime
+            ? { timeRange: { start: timeOptions.startTime, end: timeOptions.endTime } }
+            : undefined,
+          { limit: args.limit || 20 }
+        );
+
+        console.log("\nSessions (offline):\n");
+        for (const s of sessions.sessions) {
+          const created = s.time?.created ? new Date(s.time.created).toISOString() : "N/A";
+          console.log(`  ${s.id} | ${s.title || "(无标题)"} | ${created}`);
+        }
+        console.log(`\nTotal: ${sessions.total}`);
+        break;
+      }
+
+      case "read": {
+        if (!args.session) {
+          console.error("Error: --session is required for read");
+          process.exit(1);
+        }
+
+        const session = Storage.getSession(args.session);
+        if (!session) {
+          console.error(`Error: Session not found: ${args.session}`);
+          process.exit(1);
+        }
+
+        let messages = await session.getMessages();
+        console.error("DEBUG: messages type:", typeof messages, Array.isArray(messages), "length:", messages?.length);
+
+        // 时间过滤
+        if (timeOptions.startTime || timeOptions.endTime) {
+          messages = messages.filter((m: any) => {
+            const ts = m.info.timestamp;
+            if (timeOptions.startTime && ts < timeOptions.startTime) return false;
+            if (timeOptions.endTime && ts > timeOptions.endTime) return false;
+            return true;
+          });
+        }
+
+        // 限制数量
+        if (args.limit && messages.length > args.limit) {
+          messages = messages.slice(-args.limit);
+        }
+
+        console.log(`\n=== Session: ${args.session} ===\n`);
+        for (const msg of messages as any[]) {
+          const parts = msg.parts || [];
+          const content = Array.isArray(parts)
+            ? parts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("\n")
+                .substring(0, 200)
+            : "";
+          console.log(`[${msg.info.role}] ${new Date(msg.info.timestamp).toISOString()}: ${content}`);
+        }
+        console.log(`\nTotal: ${messages.length}`);
+        break;
+      }
+
+      case "grep": {
+        if (!args.session || !args.query) {
+          console.error("Error: --session and --query are required for grep");
+          process.exit(1);
+        }
+
+        const session = Storage.getSession(args.session);
+        if (!session) {
+          console.error(`Error: Session not found: ${args.session}`);
+          process.exit(1);
+        }
+
+        const messages = await session.getMessages();
+        const lowerQuery = args.query.toLowerCase();
+        const matches: typeof messages = [];
+
+        for (const msg of messages as any[]) {
+          const parts = msg.parts || [];
+          const content = Array.isArray(parts)
+            ? parts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("\n")
+                .toLowerCase()
+            : "";
+
+          if (content.includes(lowerQuery)) {
+            matches.push(msg);
+            if (matches.length >= (args.limit || 10)) break;
+          }
+        }
+
+        console.log(`\n=== Grep results for "${args.query}" in ${args.session} ===\n`);
+        console.log(`Found ${matches.length} matches:\n`);
+        for (const msg of matches as any[]) {
+          const msgParts = msg.parts || [];
+          const content = Array.isArray(msgParts)
+            ? msgParts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("\n")
+                .substring(0, 200)
+            : "";
+          console.log(`[${msg.info.role}] ${new Date(msg.info.timestamp).toISOString()}: ${content}`);
+        }
+        console.log(`\nTotal matches: ${matches.length}`);
+        break;
+      }
+
+      default:
+        showHelp();
+    }
+  } catch (error) {
+    console.error(`Error in offline mode: ${error}`);
+    process.exit(1);
+  }
 }
 
 export const SessionCommand: CommandModule<object, SessionOptions> = {
@@ -132,11 +277,22 @@ export const SessionCommand: CommandModule<object, SessionOptions> = {
         type: "number",
         default: 4096,
       },
+      offline: {
+        describe: "离线模式，直接从本地存储读取（不需要服务器）",
+        type: "boolean",
+        default: false,
+      },
     }),
 
   async handler(argv) {
     const args = argv as SessionOptions;
 
+    // 离线模式：直接从 Storage 读取
+    if (args.offline) {
+      return handleOfflineMode(args);
+    }
+
+    // 在线模式：通过 HTTP API
     const client = new TongWorkClient(`http://localhost:${args.port || 4096}`);
 
     switch (args.type) {
