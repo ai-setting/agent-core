@@ -10,6 +10,15 @@ describe("Session Tools", () => {
   let mockEnv: ServerEnvironment;
   let sessionTools: ReturnType<typeof createSessionTools>;
 
+  // Mock with 10 messages for pagination testing (including "Hello world" for grep test)
+  const mockMessages = [
+    { info: { id: "msg-1", role: "user", timestamp: 1700000000000 }, parts: [{ type: "text", text: "Hello world" }] },
+    ...Array.from({ length: 9 }, (_, i) => ({
+      info: { id: `msg-${i + 2}`, role: (i + 1) % 2 === 0 ? "user" : "assistant", timestamp: 1700000000000 + (i + 1) * 1000 },
+      parts: [{ type: "text", text: `Message ${i + 2}` }],
+    })),
+  ];
+
   const mockSession1 = {
     id: "session-1",
     info: {
@@ -17,16 +26,7 @@ describe("Session Tools", () => {
       title: "First Session",
       time: { created: 1700000000000, updated: 1700000100000 },
     },
-    getMessages: vi.fn().mockReturnValue([
-      {
-        info: { id: "msg-1", role: "user", timestamp: 1700000000000 },
-        parts: [{ type: "text", text: "Hello world" }],
-      },
-      {
-        info: { id: "msg-2", role: "assistant", timestamp: 1700000050000 },
-        parts: [{ type: "text", text: "Hi there!" }],
-      },
-    ]),
+    getMessages: vi.fn().mockReturnValue(mockMessages),
   };
 
   const mockSession2 = {
@@ -142,6 +142,47 @@ describe("Session Tools", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("not found");
+    });
+
+    test("should support offset parameter for pagination", async () => {
+      const result = await sessionTools.readSessionTool.execute(
+        { session_id: "session-1", limit: 3, offset: 2, reason: "Test offset" },
+        {}
+      );
+
+      expect(result.success).toBe(true);
+      const output = JSON.parse(result.output);
+      expect(output.messages).toHaveLength(3);
+      expect(output.messages[0].content).toBe("Message 3"); // offset=2 starts from index 2
+      expect(output.total).toBe(10);
+      expect(output.offset).toBe(2);
+      expect(output.limit).toBe(3);
+    });
+
+    test("should default offset to 0 when not provided", async () => {
+      const result = await sessionTools.readSessionTool.execute(
+        { session_id: "session-1", limit: 5, reason: "Test default offset" },
+        {}
+      );
+
+      expect(result.success).toBe(true);
+      const output = JSON.parse(result.output);
+      expect(output.messages).toHaveLength(5);
+      expect(output.messages[0].content).toBe("Hello world");
+      expect(output.offset).toBe(0);
+    });
+
+    test("should handle offset beyond total messages", async () => {
+      const result = await sessionTools.readSessionTool.execute(
+        { session_id: "session-1", limit: 5, offset: 100, reason: "Test large offset" },
+        {}
+      );
+
+      expect(result.success).toBe(true);
+      const output = JSON.parse(result.output);
+      expect(output.messages).toHaveLength(0);
+      expect(output.total).toBe(10);
+      expect(output.offset).toBe(100);
     });
   });
 });

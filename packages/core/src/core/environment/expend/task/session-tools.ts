@@ -130,11 +130,12 @@ export function createSessionTools(env: ServerEnvironment) {
     parameters: z.object({
       session_id: z.string(),
       limit: z.number().default(50).optional(),
+      offset: z.number().default(0).optional(),
       reason: z.string(),
     }),
     execute: async (args: any, ctx: ToolContext): Promise<ToolResult> => {
       const startTime = Date.now();
-      const { session_id, limit = 50 } = args;
+      const { session_id, limit = 50, offset = 0 } = args;
 
       try {
         const session = await env.getSession(session_id);
@@ -142,7 +143,9 @@ export function createSessionTools(env: ServerEnvironment) {
           return { success: false, output: "", error: `Session not found: ${session_id}`, metadata: {} };
         }
 
-        const messages = (await session.getMessages()).slice(0, limit);
+        const allMessages = await session.getMessages();
+        const total = allMessages.length;
+        const messages = allMessages.slice(offset, offset + limit);
         const outputMessages = messages.map(msg => ({
           id: msg.info.id,
           role: msg.info.role,
@@ -156,7 +159,9 @@ export function createSessionTools(env: ServerEnvironment) {
             session_id,
             session_title: session.info.title,
             messages: outputMessages,
-            total: messages.length,
+            total,
+            offset,
+            limit,
           }, null, 2),
           metadata: { execution_time_ms: Date.now() - startTime },
         };
