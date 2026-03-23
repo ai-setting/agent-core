@@ -45,11 +45,20 @@ interface AgentConfig {
 const DEFAULT_CONFIG: Required<AgentConfig> = {
   maxIterations: 100,
   maxErrorRetries: 3,
-  retryDelayMs: 1000,
+  retryDelayMs: 2000,     // 与 opencode 保持一致，使用 2 秒基础延迟
   retryBackoffFactor: 2,
   maxRetryDelayMs: 30000,
   doomLoopThreshold: 5,
 };
+
+// MiniMax 限流错误码
+const MINIMAX_RATE_LIMIT_CODES = ['2062'];
+
+export function isRateLimitError(errorMessage: string): boolean {
+  if (!errorMessage) return false;
+  // 检查是否包含限流相关的错误码
+  return MINIMAX_RATE_LIMIT_CODES.some(code => errorMessage.includes(code));
+}
 
 export class Agent {
   private config: Required<AgentConfig>;
@@ -385,7 +394,21 @@ export class Agent {
           throw new Error(`Max error retries (${this.config.maxErrorRetries}) exceeded. Last error: ${error instanceof Error ? error.message : String(error)}`);
         }
 
-        const delay = this.getRetryDelay(consecutiveErrors - 1);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        let delay = this.getRetryDelay(consecutiveErrors - 1);
+        
+        // 限流错误特殊处理：增加额外延迟
+        if (isRateLimitError(errorMessage)) {
+          // MiniMax 2062 等限流错误，需要更长的冷却时间
+          // 在当前延迟基础上增加 2 倍，避免快速重试导致持续限流
+          const rateLimitExtraDelay = delay;
+          delay = Math.min(delay * 2, this.config.maxRetryDelayMs);
+          agentLogger.info(`Rate limit error detected (${MINIMAX_RATE_LIMIT_CODES.join(',')}), adding extra delay`, { 
+            originalDelay: rateLimitExtraDelay, 
+            adjustedDelay: delay 
+          });
+        }
+        
         agentLogger.info(`Retrying after ${delay}ms`, { attempt: consecutiveErrors, maxRetries: this.config.maxErrorRetries });
         await this.delay(delay);
       }
