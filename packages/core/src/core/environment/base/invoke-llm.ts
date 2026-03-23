@@ -109,28 +109,11 @@ function extractUsageInfo(usage: UsageInfo | undefined): UsageInfo | undefined {
 }
 
 /**
- * AI SDK retry 配置
- * 用于配置指数退避重试策略
+ * AI SDK 最大重试次数
+ * AI SDK 内部使用指数退避策略（默认 2s → 4s → 8s）
+ * 此配置与 Agent 层的 maxErrorRetries 保持一致
  */
-export interface RetryConfig {
-  maxRetries: number;     // 最大重试次数
-  baseDelay: number;      // 基础延迟 (ms)
-  factor: number;         // 指数因子
-  maxDelay: number;       // 最大延迟 (ms)
-  jitter: boolean;        // 是否添加随机抖动
-}
-
-/**
- * 默认重试配置
- * 采用指数退避策略：1s → 2s → 4s，最大 30s
- */
-const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: 3,
-  baseDelay: 1000,       // 1秒
-  factor: 2,             // 指数增长
-  maxDelay: 30000,       // 最大30秒
-  jitter: true,          // 添加随机抖动避免雷群
-};
+const MAX_RETRIES = 3;
 
 export interface StreamEventHandler {
   onStart?: (metadata: { model: string }) => void;
@@ -372,14 +355,8 @@ export async function invokeLLM(
       includeUsage: providerOptions.includeUsage,
       ...providerOptions.providerOptions,
       abortSignal: ctx.abort,
-      // 指数退避重试配置
-      retry: {
-        maxRetries: DEFAULT_RETRY_CONFIG.maxRetries,
-        baseDelay: DEFAULT_RETRY_CONFIG.baseDelay,
-        factor: DEFAULT_RETRY_CONFIG.factor,
-        maxDelay: DEFAULT_RETRY_CONFIG.maxDelay,
-        jitter: DEFAULT_RETRY_CONFIG.jitter,
-      },
+      // AI SDK 内部使用指数退避重试（默认 2s → 4s → 8s，支持 retry-after headers）
+      maxRetries: MAX_RETRIES,
       // Enable usage info in stream completion
       streamOptions: {
         includeUsage: true,
