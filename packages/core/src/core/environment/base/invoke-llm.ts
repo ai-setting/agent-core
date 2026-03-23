@@ -108,6 +108,30 @@ function extractUsageInfo(usage: UsageInfo | undefined): UsageInfo | undefined {
   return undefined;
 }
 
+/**
+ * AI SDK retry 配置
+ * 用于配置指数退避重试策略
+ */
+export interface RetryConfig {
+  maxRetries: number;     // 最大重试次数
+  baseDelay: number;      // 基础延迟 (ms)
+  factor: number;         // 指数因子
+  maxDelay: number;       // 最大延迟 (ms)
+  jitter: boolean;        // 是否添加随机抖动
+}
+
+/**
+ * 默认重试配置
+ * 采用指数退避策略：1s → 2s → 4s，最大 30s
+ */
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000,       // 1秒
+  factor: 2,             // 指数增长
+  maxDelay: 30000,       // 最大30秒
+  jitter: true,          // 添加随机抖动避免雷群
+};
+
 export interface StreamEventHandler {
   onStart?: (metadata: { model: string }) => void;
   onText?: (content: string, delta: string) => void;
@@ -348,7 +372,14 @@ export async function invokeLLM(
       includeUsage: providerOptions.includeUsage,
       ...providerOptions.providerOptions,
       abortSignal: ctx.abort,
-      maxRetries: 2,
+      // 指数退避重试配置
+      retry: {
+        maxRetries: DEFAULT_RETRY_CONFIG.maxRetries,
+        baseDelay: DEFAULT_RETRY_CONFIG.baseDelay,
+        factor: DEFAULT_RETRY_CONFIG.factor,
+        maxDelay: DEFAULT_RETRY_CONFIG.maxDelay,
+        jitter: DEFAULT_RETRY_CONFIG.jitter,
+      },
       // Enable usage info in stream completion
       streamOptions: {
         includeUsage: true,
